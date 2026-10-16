@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse,StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel,Field
 from .engine import backtest,search_candidates
-from .audit import independent_replay
+from .audit import independent_replay, FIELDS
 from .data import download_binance_month,validate_ohlcv,split_reference_period
 from .persistence import load_datasets,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles
 
@@ -172,6 +172,9 @@ def audit_run(run_id:str):
     df=DATASETS.get(dataset_id) if dataset_id else None
     if df is None: raise HTTPException(409,'دادهٔ اصلی این اجرا در ذخیره‌سازی موجود نیست؛ تطبیق مستقل انجام نشد.')
     try:
+        full_hash=hashlib.sha256(df.to_csv(index=False,float_format='%.12g').encode()).hexdigest()
+        if full_hash != r.get('metrics',{}).get('data_hash_sha256'):
+            raise HTTPException(409,'این اجرا روی یک بخش Train/Dev/OOS انجام شده، نه کل دیتاست؛ برای جلوگیری از تطبیق اشتباه، audit مستقل روی همین قطعه در این نسخه در دسترس نیست.')
         second=independent_replay(df,r['strategy'],r['contract'])
         first=r['ledger']; other=second['ledger']
         if len(first)!=len(other):
