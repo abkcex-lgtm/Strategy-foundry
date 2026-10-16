@@ -17,6 +17,10 @@ DATASETS:dict[str,pd.DataFrame]={}; RUNS:dict[str,dict[str,Any]]={}
 class BacktestRequest(BaseModel):
     strategy:dict[str,Any]=Field(default_factory=dict)
     contract:dict[str,Any]=Field(default_factory=dict)
+class SearchRequest(BaseModel):
+    candidates:int=500
+    seed:int=42
+    contract:dict[str,Any]=Field(default_factory=dict)
 class DownloadRequest(BaseModel):
     symbol:str='ETHUSDT'; interval:str='1m'; start_year:int=2026; start_month:int=4; end_year:int=2026; end_month:int=9
 @app.get('/',response_class=HTMLResponse)
@@ -24,7 +28,14 @@ def home(): return (ROOT/'static'/'index.html').read_text(encoding='utf-8')
 @app.get('/api/health')
 def health(): return {'status':'ok','service':'strategy-foundry','version':'0.1.0','execution':'server-side','live_trading':False}
 @app.get('/api/contract')
-def contract(): return {'contract':CONTRACT,'notes':['No live orders','No synthetic candles','Ambiguous SL/TP fails closed','Train/dev/OOS kept separate']}
+def contract():
+    from .engine import normalize_contract
+    return {'contract':normalize_contract(),'editable':True,'notes':['This is an editable preset, not a locked contract.','No live orders','No synthetic candles','Ambiguous SL/TP fails closed','Train/dev/OOS kept separate']}
+@app.post('/api/settings/validate')
+def validate_settings(req:BacktestRequest):
+    from .engine import normalize_contract
+    try: return {'valid':True,'contract':normalize_contract(req.contract),'effective_cost_pct_per_side':normalize_contract(req.contract)['commission_pct_per_side']+normalize_contract(req.contract)['slippage_pct_per_side']}
+    except Exception as exc: raise HTTPException(422,f'Settings rejected: {exc}') from exc
 @app.post('/api/data/upload')
 async def upload_csv(file:UploadFile=File(...)):
     if not file.filename or not file.filename.lower().endswith('.csv'): raise HTTPException(400,'فقط فایل CSV کندل پذیرفته می‌شود.')
@@ -62,13 +73,13 @@ def run_backtest(dataset_id:str,req:BacktestRequest):
         return {'run_id':run_id,**result}
     except Exception as exc: raise HTTPException(422,f'اجرای بک‌تست رد شد: {exc}') from exc
 @app.post('/api/search/{dataset_id}')
-def search(dataset_id:str,candidates:int=500,seed:int=42):
+def search(dataset_id:str,req:SearchRequest):
     df=DATASETS.get(dataset_id)
     if df is None: raise HTTPException(404,'ابتدا داده را دریافت کنید.')
     try:
         splits=split_reference_period(df); train=splits['train']
         if len(train)<100: raise HTTPException(422,'دادهٔ Train برای بازهٔ قرارداد Apr-Jun 2026 کافی نیست؛ جست‌وجو آغاز نشد.')
-        result=search_candidates(train,candidates,seed)
+        result=search_candidates(train,req.candidates,req.seed,req.contract)
         result['dataset_id']=dataset_id
         result['search_period']='2026-04-01 to 2026-07-01 UTC (TRAIN only)'
         result['development_period']='2026-07-01 to 2026-08-01 UTC (not used in search)'
