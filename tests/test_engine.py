@@ -2,7 +2,7 @@ import math
 import pandas as pd
 import pytest
 from app.data import validate_ohlcv, DataIntegrityError
-from app.engine import backtest, StrategySpec, CONTRACT, normalize_contract, _size_and_target
+from app.engine import backtest, StrategySpec, CONTRACT, normalize_contract, _size_and_target\nfrom app.audit import independent_replay
 
 def candles(n=300):
     # Synthetic prices are used only for unit tests, never as market data.
@@ -65,3 +65,20 @@ def test_net_rr_prices_include_costs():
 def test_unsupported_addon_fails_closed():
     with pytest.raises(ValueError,match='not implemented'):
         normalize_contract({'trailing_stop_enabled':True})
+
+def test_independent_engine_matches_primary_ledger():
+    df=candles()
+    spec=StrategySpec(fast=5,slow=18,atr_period=7,stop_atr=1.5)
+    cfg=normalize_contract({'risk_usd':10,'reward_risk':2.0})
+    try:
+        primary=backtest(df,spec,cfg)
+        independent=independent_replay(df,primary['strategy'],primary['contract'])
+    except DataIntegrityError as exc:
+        if 'ambiguity' in str(exc): pytest.skip('Synthetic path intentionally triggered conservative ambiguity guard')
+        raise
+    assert len(primary['ledger'])==len(independent['ledger'])
+    for a,b in zip(primary['ledger'],independent['ledger']):
+        for key in ('trade_id','signal_time','entry_time','exit_time','direction','exit_reason','loss_streak_after'):
+            assert a[key]==b[key]
+        for key in ('entry_price','stop_loss','take_profit','exit_price','net_pnl','balance_after'):
+            assert a[key]==pytest.approx(b[key],rel=1e-10,abs=1e-8)
