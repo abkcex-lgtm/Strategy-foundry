@@ -4,7 +4,7 @@ let savedDatasetRows=[];
 const $=id=>document.getElementById(id);
 function msg(s){$('message').textContent=s}
 function fmt(n,d=2){if(n===null||n===undefined||!Number.isFinite(Number(n)))return '—';return Number(n).toLocaleString('fa-IR',{maximumFractionDigits:d})}
-async function api(url,opts={}){const r=await fetch(url,opts);const data=await r.json().catch(()=>({detail:'پاسخ نامعتبر سرور'}));if(!r.ok)throw new Error(data.detail||('HTTP '+r.status));return data}
+async function api(url,opts={}){const r=await fetch(url,opts);const data=await r.json().catch(()=>({detail:'پاسخ نامعتبر سرور'}));if(!r.ok){const d=data.detail;throw new Error(typeof d==='string'?d:(d&&typeof d==='object'?(d.message||JSON.stringify(d)):('HTTP '+r.status)))}return data}
 async function health(){try{const h=await api('/api/health');$('apiStatus').textContent='سرور متصل · '+h.version+' · داده '+h.loaded_datasets+' · اجرا '+h.loaded_runs;$('apiStatus').previousElementSibling.style.background='var(--good)';loadHistory()}catch(e){$('apiStatus').textContent='سرور در دسترس نیست'}}
 async function loadAIStatus(){try{const s=await api('/api/ai/status');const names={openai:'OpenAI',groq:'Groq',openrouter:'OpenRouter',cerebras:'Cerebras',custom:'سرویس سفارشی'};const ready=s.providers.filter(p=>p.configured).map(p=>names[p.provider]+' ('+p.model+')');$('aiProviderStatus').textContent=s.ready?'هوش مصنوعی آماده · '+ready.join(' ← ')+' · در خطا، ارائه‌دهندهٔ بعدی امتحان می‌شود.':'هوش مصنوعی هنوز پیکربندی نشده؛ برای فعال‌سازی باید کلیدهای محرمانه در تنظیمات سرور ثبت شوند. وضعیت فعلی: '+s.providers.map(p=>names[p.provider]+': '+(p.configured?'آماده':'بدون کلید')).join(' · ')}catch(e){$('aiProviderStatus').textContent='وضعیت مدل‌ها قابل دریافت نیست: '+e.message}}
 
