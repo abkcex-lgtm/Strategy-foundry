@@ -115,7 +115,7 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
         vol_active=v>volbase*volume_mult; atr_active=atr>atrbase
         trend_strength=(ef-es).abs()/atr.replace(0,np.nan)
         high_vol_regime=(atr/close.abs().replace(0,np.nan))>(atrbase/close.abs().replace(0,np.nan))
-        low_vol_regime=~high_vol_regime
+        low_vol_regime=(atr/close.abs().replace(0,np.nan))<(atrbase/close.abs().replace(0,np.nan))
         trend_regime=trend_strength>0.5
         range_regime=trend_strength<0.25
         bullish=close>o; bearish=close<o
