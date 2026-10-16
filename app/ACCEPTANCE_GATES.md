@@ -17,7 +17,7 @@
 - [ ] Persistent database and authenticated user-owned runs
 - [ ] Interactive candlestick chart, pan/zoom, replay, indicators and drawing tools
 - [ ] AI assistant, voice/files/media, run history and guarded bug-fix workflow
-- [ ] Truly standalone Python export and trade-by-trade replay reconciliation
+- [x] Self-contained Python replay export template (no Factory import)\n- [ ] Execute exported script against the exact source CSV and verify trade-by-trade equality
 - [ ] Deployment smoke test and persistence check
 
 A checked box means code exists, not profitability is established. Unit tests have not been executed by this file-authoring action.
