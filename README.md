@@ -35,10 +35,10 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 Open http://localhost:8000. API schema: /docs.
 
 ## Free-tier deployment
-A Render blueprint is included. Free instances may sleep, have resource/time limits, and may not provide durable local disk. Configure managed PostgreSQL for reliable persistent multi-user storage; it may not remain free forever. GitHub alone does not execute the Python backend.
+A Render blueprint is included. Free instances may sleep, have resource/time limits, and may not provide durable local disk. The app uses SQLite by default; set FOUNDRY_DB_PATH to a mounted persistent path or switch to a managed database for durable storage. Managed databases may not remain free forever. GitHub alone does not execute the Python backend.
 
 ## Status
-Implemented in this foundation: API shell, OHLCV checks, Binance archive download path, editable contract validation, risk/cost-aware backtest ledger, bounded candidate search, CSV and standalone Python replay template, Persian responsive UI, and automated tests.
-Not yet certified/complete: 500k+ candidate search, independent second-engine trade-by-trade reconciliation, 1-second ambiguity resolution, execution of standalone replay and full ledger equality, robust chart candlesticks/replay/drawing tools, persistent storage/authentication, complete AI/voice/files engineer workflow, long-run benchmarks, and deployment smoke test. See app/ACCEPTANCE_GATES.md.
+Implemented in this foundation: server-side API, OHLCV checks, Binance archive download path, editable settings/profile validation, SQLite dataset/run/profile persistence, risk/cost-aware ledger, bounded candidate search, OHLC candlestick view with trade overlays and paging, CSV and standalone Python replay export, an independent replay/audit endpoint, run history, and automated tests. SQLite durability depends on the host disk; free ephemeral deployments can lose data after restart/redeploy.
+Not yet certified/complete: 500k+ candidate search, 1-second ambiguity resolution, standalone-export execution and exact ledger equality on real source data, smooth zoom/pan/replay/drawing tools, indicator selection beyond the current EMA crossover family, full authentication/multi-user isolation, complete AI/voice/files engineer workflow, long-run benchmarks, and deployment smoke test. The independent audit engine has a synthetic-data unit test; this is not a market-data certificate. See app/ACCEPTANCE_GATES.md.
 
 Backtests can overfit and do not guarantee future returns. Never add exchange API keys with trading permissions.
