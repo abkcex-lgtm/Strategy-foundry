@@ -110,7 +110,12 @@ async def download_data(req:DownloadRequest):
     except Exception as exc: raise HTTPException(422,f'دریافت/اعتبارسنجی کامل نشد؛ بک‌تست شروع نشد: {exc}') from exc
 
 @app.get('/api/datasets')
-def datasets(): return [{'dataset_id':k,'rows':len(v),'first_open_time':int(v.open_time.iloc[0]),'last_open_time':int(v.open_time.iloc[-1])} for k,v in DATASETS.items()]
+def datasets():
+    out=[]
+    for key,frame in DATASETS.items():
+        split_counts={name:int(len(part)) for name,part in split_reference_period(frame).items()}
+        out.append({'dataset_id':key,'rows':len(frame),'first_open_time':int(frame.open_time.iloc[0]),'last_open_time':int(frame.open_time.iloc[-1]),'splits':split_counts})
+    return out
 
 @app.get('/api/datasets/{dataset_id}/candles')
 def get_candles(dataset_id:str,offset:int=Query(default=0,ge=0),limit:int=Query(default=500,ge=1,le=2000)):
