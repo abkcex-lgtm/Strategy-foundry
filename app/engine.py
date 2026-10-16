@@ -94,7 +94,7 @@ def indicators(df, spec):
 
 def _risk_budget(cfg: dict[str, Any], balance: float) -> float:
     if cfg["risk_mode"] == "fixed_usd": return cfg["risk_usd"]
-    base = cfg["initial_balance"] if cfg["risk_mode"] == "percent_initial" else balance
+    base = cfg["initial_balance"] if (cfg["risk_mode"] == "percent_initial" and not cfg["compound"]) else balance
     return base * cfg["risk_pct"] / 100.0
 
 def _size_and_target(entry: float, stop: float, side: str, risk_budget: float, cfg: dict[str, Any]):
