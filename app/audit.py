@@ -99,6 +99,39 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
     elif family=="trend_pullback":
         long=(ef>es)&(l<=ef)&(close>ef)&(close.shift(1)<=ef.shift(1))
         short=(ef<es)&(h>=ef)&(close<ef)&(close.shift(1)>=ef.shift(1))
+    # Independent duplicate of the causal confirmation/regime layer.
+    filt=spec.get("filter_family","none")
+    if filt!="none":
+        volbase=v.shift(1).rolling(lookback,min_periods=lookback).mean()
+        atrbase=atr.shift(1).rolling(lookback,min_periods=lookback).median()
+        delta=close.diff()
+        gain=delta.clip(lower=0).ewm(alpha=1/rsi_period,adjust=False,min_periods=rsi_period).mean()
+        loss=(-delta.clip(upper=0)).ewm(alpha=1/rsi_period,adjust=False,min_periods=rsi_period).mean()
+        rsi=100-(100/(1+gain/loss.replace(0,np.nan)))
+        mom=close.pct_change(lookback)
+        trend_up=ef>es; trend_down=ef<es
+        slope_n=max(2,rsi_period//3)
+        slope_up=ef>ef.shift(slope_n); slope_down=ef<ef.shift(slope_n)
+        vol_active=v>volbase*volume_mult; atr_active=atr>atrbase
+        bullish=close>o; bearish=close<o
+        high_prev=h.shift(1).rolling(lookback,min_periods=lookback).max()
+        low_prev=l.shift(1).rolling(lookback,min_periods=lookback).min()
+        if filt=="trend_alignment": allow_l,allow_s=trend_up,trend_down
+        elif filt=="volume_expansion": allow_l=allow_s=vol_active
+        elif filt=="atr_expansion": allow_l=allow_s=atr_active
+        elif filt=="candle_direction": allow_l,allow_s=bullish,bearish
+        elif filt=="rsi_bias": allow_l,allow_s=rsi>=50,rsi<=50
+        elif filt=="momentum_alignment": allow_l,allow_s=mom>0,mom<0
+        elif filt=="ema_slope": allow_l,allow_s=slope_up,slope_down
+        elif filt=="range_guard": allow_l=allow_s=(atr/close.abs().replace(0,np.nan)<0.02)
+        elif filt=="breakout_confirmation": allow_l,allow_s=close>high_prev,close<low_prev
+        elif filt=="volume_and_trend": allow_l,allow_s=vol_active&trend_up,vol_active&trend_down
+        elif filt=="trend_and_momentum": allow_l,allow_s=trend_up&(mom>0),trend_down&(mom<0)
+        elif filt=="candle_and_volume": allow_l,allow_s=bullish&vol_active,bearish&vol_active
+        elif filt=="low_volatility": allow_l=allow_s=(atr/close.abs().replace(0,np.nan)<0.01)
+        else: raise ValueError(f"Unsupported filter family: {filt}")
+        long=long & allow_l.fillna(False)
+        short=short & allow_s.fillna(False)
     rate=(float(cfg["commission_pct_per_side"])+float(cfg["slippage_pct_per_side"]))/100.0
     balance=float(cfg["initial_balance"]); streak=0; ledger=[]; max_streak=0
     i=max(slow,period)
