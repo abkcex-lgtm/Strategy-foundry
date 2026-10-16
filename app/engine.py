@@ -77,7 +77,7 @@ STRATEGY_FAMILIES = (
     "ema_cross", "momentum", "rsi_reversal", "bollinger_breakout",
     "donchian_breakout", "volume_breakout", "candle_engulfing",
     "support_resistance", "channel_breakout", "macd_cross",
-    "trend_pullback", "range_reversion", "candle_patterns", "classic_patterns", "stochastic_reversal", "vwap_reversion",
+    "trend_pullback", "range_reversion", "candle_patterns", "classic_patterns", "stochastic_reversal", "vwap_reversion", "adaptive_router",
 )
 # Compose base entry families with confirmation/regime layers and parameter grids.
 FILTER_FAMILIES = (
@@ -218,6 +218,22 @@ def indicators(df, spec):
         long_signal=trend&(l<=x.ema_fast)&(c>x.ema_fast)&(c.shift(1)<=x.ema_fast.shift(1))
         trend_down=x.ema_fast<x.ema_slow
         short_signal=trend_down&(h>=x.ema_fast)&(c<x.ema_fast)&(c.shift(1)>=x.ema_fast.shift(1))
+    elif family == "adaptive_router":
+        # Explicit regime-aware method selection: EMA crossover in directional regimes,
+        # RSI threshold re-entry in ranges. Thresholds are causal and configurable.
+        delta=c.diff()
+        gain=delta.clip(lower=0).ewm(alpha=1/spec.rsi_period,adjust=False,min_periods=spec.rsi_period).mean()
+        loss=(-delta.clip(upper=0)).ewm(alpha=1/spec.rsi_period,adjust=False,min_periods=spec.rsi_period).mean()
+        rsi=100-(100/(1+gain/loss.replace(0,np.nan)))
+        strength=(x.ema_fast-x.ema_slow).abs()/x.atr.replace(0,np.nan)
+        trending=strength>0.5
+        ranging=strength<0.25
+        trend_long=(x.ema_fast>x.ema_slow)&(x.ema_fast.shift(1)<=x.ema_slow.shift(1))
+        trend_short=(x.ema_fast<x.ema_slow)&(x.ema_fast.shift(1)>=x.ema_slow.shift(1))
+        range_long=(rsi.shift(1)<spec.rsi_low)&(rsi>=spec.rsi_low)
+        range_short=(rsi.shift(1)>spec.rsi_high)&(rsi<=spec.rsi_high)
+        long_signal=(trending&trend_long)|(ranging&range_long)
+        short_signal=(trending&trend_short)|(ranging&range_short)
     # Causal confirmation/regime layer: current and past candles only.
     filt=spec.filter_family
     if filt != "none":
