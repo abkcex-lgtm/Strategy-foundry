@@ -129,7 +129,7 @@ def backtest(frame, spec=None, contract=None):
     df=frame.copy().reset_index(drop=True)
     if len(df)>1:
         diffs=df.open_time.diff().dropna(); interval=int(diffs.mode().iloc[0]) if len(diffs) else None
-        report=validate_ohlcv(df,interval)
+        report=validate_ohlcv(df,interval,strict_gaps=True)
     else: report=validate_ohlcv(df,None)
     if len(df)<max(spec.slow,spec.atr_period)+3: raise DataIntegrityError("Not enough candles for warmup")
     data_hash=sha256_bytes(df.to_csv(index=False,float_format="%.12g").encode())
