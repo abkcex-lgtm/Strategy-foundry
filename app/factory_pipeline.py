@@ -37,9 +37,9 @@ def run_validation_pipeline(
 ) -> dict[str, Any]:
     """Search only Train, select on Development, and report untouched OOS once.
 
-    The candidate engine currently returns all Train-pass candidates or exactly
-    five Train near-misses. This pipeline does not pretend that this starter
-    search is the full 500k+ strategy factory.
+    The candidate engine searches base signal families combined with causal
+    confirmation/regime filters and parameter grids. Requested count is a ceiling,
+    not a promise of throughput or profitability.
     """
     if not 1 <= int(candidates) <= 500_000:
         raise FactoryPreflightError("candidate count must be between 1 and 500000")
@@ -137,8 +137,13 @@ def run_validation_pipeline(
         "selection_policy": "Train search; Development ranking; OOS final report only; never rank by OOS",
         "all_targets_passed": bool(passing),
         "results": output,
+        "search_space": {
+            "base_signal_families": train_result.get("families_searched", []),
+            "confirmation_regime_filters": train_result.get("filter_families_searched", []),
+            "compositional_space": train_result.get("combinatorial_genome_space", "not reported"),
+        },
         "limitations": [
-            "Search family and candidate count remain bounded by the current EMA-only starter engine.",
+            "Candidate throughput depends on dataset length and available server resources; 500000 is an API ceiling, not a runtime guarantee.",
             "This pipeline is not a profitability certificate and does not replace independent trade-by-trade audit.",
             "The OOS set must remain untouched after this report; further tuning invalidates its independence.",
         ],
