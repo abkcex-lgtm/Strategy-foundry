@@ -11,7 +11,7 @@ A checked box means implementation exists; it does not establish profitability o
 - [x] Same-candle SL/TP ambiguity fails closed
 - [x] CSV ledger and self-contained Python replay template
 - [x] Unit tests for editable contract, exact net risk/reward sizing, API smoke paths
-- [ ] Verify current GitHub Actions run after settings changes
+- [x] GitHub Actions passed for the configurable-settings/test commit (cfda2eb3)
 - [ ] Independent second engine and trade-by-trade reconciliation
 - [ ] Resolve ambiguous 1m bars using 1s Binance data, failing if unavailable
 - [ ] Slippage model with direction/volatility/order-type sensitivity; current setting is a configurable percentage approximation
