@@ -12,15 +12,15 @@ A checked box means implementation exists; it does not establish profitability o
 - [x] CSV ledger and self-contained Python replay template
 - [x] Unit tests for editable contract, exact net risk/reward sizing, API smoke paths
 - [x] GitHub Actions passed for the configurable-settings/test commit (cfda2eb3)
-- [ ] Independent second engine and trade-by-trade reconciliation
+- [x] Independent second replay engine and trade-by-trade audit endpoint (synthetic-data test only; real-market certification pending)
 - [ ] Resolve ambiguous 1m bars using 1s Binance data, failing if unavailable
 - [ ] Slippage model with direction/volatility/order-type sensitivity; current setting is a configurable percentage approximation
 - [ ] Search 500,000+ candidates under measured resource budget
 - [ ] Train/dev/OOS evaluation with frozen strategy and truly untouched OOS report
 - [ ] Exactly five near-misses when none pass, ranked by OOS proximity
 - [ ] Two-year 1m performance and memory benchmark
-- [ ] Persistent database and authenticated user-owned runs/settings
-- [ ] Full candlestick chart, pan/zoom, replay, indicators, drawing tools, all setup annotations
+- [x] SQLite persistence for datasets, run history, and editable profiles (durability depends on host disk; authentication/multi-user isolation remains open)
+- [x] OHLC candlestick chart with trade SL/TP/entry/exit overlays and candle-window paging\n- [ ] Smooth pan/zoom, replay controls, indicator and drawing tools, all setup annotations for candidate-library strategies
 - [ ] AI assistant, voice/files/media, run history, and guarded bug-fix workflow
 - [ ] Standalone export replay run on exact source CSV and ledger equality verified
 - [ ] Deployment smoke test and persistence check
