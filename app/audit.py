@@ -113,6 +113,11 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
         slope_n=max(2,rsi_period//3)
         slope_up=ef>ef.shift(slope_n); slope_down=ef<ef.shift(slope_n)
         vol_active=v>volbase*volume_mult; atr_active=atr>atrbase
+        trend_strength=(ef-es).abs()/atr.replace(0,np.nan)
+        high_vol_regime=(atr/close.abs().replace(0,np.nan))>(atrbase/close.abs().replace(0,np.nan))
+        low_vol_regime=~high_vol_regime
+        trend_regime=trend_strength>0.5
+        range_regime=trend_strength<0.25
         bullish=close>o; bearish=close<o
         high_prev=h.shift(1).rolling(lookback,min_periods=lookback).max()
         low_prev=l.shift(1).rolling(lookback,min_periods=lookback).min()
@@ -129,6 +134,11 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
         elif filt=="trend_and_momentum": allow_l,allow_s=trend_up&(mom>0),trend_down&(mom<0)
         elif filt=="candle_and_volume": allow_l,allow_s=bullish&vol_active,bearish&vol_active
         elif filt=="low_volatility": allow_l=allow_s=(atr/close.abs().replace(0,np.nan)<0.01)
+        elif filt=="trend_regime": allow_l=allow_s=trend_regime
+        elif filt=="range_regime": allow_l=allow_s=range_regime
+        elif filt=="high_volatility_regime": allow_l=allow_s=high_vol_regime
+        elif filt=="low_volatility_regime": allow_l=allow_s=low_vol_regime
+        elif filt=="trend_or_high_vol": allow_l,allow_s=(trend_regime|high_vol_regime)&trend_up,(trend_regime|high_vol_regime)&trend_down
         else: raise ValueError(f"Unsupported filter family: {filt}")
         long=long & allow_l.fillna(False)
         short=short & allow_s.fillna(False)
