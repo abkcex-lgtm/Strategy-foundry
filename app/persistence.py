@@ -4,7 +4,9 @@ from pathlib import Path
 from typing import Any
 import pandas as pd
 
-DB_PATH = Path(os.environ.get("FOUNDRY_DB_PATH", str(Path(__file__).resolve().parent.parent / "data" / "foundry.sqlite3")))
+# Vercel's function filesystem is read-only except for /tmp; its storage is ephemeral.
+_DEFAULT_DB = Path("/tmp/strategy_foundry.sqlite3") if os.environ.get("VERCEL") else (Path(__file__).resolve().parent.parent / "data" / "foundry.sqlite3")
+DB_PATH = Path(os.environ.get("FOUNDRY_DB_PATH", str(_DEFAULT_DB)))
 
 def _connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
