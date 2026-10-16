@@ -79,6 +79,13 @@ STRATEGY_FAMILIES = (
     "support_resistance", "channel_breakout", "macd_cross",
     "trend_pullback", "range_reversion", "candle_patterns", "classic_patterns", "stochastic_reversal", "vwap_reversion",
 )
+# Compose base entry families with confirmation/regime layers and parameter grids.
+FILTER_FAMILIES = (
+    "none", "trend_alignment", "volume_expansion", "atr_expansion",
+    "candle_direction", "rsi_bias", "momentum_alignment", "ema_slope",
+    "range_guard", "breakout_confirmation", "volume_and_trend",
+    "trend_and_momentum", "candle_and_volume", "low_volatility",
+)
 
 @dataclass(frozen=True)
 class StrategySpec:
@@ -90,6 +97,7 @@ class StrategySpec:
     direction: str = "both"
     seed: int = 42
     family: str = "ema_cross"
+    filter_family: str = "none"
     lookback: int = 20
     rsi_period: int = 14
     rsi_low: float = 30.0
@@ -103,6 +111,7 @@ class StrategySpec:
         if not (0.2 <= self.stop_atr <= 10): raise ValueError("stop_atr must be 0.2..10")
         if self.direction not in {"both","long","short"}: raise ValueError("Invalid direction")
         if self.family not in STRATEGY_FAMILIES: raise ValueError(f"Unsupported strategy family: {self.family}")
+        if self.filter_family not in FILTER_FAMILIES: raise ValueError(f"Unsupported filter family: {self.filter_family}")
         if not 3 <= self.lookback <= 500: raise ValueError("lookback must be 3..500")
         if not 2 <= self.rsi_period <= 100: raise ValueError("rsi_period must be 2..100")
         if not 0 < self.rsi_low < self.rsi_high < 100: raise ValueError("Require 0 < rsi_low < rsi_high < 100")
@@ -207,6 +216,41 @@ def indicators(df, spec):
         long_signal=trend&(l<=x.ema_fast)&(c>x.ema_fast)&(c.shift(1)<=x.ema_fast.shift(1))
         trend_down=x.ema_fast<x.ema_slow
         short_signal=trend_down&(h>=x.ema_fast)&(c<x.ema_fast)&(c.shift(1)>=x.ema_fast.shift(1))
+    # Causal confirmation/regime layer: current and past candles only.
+    filt=spec.filter_family
+    if filt != "none":
+        n=spec.lookback
+        volbase=v.shift(1).rolling(n,min_periods=n).mean()
+        atrbase=x["atr"].shift(1).rolling(n,min_periods=n).median()
+        delta=c.diff()
+        gain=delta.clip(lower=0).ewm(alpha=1/spec.rsi_period,adjust=False,min_periods=spec.rsi_period).mean()
+        loss=(-delta.clip(upper=0)).ewm(alpha=1/spec.rsi_period,adjust=False,min_periods=spec.rsi_period).mean()
+        rsi=100-(100/(1+gain/loss.replace(0,np.nan)))
+        mom=c.pct_change(spec.lookback)
+        trend_up=x.ema_fast>x.ema_slow; trend_down=x.ema_fast<x.ema_slow
+        slope_n=max(2,spec.rsi_period//3)
+        slope_up=x.ema_fast>x.ema_fast.shift(slope_n); slope_down=x.ema_fast<x.ema_fast.shift(slope_n)
+        vol_active=v>volbase*spec.volume_mult
+        atr_active=x.atr>atrbase
+        bullish=c>o; bearish=c<o
+        high_prev=h.shift(1).rolling(n,min_periods=n).max()
+        low_prev=l.shift(1).rolling(n,min_periods=n).min()
+        if filt=="trend_alignment": allow_l,allow_s=trend_up,trend_down
+        elif filt=="volume_expansion": allow_l=allow_s=vol_active
+        elif filt=="atr_expansion": allow_l=allow_s=atr_active
+        elif filt=="candle_direction": allow_l,allow_s=bullish,bearish
+        elif filt=="rsi_bias": allow_l,allow_s=rsi>=50,rsi<=50
+        elif filt=="momentum_alignment": allow_l,allow_s=mom>0,mom<0
+        elif filt=="ema_slope": allow_l,allow_s=slope_up,slope_down
+        elif filt=="range_guard": allow_l=allow_s=(x.atr/c.abs().replace(0,np.nan)<0.02)
+        elif filt=="breakout_confirmation": allow_l,allow_s=c>high_prev,c<low_prev
+        elif filt=="volume_and_trend": allow_l,allow_s=vol_active&trend_up,vol_active&trend_down
+        elif filt=="trend_and_momentum": allow_l,allow_s=trend_up&(mom>0),trend_down&(mom<0)
+        elif filt=="candle_and_volume": allow_l,allow_s=bullish&vol_active,bearish&vol_active
+        elif filt=="low_volatility": allow_l=allow_s=(x.atr/c.abs().replace(0,np.nan)<0.01)
+        else: raise ValueError(f"Unsupported filter family: {filt}")
+        long_signal=long_signal & allow_l.fillna(False)
+        short_signal=short_signal & allow_s.fillna(False)
     x["long_signal"]=long_signal.fillna(False).astype(bool)
     x["short_signal"]=short_signal.fillna(False).astype(bool)
     return x
@@ -290,19 +334,20 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None):
     cfg=normalize_contract(contract)
     rng=np.random.default_rng(seed); results=[]; errors=0
     families=np.asarray(STRATEGY_FAMILIES,dtype=object)
+    filters=np.asarray(FILTER_FAMILIES,dtype=object)
     for _ in range(max_candidates):
         fast=int(rng.integers(4,40)); slow=int(rng.integers(max(fast+2,20),121))
         period=int(rng.integers(7,31)); mult=float(rng.choice([0.8,1.0,1.2,1.5,2.0,2.5]))
-        family=str(rng.choice(families)); lookback=int(rng.integers(8,81))
+        family=str(rng.choice(families)); filter_family=str(rng.choice(filters)); lookback=int(rng.integers(8,81))
         rsi_period=int(rng.integers(7,31)); rsi_low=float(rng.choice([20,25,30,35,40])); rsi_high=float(rng.choice([60,65,70,75,80]))
         if rsi_low>=rsi_high: rsi_low,rsi_high=30.0,70.0
         volume_mult=float(rng.choice([1.1,1.25,1.5,1.75,2.0,2.5]))
         band_std=float(rng.choice([1.0,1.5,2.0,2.25,2.5,3.0]))
         momentum_threshold=float(rng.choice([0.0,0.0005,0.001,0.002,0.003]))
         spec=StrategySpec(
-            name=f"{family} f{fast}/s{slow} lb{lookback} ATR {period}x{mult:g}",
+            name=f"{family}+{filter_family} f{fast}/s{slow} lb{lookback} ATR {period}x{mult:g}",
             fast=fast,slow=slow,atr_period=period,stop_atr=mult,direction="both",seed=seed,
-            family=family,lookback=lookback,rsi_period=rsi_period,rsi_low=rsi_low,
+            family=family,filter_family=filter_family,lookback=lookback,rsi_period=rsi_period,rsi_low=rsi_low,
             rsi_high=rsi_high,volume_mult=volume_mult,band_std=band_std,
             momentum_threshold=momentum_threshold)
         try:
@@ -313,4 +358,6 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None):
     results.sort(key=lambda r:(not r["metrics"]["passes_all_targets"],r["distance"],r["metrics"]["max_consecutive_losses"],-r["metrics"]["win_rate_pct"],-r["metrics"]["avg_net_tp_per_day"],-(r["metrics"]["profit_factor"] or 0)))
     passing=[r for r in results if r["metrics"]["passes_all_targets"]]
     selected=passing if passing else results[:5]
-    return {"requested_candidates":max_candidates,"evaluated_candidates":len(results),"failed_candidates":errors,"seed":seed,"contract":cfg,"families_searched":list(STRATEGY_FAMILIES),"all_passing":bool(passing),"results":selected,"warning":"Multi-family randomized search. Large candidate counts may be computationally expensive; run on TRAIN data only. OOS certification is separate."}
+    return {"requested_candidates":max_candidates,"evaluated_candidates":len(results),"failed_candidates":errors,"seed":seed,"contract":cfg,"families_searched":list(STRATEGY_FAMILIES),"filter_families_searched":list(FILTER_FAMILIES),
+        "combinatorial_genome_space":"base family × confirmation/regime layer × parameter grid (thousands of variants)",
+        "all_passing":bool(passing),"results":selected,"warning":"Multi-family randomized search. Large candidate counts may be computationally expensive; run on TRAIN data only. OOS certification is separate."}
