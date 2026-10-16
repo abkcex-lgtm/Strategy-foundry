@@ -85,6 +85,8 @@ FILTER_FAMILIES = (
     "candle_direction", "rsi_bias", "momentum_alignment", "ema_slope",
     "range_guard", "breakout_confirmation", "volume_and_trend",
     "trend_and_momentum", "candle_and_volume", "low_volatility",
+    "trend_regime", "range_regime", "high_volatility_regime",
+    "low_volatility_regime", "trend_or_high_vol",
 )
 
 @dataclass(frozen=True)
@@ -232,6 +234,11 @@ def indicators(df, spec):
         slope_up=x.ema_fast>x.ema_fast.shift(slope_n); slope_down=x.ema_fast<x.ema_fast.shift(slope_n)
         vol_active=v>volbase*spec.volume_mult
         atr_active=x.atr>atrbase
+        trend_strength=(x.ema_fast-x.ema_slow).abs()/x.atr.replace(0,np.nan)
+        high_vol_regime=(x.atr/c.abs().replace(0,np.nan))>(atrbase/c.abs().replace(0,np.nan))
+        low_vol_regime=~high_vol_regime
+        trend_regime=trend_strength>0.5
+        range_regime=trend_strength<0.25
         bullish=c>o; bearish=c<o
         high_prev=h.shift(1).rolling(n,min_periods=n).max()
         low_prev=l.shift(1).rolling(n,min_periods=n).min()
@@ -248,6 +255,11 @@ def indicators(df, spec):
         elif filt=="trend_and_momentum": allow_l,allow_s=trend_up&(mom>0),trend_down&(mom<0)
         elif filt=="candle_and_volume": allow_l,allow_s=bullish&vol_active,bearish&vol_active
         elif filt=="low_volatility": allow_l=allow_s=(x.atr/c.abs().replace(0,np.nan)<0.01)
+        elif filt=="trend_regime": allow_l=allow_s=trend_regime
+        elif filt=="range_regime": allow_l=allow_s=range_regime
+        elif filt=="high_volatility_regime": allow_l=allow_s=high_vol_regime
+        elif filt=="low_volatility_regime": allow_l=allow_s=low_vol_regime
+        elif filt=="trend_or_high_vol": allow_l,allow_s=(trend_regime|high_vol_regime)&trend_up,(trend_regime|high_vol_regime)&trend_down
         else: raise ValueError(f"Unsupported filter family: {filt}")
         long_signal=long_signal & allow_l.fillna(False)
         short_signal=short_signal & allow_s.fillna(False)
