@@ -1,3 +1,13 @@
+---
+title: Strategy Foundry
+emoji: 📈
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Strategy Foundry
 
 A server-side, simulation-only strategy research foundation. It never sends live exchange orders. Passing unit tests do not imply profitability or full validation.
@@ -52,3 +62,15 @@ Implemented in this foundation: server-side API, OHLCV checks, Binance archive d
 Not yet certified/complete: 500k+ candidate search, 1-second ambiguity resolution, standalone-export execution and exact ledger equality on real data, smooth zoom/pan/replay/drawing tools, indicator selection beyond the current EMA crossover family, full authentication/multi-user isolation, complete AI/voice/files engineer workflow, long-run benchmarks, and deployment smoke test. The independent audit engine has a synthetic-data unit test; this is not a market-data certificate. See app/ACCEPTANCE_GATES.md.
 
 Backtests can overfit and do not guarantee future returns. Never add exchange API keys with trading permissions.
+
+
+## Free public hosting path (Docker Space)
+
+This repository includes a Docker-based FastAPI app and can run as a Hugging Face Docker Space on its free CPU tier. A Space must be created under the owner's Hugging Face account and linked/imported from this GitHub repository; this repository cannot create that account or authorize hosting on the owner's behalf.
+
+1. Open [Create a new Hugging Face Space](https://huggingface.co/new-space).
+2. Choose **Docker** as the Space SDK, set visibility to **Public**, and create the Space.
+3. Connect/import this repository (`abkcex-lgtm/Strategy-foundry`) as the Space source and keep the Dockerfile at the repository root.
+4. Wait for the Docker build, then open the Space URL and verify `/api/health` reports `status: ok`.
+
+**Hosting caveats:** free Spaces can sleep when idle and their local filesystem is not a guaranteed durable database. This makes the first hosted build useful for a smoke test, not a promise of durable production storage. Do not put exchange trading keys into this simulation-only app.
