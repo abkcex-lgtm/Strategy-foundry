@@ -5,13 +5,14 @@ from typing import Any
 import pandas as pd
 from fastapi import FastAPI,HTTPException,UploadFile,File
 from fastapi.responses import HTMLResponse,StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel,Field
 from .engine import backtest,search_candidates,CONTRACT
 from .data import download_binance_month,validate_ohlcv,split_reference_period
 
 ROOT=Path(__file__).resolve().parent
 app=FastAPI(title='Strategy Foundry API',version='0.1.0',description='Research/backtest only; no live orders.')
-app.mount('/static',__import__('fastapi').staticfiles.StaticFiles(directory=ROOT/'static'),name='static')
+app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')
 DATASETS:dict[str,pd.DataFrame]={}; RUNS:dict[str,dict[str,Any]]={}
 class BacktestRequest(BaseModel):
     strategy:dict[str,Any]=Field(default_factory=dict)
