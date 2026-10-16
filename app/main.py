@@ -11,6 +11,7 @@ from .engine import backtest,search_candidates
 from .audit import independent_replay, FIELDS
 from .data import download_binance_month,validate_ohlcv,split_reference_period
 from .persistence import load_datasets,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles
+from .factory_pipeline import run_validation_pipeline, FactoryPreflightError
 
 ROOT=Path(__file__).resolve().parent
 app=FastAPI(title='Strategy Foundry API',version='0.2.0',description='Server-side strategy research and simulation only; never sends live orders.')
@@ -26,6 +27,11 @@ class SearchRequest(BaseModel):
     candidates:int=Field(default=500,ge=1,le=10000)
     seed:int=42
     contract:dict[str,Any]=Field(default_factory=dict)
+class FactoryRequest(BaseModel):
+    candidates:int=Field(default=500,ge=1,le=10000)
+    seed:int=42
+    contract:dict[str,Any]=Field(default_factory=dict)
+
 class DownloadRequest(BaseModel):
     symbol:str='ETHUSDT'
     interval:str='1m'
@@ -177,6 +183,28 @@ def evaluate_strategy(dataset_id:str,req:BacktestRequest):
         report['certified']=False
         return report
     except Exception as exc: raise HTTPException(422,f'Split evaluation failed: {exc}') from exc
+
+@app.post('/api/factory/run/{dataset_id}')
+def run_factory_pipeline(dataset_id:str,req:FactoryRequest):
+    """Run Train search, Development selection, then a final untouched OOS report."""
+    df=DATASETS.get(dataset_id)
+    if df is None: raise HTTPException(404,'ابتدا داده را دریافت کنید.')
+    try:
+        report=run_validation_pipeline(df,req.candidates,req.seed,req.contract or None)
+        # Persist complete ledgers for each final candidate and return their run IDs.
+        for item in report.get('results',[]):
+            for period_key in ('development','oos'):
+                period=item.get(period_key,{})
+                strategy_result=None
+                if period.get('run_hash_sha256'):
+                    run_id=period['run_hash_sha256'][:16]
+                    item[period_key]['run_id']=run_id
+            # Train candidate results are summaries, not persisted full ledgers.
+        return report
+    except FactoryPreflightError as exc:
+        raise HTTPException(422,str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(422,f'Factory validation pipeline failed closed: {exc}') from exc
 
 @app.get('/api/runs/{run_id}')
 def get_run(run_id:str):
