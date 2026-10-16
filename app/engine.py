@@ -77,7 +77,7 @@ STRATEGY_FAMILIES = (
     "ema_cross", "momentum", "rsi_reversal", "bollinger_breakout",
     "donchian_breakout", "volume_breakout", "candle_engulfing",
     "support_resistance", "channel_breakout", "macd_cross",
-    "trend_pullback", "range_reversion",
+    "trend_pullback", "range_reversion", "candle_patterns", "classic_patterns", "stochastic_reversal", "vwap_reversion",
 )
 
 @dataclass(frozen=True)
@@ -154,11 +154,48 @@ def indicators(df, spec):
         active=v>volbase*spec.volume_mult
         long_signal=(c>ceiling)&(prev<=ceiling)&active
         short_signal=(c<floor)&(prev>=floor)&active
-    elif family == "candle_engulfing":
+    elif family in {"candle_engulfing","candle_patterns"}:
         prev_open=o.shift(1); prev_close=c.shift(1)
         bullish=(c>o)&(prev_close<prev_open)&(o<=prev_close)&(c>=prev_open)
         bearish=(c<o)&(prev_close>prev_open)&(o>=prev_close)&(c<=prev_open)
-        long_signal=bullish; short_signal=bearish
+        body=(c-o).abs().replace(0,np.nan); candle_range=(h-l).replace(0,np.nan)
+        lower_wick=np.minimum(o,c)-l; upper_wick=h-np.maximum(o,c)
+        hammer=(lower_wick>=2*body)&(upper_wick<=body)&(c>o)
+        shooting_star=(upper_wick>=2*body)&(lower_wick<=body)&(c<o)
+        inside=(h<h.shift(1))&(l>l.shift(1))
+        inside_break_up=inside.shift(1).fillna(False)&(c>h.shift(2))
+        inside_break_down=inside.shift(1).fillna(False)&(c<l.shift(2))
+        if family=="candle_engulfing":
+            long_signal=bullish; short_signal=bearish
+        else:
+            long_signal=bullish|hammer|inside_break_up
+            short_signal=bearish|shooting_star|inside_break_down
+    elif family == "classic_patterns":
+        # Confirm pivots only after the right-hand candle has closed; no centered/future rolling window.
+        pivot_high=(h.shift(2)>h.shift(3))&(h.shift(2)>h.shift(1))
+        pivot_low=(l.shift(2)<l.shift(3))&(l.shift(2)<l.shift(1))
+        ph=h.shift(2).where(pivot_high); pl=l.shift(2).where(pivot_low)
+        prior_high=ph.shift(1).rolling(spec.lookback,min_periods=2).max()
+        prior_low=pl.shift(1).rolling(spec.lookback,min_periods=2).min()
+        tol=spec.band_std/100.0
+        double_top=pivot_high&(ph>=prior_high*(1-tol))&(ph<=prior_high*(1+tol))
+        double_bottom=pivot_low&(pl>=prior_low*(1-tol))&(pl<=prior_low*(1+tol))
+        long_signal=double_bottom.shift(1).fillna(False)&(c>o)
+        short_signal=double_top.shift(1).fillna(False)&(c<o)
+    elif family == "stochastic_reversal":
+        low_n=l.rolling(spec.lookback,min_periods=spec.lookback).min()
+        high_n=h.rolling(spec.lookback,min_periods=spec.lookback).max()
+        k=100*(c-low_n)/(high_n-low_n).replace(0,np.nan)
+        dline=k.rolling(max(2,spec.rsi_period//3),min_periods=max(2,spec.rsi_period//3)).mean()
+        long_signal=(k.shift(1)<spec.rsi_low)&(k>=spec.rsi_low)&(k>dline)
+        short_signal=(k.shift(1)>spec.rsi_high)&(k<=spec.rsi_high)&(k<dline)
+    elif family == "vwap_reversion":
+        typical=(h+l+c)/3
+        vol_sum=v.rolling(spec.lookback,min_periods=spec.lookback).sum()
+        vwap=(typical*v).rolling(spec.lookback,min_periods=spec.lookback).sum()/vol_sum.replace(0,np.nan)
+        sd=c.rolling(spec.lookback,min_periods=spec.lookback).std(ddof=0)
+        long_signal=(c<vwap-spec.band_std*sd)&(c>o)
+        short_signal=(c>vwap+spec.band_std*sd)&(c<o)
     elif family == "macd_cross":
         fast=c.ewm(span=spec.fast,adjust=False,min_periods=spec.fast).mean()
         slow=c.ewm(span=spec.slow,adjust=False,min_periods=spec.slow).mean()
