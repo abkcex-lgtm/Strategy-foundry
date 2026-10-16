@@ -111,5 +111,6 @@ def export_ledger(run_id:str):
 def export_python(run_id:str):
     r=RUNS.get(run_id)
     if not r: raise HTTPException(404,'Run پیدا نشد.')
-    script='import sys, pandas as pd\nfrom app.engine import backtest\nSPEC = '+repr(r['strategy'])+'\nEXPECTED_DATA_SHA256 = '+repr(r['metrics']['data_hash_sha256'])+'\nif __name__ == "__main__":\n df=pd.read_csv(sys.argv[1])\n result=backtest(df,SPEC)\n print(result["metrics"])\n if result["metrics"]["data_hash_sha256"] != EXPECTED_DATA_SHA256: raise SystemExit("DATA HASH MISMATCH")\n'
+    template=(ROOT/'standalone_template.py').read_text(encoding='utf-8')
+    script=template.replace('__SPEC__',repr(r['strategy'])).replace('__CONTRACT__',repr(r['contract'])).replace('__DATA_HASH__',r['metrics']['data_hash_sha256']).replace('__RUN_HASH__',r['run_hash_sha256'])
     return StreamingResponse(iter([script]),media_type='text/x-python',headers={'Content-Disposition':f'attachment; filename={run_id}-replay.py'})
