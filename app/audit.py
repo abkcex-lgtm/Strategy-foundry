@@ -53,10 +53,46 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
             long=(close>ceiling)&(prev<=ceiling)&active; short=(close<floor)&(prev>=floor)&active
         else:
             long=(close>ceiling)&(prev<=ceiling); short=(close<floor)&(prev>=floor)
-    elif family=="candle_engulfing":
+    elif family in {"candle_engulfing","candle_patterns"}:
         po=o.shift(1); pc=close.shift(1)
-        long=(close>o)&(pc<po)&(o<=pc)&(close>=po)
-        short=(close<o)&(pc>po)&(o>=pc)&(close<=po)
+        bullish=(close>o)&(pc<po)&(o<=pc)&(close>=po)
+        bearish=(close<o)&(pc>po)&(o>=pc)&(close<=po)
+        body=(close-o).abs().replace(0,np.nan)
+        lower_wick=np.minimum(o,close)-l; upper_wick=h-np.maximum(o,close)
+        hammer=(lower_wick>=2*body)&(upper_wick<=body)&(close>o)
+        shooting_star=(upper_wick>=2*body)&(lower_wick<=body)&(close<o)
+        inside=(h<h.shift(1))&(l>l.shift(1))
+        inside_break_up=inside.shift(1).fillna(False)&(close>h.shift(2))
+        inside_break_down=inside.shift(1).fillna(False)&(close<l.shift(2))
+        if family=="candle_engulfing":
+            long=bullish; short=bearish
+        else:
+            long=bullish|hammer|inside_break_up; short=bearish|shooting_star|inside_break_down
+    elif family=="classic_patterns":
+        pivot_high=(h.shift(2)>h.shift(3))&(h.shift(2)>h.shift(1))
+        pivot_low=(l.shift(2)<l.shift(3))&(l.shift(2)<l.shift(1))
+        ph=h.shift(2).where(pivot_high); pl=l.shift(2).where(pivot_low)
+        prior_high=ph.shift(1).rolling(lookback,min_periods=2).max()
+        prior_low=pl.shift(1).rolling(lookback,min_periods=2).min()
+        tol=band_std/100.0
+        double_top=pivot_high&(ph>=prior_high*(1-tol))&(ph<=prior_high*(1+tol))
+        double_bottom=pivot_low&(pl>=prior_low*(1-tol))&(pl<=prior_low*(1+tol))
+        long=double_bottom.shift(1).fillna(False)&(close>o)
+        short=double_top.shift(1).fillna(False)&(close<o)
+    elif family=="stochastic_reversal":
+        low_n=l.rolling(lookback,min_periods=lookback).min()
+        high_n=h.rolling(lookback,min_periods=lookback).max()
+        k=100*(close-low_n)/(high_n-low_n).replace(0,np.nan)
+        dline=k.rolling(max(2,rsi_period//3),min_periods=max(2,rsi_period//3)).mean()
+        long=(k.shift(1)<rsi_low)&(k>=rsi_low)&(k>dline)
+        short=(k.shift(1)>rsi_high)&(k<=rsi_high)&(k<dline)
+    elif family=="vwap_reversion":
+        typical=(h+l+close)/3
+        vol_sum=v.rolling(lookback,min_periods=lookback).sum()
+        vwap=(typical*v).rolling(lookback,min_periods=lookback).sum()/vol_sum.replace(0,np.nan)
+        sd=close.rolling(lookback,min_periods=lookback).std(ddof=0)
+        long=(close<vwap-band_std*sd)&(close>o)
+        short=(close>vwap+band_std*sd)&(close<o)
     elif family=="macd_cross":
         macd=ef-es; signal=macd.ewm(span=max(2,rsi_period//2),adjust=False,min_periods=max(2,rsi_period//2)).mean()
         long=(macd>signal)&(macd.shift(1)<=signal.shift(1)); short=(macd<signal)&(macd.shift(1)>=signal.shift(1))
