@@ -99,6 +99,19 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
     elif family=="trend_pullback":
         long=(ef>es)&(l<=ef)&(close>ef)&(close.shift(1)<=ef.shift(1))
         short=(ef<es)&(h>=ef)&(close<ef)&(close.shift(1)>=ef.shift(1))
+    elif family=="adaptive_router":
+        delta=close.diff()
+        gain=delta.clip(lower=0).ewm(alpha=1/rsi_period,adjust=False,min_periods=rsi_period).mean()
+        loss=(-delta.clip(upper=0)).ewm(alpha=1/rsi_period,adjust=False,min_periods=rsi_period).mean()
+        rsi=100-(100/(1+gain/loss.replace(0,np.nan)))
+        strength=(ef-es).abs()/atr.replace(0,np.nan)
+        trending=strength>0.5; ranging=strength<0.25
+        trend_long=(ef>es)&(ef.shift(1)<=es.shift(1))
+        trend_short=(ef<es)&(ef.shift(1)>=es.shift(1))
+        range_long=(rsi.shift(1)<rsi_low)&(rsi>=rsi_low)
+        range_short=(rsi.shift(1)>rsi_high)&(rsi<=rsi_high)
+        long=(trending&trend_long)|(ranging&range_long)
+        short=(trending&trend_short)|(ranging&range_short)
     # Independent duplicate of the causal confirmation/regime layer.
     filt=spec.get("filter_family","none")
     if filt!="none":
