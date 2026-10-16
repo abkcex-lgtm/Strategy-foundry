@@ -49,7 +49,7 @@ def test_custom_contract_settings_are_respected():
     assert cfg['initial_balance']==2500
     assert cfg['risk_usd']==25
     assert cfg['reward_risk']==2.0
-    assert cfg['commission_pct_per_side']+cfg['slippage_pct_per_side']==0.15
+    assert abs(cfg['commission_pct_per_side']+cfg['slippage_pct_per_side']-0.15)<1e-12
     assert cfg['min_win_rate_pct']==45
     assert cfg['max_consecutive_losses']==8
 
