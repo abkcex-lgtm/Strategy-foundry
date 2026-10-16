@@ -1,7 +1,32 @@
 import pandas as pd
 import pytest
 
-from app.data import DataIntegrityError, validate_ohlcv
+from app.data import DataIntegrityError, _drop_binance_header, validate_ohlcv
+
+
+def test_binance_csv_header_row_is_removed():
+    frame = pd.DataFrame([
+        ["open_time", "open", "high", "low", "close", "volume"],
+        ["1775001600000", "2104.48", "2105.45", "2102.28", "2103.21", "6955.005"],
+        ["1775001660000", "2103.21", "2103.48", "2099.19", "2102.18", "4824.334"],
+    ])
+    parsed = _drop_binance_header(frame)
+    assert len(parsed) == 2
+    assert parsed.iloc[0, 0] == "1775001600000"
+    parsed.columns = ["open_time", "open", "high", "low", "close", "volume"]
+    report = validate_ohlcv(parsed, 60000, strict_gaps=True)
+    assert report["rows"] == 2
+    assert report["gap_count"] == 0
+
+
+def test_binance_csv_without_header_keeps_first_candle():
+    frame = pd.DataFrame([
+        ["1775001600000", "2104.48", "2105.45", "2102.28", "2103.21", "6955.005"],
+        ["1775001660000", "2103.21", "2103.48", "2099.19", "2102.18", "4824.334"],
+    ])
+    parsed = _drop_binance_header(frame)
+    assert len(parsed) == 2
+    assert parsed.iloc[0, 0] == "1775001600000"
 
 
 def test_strict_validation_rejects_missing_candles():
