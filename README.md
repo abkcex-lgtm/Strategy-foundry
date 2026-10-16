@@ -1,13 +1,3 @@
----
-title: Strategy Foundry
-emoji: 📈
-colorFrom: green
-colorTo: blue
-sdk: docker
-app_port: 7860
-pinned: false
----
-
 # Strategy Foundry
 
 A server-side, simulation-only strategy research foundation. It never sends live exchange orders. Passing unit tests do not imply profitability or full validation.
@@ -51,9 +41,9 @@ Open http://localhost:8000. API schema: /docs.
 
 ## Deployment
 
-A Dockerfile and a Render Blueprint are included so the app can run on a Python/Docker host. Hosting is not yet deployed: GitHub does not execute the FastAPI backend by itself, and some hosts require billing verification or a paid plan even when their compute tier has a free allowance. Do not enter payment details unless you explicitly choose to use that provider.
+Vercel serverless deployment files (`api/index.py` and `vercel.json`) are included for a free Hobby-plan deployment attempt, alongside the Render Blueprint and Dockerfile. The repository is **not deployed yet**: GitHub does not run the backend itself. Vercel account authorization and the first deployment must be completed by the repository owner at the import link.
 
-Hugging Face currently requires a paid plan to create Docker Spaces for a general FastAPI app, so it is not a verified free no-card route for this repository. Free static hosting alone cannot run this Python backend or its strategy-search jobs. The SQLite database uses the host's disk; data durability must be verified on the chosen host before relying on saved runs.
+Important limitations of the Vercel serverless trial: SQLite is stored in temporary `/tmp`, in-memory datasets/runs may not survive between separate function instances, and long searches or multi-month data downloads may exceed serverless limits. This is an initial online trial path, not durable production hosting or a certified full factory. Do not enter payment details if a host unexpectedly requests a card.
 
 ## Status
 
