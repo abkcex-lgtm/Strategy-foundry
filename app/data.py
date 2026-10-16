@@ -10,6 +10,12 @@ class DataIntegrityError(ValueError):
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
+def _drop_binance_header(frame: pd.DataFrame) -> pd.DataFrame:
+    """Accept Binance Vision CSVs both with and without a column-header row."""
+    if not frame.empty and str(frame.iloc[0, 0]).strip().lower() in {"open_time", "open time", "timestamp"}:
+        return frame.iloc[1:].reset_index(drop=True)
+    return frame
+
 def validate_ohlcv(frame: pd.DataFrame, interval_ms: int | None = 60000) -> dict[str, Any]:
     required = ['open_time','open','high','low','close','volume']
     missing = [c for c in required if c not in frame.columns]
@@ -42,7 +48,7 @@ async def download_binance_month(symbol: str, interval: str, year: int, month: i
         with zipfile.ZipFile(io.BytesIO(raw)) as zf:
             names=[n for n in zf.namelist() if n.lower().endswith('.csv')]
             if not names: raise DataIntegrityError('Archive has no CSV')
-            with zf.open(names[0]) as fp: df=pd.read_csv(fp, header=None)
+            with zf.open(names[0]) as fp: df=_drop_binance_header(pd.read_csv(fp, header=None))
     except zipfile.BadZipFile as exc: raise DataIntegrityError('Invalid Binance ZIP archive') from exc
     names=['open_time','open','high','low','close','volume','close_time','quote_volume','trade_count','taker_buy_base','taker_buy_quote','ignore']
     if df.shape[1] < 6: raise DataIntegrityError('Unexpected kline columns')
