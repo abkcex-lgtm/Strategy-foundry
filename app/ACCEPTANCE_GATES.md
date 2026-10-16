@@ -1,23 +1,26 @@
 # Acceptance gates
 
-- [x] Server-side API and static Persian UI
-- [x] OHLCV validator and SHA-256 fingerprints
-- [x] Fixed-contract single-position backtest and canonical ledger
+A checked box means implementation exists; it does not establish profitability or global completeness.
+
+- [x] Server-side API and Persian responsive UI
+- [x] OHLCV validation and SHA-256 fingerprints
+- [x] Editable contract settings: initial balance, fixed/percentage risk, compounding, net/gross R:R, commission, slippage, pass thresholds
+- [x] Settings passed into backtest and candidate search; settings included in run fingerprint
+- [x] Exact modeled net-risk/net-reward sizing for the selected SL/TP prices
+- [x] Unsupported trade-management toggles fail closed instead of silently changing behavior
 - [x] Same-candle SL/TP ambiguity fails closed
-- [x] CSV ledger and replay-wrapper export with hash guard
-- [x] Unit tests authored
-- [ ] Run CI and record passing build
+- [x] CSV ledger and self-contained Python replay template
+- [x] Unit tests for editable contract, exact net risk/reward sizing, API smoke paths
+- [ ] Verify current GitHub Actions run after settings changes
 - [ ] Independent second engine and trade-by-trade reconciliation
 - [ ] Resolve ambiguous 1m bars using 1s Binance data, failing if unavailable
-- [ ] Enforce exact net -$10 SL and +$35 TP after all costs; current sizing is an estimate
+- [ ] Slippage model with direction/volatility/order-type sensitivity; current setting is a configurable percentage approximation
 - [ ] Search 500,000+ candidates under measured resource budget
-- [ ] Train/dev/OOS split enforcement and untouched OOS report
-- [ ] Exactly five near-misses when none pass, ranked with OOS proximity
+- [ ] Train/dev/OOS evaluation with frozen strategy and truly untouched OOS report
+- [ ] Exactly five near-misses when none pass, ranked by OOS proximity
 - [ ] Two-year 1m performance and memory benchmark
-- [ ] Persistent database and authenticated user-owned runs
-- [ ] Interactive candlestick chart, pan/zoom, replay, indicators and drawing tools
-- [ ] AI assistant, voice/files/media, run history and guarded bug-fix workflow
-- [x] Self-contained Python replay export template (no Factory import)\n- [ ] Execute exported script against the exact source CSV and verify trade-by-trade equality
+- [ ] Persistent database and authenticated user-owned runs/settings
+- [ ] Full candlestick chart, pan/zoom, replay, indicators, drawing tools, all setup annotations
+- [ ] AI assistant, voice/files/media, run history, and guarded bug-fix workflow
+- [ ] Standalone export replay run on exact source CSV and ledger equality verified
 - [ ] Deployment smoke test and persistence check
-
-A checked box means code exists, not profitability is established. Unit tests have not been executed by this file-authoring action.
