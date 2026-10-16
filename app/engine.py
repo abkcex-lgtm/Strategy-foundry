@@ -96,4 +96,4 @@ def search_candidates(frame, max_candidates=500, seed=42):
             results.append({'strategy':r['strategy'],'metrics':m,'distance':dist,'run_hash_sha256':r['run_hash_sha256']})
         except (ValueError,DataIntegrityError,IndexError): errors+=1
     results.sort(key=lambda r:(not r['metrics']['passes_all_targets'],r['distance'],r['metrics']['max_consecutive_losses'],-r['metrics']['win_rate_pct'],-r['metrics']['avg_net_tp_per_day'],-(r['metrics']['profit_factor'] or 0)))
-    return {'requested_candidates':max_candidates,'evaluated_candidates':len(results),'failed_candidates':errors,'seed':seed,'results':results[:5],'warning':'Bounded random search only; no 500k+ or OOS certification.'}
+    passing=[r for r in results if r['metrics']['passes_all_targets']]\n    selected=passing if passing else results[:5]\n    return {'requested_candidates':max_candidates,'evaluated_candidates':len(results),'failed_candidates':errors,'seed':seed,'all_passing':bool(passing),'results':selected,'warning':'Bounded random search only; run on TRAIN data. No 500k+ or OOS certification.'}
