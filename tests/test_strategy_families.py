@@ -43,7 +43,7 @@ def test_independent_audit_supports_new_strategy_families():
             if "ambiguity" in str(exc):
                 continue
             raise
-        assert len(primary["ledger"])==len(audit["ledger"])
+        assert len(primary["ledger"])==len(audit["ledger"]), "family mismatch: " + family
         for a,b in zip(primary["ledger"],audit["ledger"]):
             assert a["entry_time"]==b["entry_time"]
             assert a["exit_time"]==b["exit_time"]
