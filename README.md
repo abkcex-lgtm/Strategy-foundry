@@ -49,11 +49,11 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 Open http://localhost:8000. API schema: /docs.
 
-## Free-tier deployment
+## Deployment
 
-A Docker deployment target is included for a free Hugging Face Spaces Docker Space. Create a new Docker Space and upload/push this repository's contents there, or connect a deployment workflow. Free hosting can sleep, impose CPU/memory limits, and may not provide durable local disk. The app uses SQLite by default; persistence is only as durable as the host's storage. Do not assume saved data will survive host restarts/rebuilds until verified.
+A Dockerfile and a Render Blueprint are included so the app can run on a Python/Docker host. Hosting is not yet deployed: GitHub does not execute the FastAPI backend by itself, and some hosts require billing verification or a paid plan even when their compute tier has a free allowance. Do not enter payment details unless you explicitly choose to use that provider.
 
-GitHub alone does not execute the Python backend. The repository is not a live website until a hosting provider builds and runs it.
+Hugging Face currently requires a paid plan to create Docker Spaces for a general FastAPI app, so it is not a verified free no-card route for this repository. Free static hosting alone cannot run this Python backend or its strategy-search jobs. The SQLite database uses the host's disk; data durability must be verified on the chosen host before relying on saved runs.
 
 ## Status
 
