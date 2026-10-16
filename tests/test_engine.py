@@ -2,7 +2,7 @@ import math
 import pandas as pd
 import pytest
 from app.data import validate_ohlcv, DataIntegrityError
-from app.engine import backtest, StrategySpec, CONTRACT
+from app.engine import backtest, StrategySpec, CONTRACT, normalize_contract, _size_and_target
 
 def candles(n=300):
     # Synthetic prices are used only for unit tests, never as market data.
@@ -42,4 +42,26 @@ def test_contract_defaults():
     assert CONTRACT['risk_usd']==10
     assert CONTRACT['reward_risk']==3.5
     assert CONTRACT['max_positions']==1
-    assert CONTRACT['fee_slippage_per_side']==0.0006
+    assert CONTRACT['commission_pct_per_side']+CONTRACT['slippage_pct_per_side']==0.06
+
+def test_custom_contract_settings_are_respected():
+    cfg=normalize_contract({'initial_balance':2500,'risk_mode':'fixed_usd','risk_usd':25,'reward_risk':2.0,'commission_pct_per_side':0.1,'slippage_pct_per_side':0.05,'min_win_rate_pct':45,'max_consecutive_losses':8})
+    assert cfg['initial_balance']==2500
+    assert cfg['risk_usd']==25
+    assert cfg['reward_risk']==2.0
+    assert cfg['commission_pct_per_side']+cfg['slippage_pct_per_side']==0.15
+    assert cfg['min_win_rate_pct']==45
+    assert cfg['max_consecutive_losses']==8
+
+def test_net_rr_prices_include_costs():
+    cfg=normalize_contract({'risk_usd':10,'reward_risk':3.5,'commission_pct_per_side':0.04,'slippage_pct_per_side':0.02,'target_mode':'net_rr'})
+    entry=2000.0; stop=1980.0
+    qty,target,entry_rate,exit_rate=_size_and_target(entry,stop,'LONG',10,cfg)
+    loss=qty*((entry-stop)+entry*entry_rate+stop*exit_rate)
+    net_win=qty*((target-entry)-entry*entry_rate-target*exit_rate)
+    assert abs(loss-10)<1e-9
+    assert abs(net_win-35)<1e-8
+
+def test_unsupported_addon_fails_closed():
+    with pytest.raises(ValueError,match='not implemented'):
+        normalize_contract({'trailing_stop_enabled':True})
