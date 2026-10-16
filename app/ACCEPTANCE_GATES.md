@@ -4,7 +4,9 @@ A checked box means implementation exists; it does not establish profitability o
 
 - [x] Server-side API and Persian responsive UI
 - [x] OHLCV validation and SHA-256 fingerprints
+- [x] Strict gap rejection for 1m archive downloads, CSV uploads marked as 1m, and backtests
 - [x] Editable contract settings: initial balance, fixed/percentage risk, compounding, net/gross R:R, commission, slippage, pass thresholds
+- [x] Each acceptance filter can be enabled/disabled independently; disabled filters are excluded from pass/fail and near-miss distance
 - [x] Settings passed into backtest and candidate search; settings included in run fingerprint
 - [x] Exact modeled net-risk/net-reward sizing for the selected SL/TP prices
 - [x] Unsupported trade-management toggles fail closed instead of silently changing behavior
@@ -21,6 +23,7 @@ A checked box means implementation exists; it does not establish profitability o
 - [ ] Two-year 1m performance and memory benchmark
 - [x] SQLite persistence for datasets, run history, and editable profiles (durability depends on host disk; authentication/multi-user isolation remains open)
 - [x] OHLC candlestick chart with trade SL/TP/entry/exit overlays and candle-window paging\n- [ ] Smooth pan/zoom, replay controls, indicator and drawing tools, all setup annotations for candidate-library strategies
-- [ ] AI assistant, voice/files/media, run history, and guarded bug-fix workflow
+- [x] Multi-provider chat router with automatic fallback across configured OpenAI, Groq, OpenRouter, Cerebras, and custom OpenAI-compatible endpoints
+- [ ] AI assistant autonomous code repair, voice/files/media, and guarded bug-fix workflow
 - [ ] Standalone export replay run on exact source CSV and ledger equality verified
 - [ ] Deployment smoke test and persistence check

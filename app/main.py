@@ -37,6 +37,10 @@ class ProfileRequest(BaseModel):
     profile_name:str=Field(min_length=1,max_length=80)
     config:dict[str,Any]=Field(default_factory=dict)
 
+class AIChatRequest(BaseModel):
+    message:str=Field(min_length=1,max_length=8000)
+    history:list[dict[str,str]]=Field(default_factory=list)
+
 @app.get('/',response_class=HTMLResponse)
 def home(): return (ROOT/'static'/'index.html').read_text(encoding='utf-8')
 @app.get('/api/health')
@@ -64,6 +68,16 @@ def put_profile(req:ProfileRequest):
 @app.get('/api/history')
 def history(limit:int=Query(default=100,ge=1,le=500)): return list_history(limit)
 
+@app.get('/api/ai/status')
+def ai_status():
+    from .ai_router import provider_status
+    return provider_status()
+
+@app.post('/api/ai/chat')
+async def ai_chat(req:AIChatRequest):
+    from .ai_router import chat
+    return await chat(req.message,req.history)
+
 @app.post('/api/data/upload')
 async def upload_csv(file:UploadFile=File(...)):
     if not file.filename or not file.filename.lower().endswith('.csv'): raise HTTPException(400,'فقط فایل CSV کندل پذیرفته می‌شود.')
@@ -72,7 +86,7 @@ async def upload_csv(file:UploadFile=File(...)):
         aliases={'timestamp':'open_time','time':'open_time','open time':'open_time'}
         df=df.rename(columns={c:aliases.get(c.lower(),c.lower()) for c in df.columns})
         if 'open_time' in df and pd.api.types.is_datetime64_any_dtype(df['open_time']): df['open_time']=df['open_time'].astype('int64')//1000000
-        report=validate_ohlcv(df,60000 if '1m' in file.filename.lower() else None)
+        report=validate_ohlcv(df,60000 if '1m' in file.filename.lower() else None,strict_gaps=('1m' in file.filename.lower()))
         key=str(report['rows'])+'-'+str(int(df.open_time.iloc[0]))+'-'+hashlib.sha256(raw).hexdigest()[:8]
         DATASETS[key]=df; save_dataset(key,df,{'source':'user_csv','sha256_csv':hashlib.sha256(raw).hexdigest()})
         return {'dataset_id':key,'report':report,'sha256_csv':hashlib.sha256(raw).hexdigest()}
@@ -89,7 +103,7 @@ async def download_data(req:DownloadRequest):
         for idx in range(start,end+1):
             df,h,url=await download_binance_month(req.symbol,req.interval,idx//12,idx%12+1); chunks.append(df); hashes.append({'sha256':h,'url':url})
         merged=pd.concat(chunks,ignore_index=True).sort_values('open_time').reset_index(drop=True)
-        report=validate_ohlcv(merged,60000 if req.interval=='1m' else None)
+        report=validate_ohlcv(merged,60000 if req.interval=='1m' else None,strict_gaps=(req.interval=='1m'))
         key=f'{req.symbol.upper()}-{req.interval}-{req.start_year}{req.start_month:02d}-{req.end_year}{req.end_month:02d}'
         DATASETS[key]=merged; save_dataset(key,merged,{'source':'binance_vision','symbol':req.symbol.upper(),'interval':req.interval,'monthly_archive_hashes':hashes})
         return {'dataset_id':key,'symbol':req.symbol.upper(),'interval':req.interval,'report':report,'monthly_archive_hashes':hashes,'rows':len(merged),'splits':{k:len(v) for k,v in split_reference_period(merged).items()}}

@@ -25,6 +25,10 @@ CONTRACT = {
     "min_win_rate_pct": 40.0,
     "min_profit_factor": 1.0,
     "min_tp_per_day": 3.0,
+    "use_min_win_rate": True,
+    "use_min_profit_factor": True,
+    "use_min_tp_per_day": True,
+    "use_max_consecutive_losses": True,
     "break_even_enabled": False,
     "trailing_stop_enabled": False,
     "partial_exit_enabled": False,
@@ -49,6 +53,8 @@ def normalize_contract(overrides: dict[str, Any] | None = None) -> dict[str, Any
         try: cfg[key] = float(cfg[key])
         except (TypeError, ValueError): raise ValueError(f"{key} must be numeric")
         if not math.isfinite(cfg[key]): raise ValueError(f"{key} must be finite")
+    for key in ("use_min_win_rate", "use_min_profit_factor", "use_min_tp_per_day", "use_max_consecutive_losses", "break_even_enabled", "trailing_stop_enabled", "partial_exit_enabled", "time_exit_enabled", "compound"):
+        cfg[key] = bool(cfg[key])
     if cfg["initial_balance"] <= 0: raise ValueError("Initial balance must be positive")
     if cfg["risk_mode"] not in SUPPORTED_RISK_MODES: raise ValueError("Unsupported risk_mode")
     if cfg["risk_usd"] <= 0 or cfg["risk_pct"] <= 0 or cfg["risk_pct"] > 100: raise ValueError("Risk must be positive; risk_pct must be <= 100")
@@ -123,7 +129,7 @@ def backtest(frame, spec=None, contract=None):
     df=frame.copy().reset_index(drop=True)
     if len(df)>1:
         diffs=df.open_time.diff().dropna(); interval=int(diffs.mode().iloc[0]) if len(diffs) else None
-        report=validate_ohlcv(df,interval)
+        report=validate_ohlcv(df,interval,strict_gaps=True)
     else: report=validate_ohlcv(df,None)
     if len(df)<max(spec.slow,spec.atr_period)+3: raise DataIntegrityError("Not enough candles for warmup")
     data_hash=sha256_bytes(df.to_csv(index=False,float_format="%.12g").encode())
@@ -161,7 +167,7 @@ def backtest(frame, spec=None, contract=None):
     gp=sum(max(0,t["net_pnl"]) for t in ledger); gl=abs(sum(min(0,t["net_pnl"]) for t in ledger))
     span_days=max((int(df.open_time.iloc[-1])-int(df.open_time.iloc[0]))/86400000,1/1440)
     wr=100*len(wins)/len(ledger) if ledger else 0.0; pf=gp/gl if gl else (math.inf if gp else 0.0); tp_day=len(wins)/span_days
-    passes=wr>cfg["min_win_rate_pct"] and pf>cfg["min_profit_factor"] and tp_day>=cfg["min_tp_per_day"] and max_streak<=cfg["max_consecutive_losses"]
+    passes=(not cfg["use_min_win_rate"] or wr>cfg["min_win_rate_pct"]) and (not cfg["use_min_profit_factor"] or pf>cfg["min_profit_factor"]) and (not cfg["use_min_tp_per_day"] or tp_day>=cfg["min_tp_per_day"]) and (not cfg["use_max_consecutive_losses"] or max_streak<=cfg["max_consecutive_losses"])
     metrics={"trades":len(ledger),"wins":len(wins),"losses":sum(t["net_pnl"]<=0 for t in ledger),"win_rate_pct":wr,"profit_factor":pf if math.isfinite(pf) else None,"avg_net_tp_per_day":tp_day,"max_consecutive_losses":max_streak,"net_pnl":sum(t["net_pnl"] for t in ledger),"final_balance":balance,"total_costs":sum(t["fees_slippage"] for t in ledger),"data_hash_sha256":data_hash,"rows":len(df),"span_days":span_days,"passes_all_targets":bool(passes)}
     run_hash=sha256_bytes(json.dumps({"spec":asdict(spec),"contract":cfg,"data_hash":data_hash},sort_keys=True).encode())
     return {"strategy":asdict(spec),"contract":cfg,"metrics":metrics,"ledger":ledger,"data_report":report,"run_hash_sha256":run_hash}
@@ -175,7 +181,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None):
         spec=StrategySpec(f"EMA {fast}/{slow} ATR {period}x{mult:g}",fast,slow,period,mult,"both",seed)
         try:
             r=backtest(frame,spec,cfg); m=r["metrics"]
-            dist=max(0,cfg["min_win_rate_pct"]+0.0001-m["win_rate_pct"])/max(cfg["min_win_rate_pct"],1)+max(0,cfg["min_profit_factor"]+0.0001-(m["profit_factor"] or 0))+max(0,cfg["min_tp_per_day"]-m["avg_net_tp_per_day"])/max(cfg["min_tp_per_day"],1)+max(0,m["max_consecutive_losses"]-cfg["max_consecutive_losses"])/max(cfg["max_consecutive_losses"],1)
+            dist=(max(0,cfg["min_win_rate_pct"]+0.0001-m["win_rate_pct"])/max(cfg["min_win_rate_pct"],1) if cfg["use_min_win_rate"] else 0)+(max(0,cfg["min_profit_factor"]+0.0001-(m["profit_factor"] or 0)) if cfg["use_min_profit_factor"] else 0)+(max(0,cfg["min_tp_per_day"]-m["avg_net_tp_per_day"])/max(cfg["min_tp_per_day"],1) if cfg["use_min_tp_per_day"] else 0)+(max(0,m["max_consecutive_losses"]-cfg["max_consecutive_losses"])/max(cfg["max_consecutive_losses"],1) if cfg["use_max_consecutive_losses"] else 0)
             results.append({"strategy":r["strategy"],"contract":cfg,"metrics":m,"distance":dist,"run_hash_sha256":r["run_hash_sha256"]})
         except (ValueError,DataIntegrityError,IndexError): errors+=1
     results.sort(key=lambda r:(not r["metrics"]["passes_all_targets"],r["distance"],r["metrics"]["max_consecutive_losses"],-r["metrics"]["win_rate_pct"],-r["metrics"]["avg_net_tp_per_day"],-(r["metrics"]["profit_factor"] or 0)))
