@@ -191,15 +191,15 @@ def run_factory_pipeline(dataset_id:str,req:FactoryRequest):
     if df is None: raise HTTPException(404,'ابتدا داده را دریافت کنید.')
     try:
         report=run_validation_pipeline(df,req.candidates,req.seed,req.contract or None)
-        # Persist complete ledgers for each final candidate and return their run IDs.
+        # Persist the full Development/OOS ledgers; the response keeps summaries compact.
+        splits=split_reference_period(df)
         for item in report.get('results',[]):
             for period_key in ('development','oos'):
                 period=item.get(period_key,{})
-                strategy_result=None
-                if period.get('run_hash_sha256'):
-                    run_id=period['run_hash_sha256'][:16]
+                if period.get('run_hash_sha256') and period_key in splits:
+                    full_result=backtest(splits[period_key],item['strategy'],req.contract or None)
+                    run_id=_store_result(full_result,dataset_id)
                     item[period_key]['run_id']=run_id
-            # Train candidate results are summaries, not persisted full ledgers.
         return report
     except FactoryPreflightError as exc:
         raise HTTPException(422,str(exc)) from exc
