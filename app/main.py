@@ -24,11 +24,11 @@ class BacktestRequest(BaseModel):
     strategy:dict[str,Any]=Field(default_factory=dict)
     contract:dict[str,Any]=Field(default_factory=dict)
 class SearchRequest(BaseModel):
-    candidates:int=Field(default=500,ge=1,le=10000)
+    candidates:int=Field(default=500,ge=1,le=500000)
     seed:int=42
     contract:dict[str,Any]=Field(default_factory=dict)
 class FactoryRequest(BaseModel):
-    candidates:int=Field(default=500,ge=1,le=10000)
+    candidates:int=Field(default=500,ge=1,le=500000)
     seed:int=42
     contract:dict[str,Any]=Field(default_factory=dict)
 
