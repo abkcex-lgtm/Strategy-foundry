@@ -73,6 +73,13 @@ def normalize_contract(overrides: dict[str, Any] | None = None) -> dict[str, Any
     cfg["max_consecutive_losses"] = int(cfg["max_consecutive_losses"])
     return cfg
 
+STRATEGY_FAMILIES = (
+    "ema_cross", "momentum", "rsi_reversal", "bollinger_breakout",
+    "donchian_breakout", "volume_breakout", "candle_engulfing",
+    "support_resistance", "channel_breakout", "macd_cross",
+    "trend_pullback", "range_reversion",
+)
+
 @dataclass(frozen=True)
 class StrategySpec:
     name: str = "EMA trend crossover"
@@ -82,20 +89,89 @@ class StrategySpec:
     stop_atr: float = 1.5
     direction: str = "both"
     seed: int = 42
+    family: str = "ema_cross"
+    lookback: int = 20
+    rsi_period: int = 14
+    rsi_low: float = 30.0
+    rsi_high: float = 70.0
+    volume_mult: float = 1.5
+    band_std: float = 2.0
+    momentum_threshold: float = 0.0
     def validate(self):
         if not (2 <= self.fast < self.slow <= 500): raise ValueError("Require 2 <= fast < slow <= 500")
         if not (2 <= self.atr_period <= 200): raise ValueError("atr_period must be 2..200")
         if not (0.2 <= self.stop_atr <= 10): raise ValueError("stop_atr must be 0.2..10")
         if self.direction not in {"both","long","short"}: raise ValueError("Invalid direction")
+        if self.family not in STRATEGY_FAMILIES: raise ValueError(f"Unsupported strategy family: {self.family}")
+        if not 3 <= self.lookback <= 500: raise ValueError("lookback must be 3..500")
+        if not 2 <= self.rsi_period <= 100: raise ValueError("rsi_period must be 2..100")
+        if not 0 < self.rsi_low < self.rsi_high < 100: raise ValueError("Require 0 < rsi_low < rsi_high < 100")
+        if not 0.1 <= self.volume_mult <= 10: raise ValueError("volume_mult must be 0.1..10")
+        if not 0.5 <= self.band_std <= 4: raise ValueError("band_std must be 0.5..4")
+        if not -0.2 <= self.momentum_threshold <= 0.2: raise ValueError("momentum_threshold must be -0.2..0.2")
 
 def indicators(df, spec):
-    x=df.copy(); c=x.close.astype(float); prev=c.shift(1)
+    x=df.copy(); c=x.close.astype(float); o=x.open.astype(float); h=x.high.astype(float); l=x.low.astype(float); v=x.volume.astype(float); prev=c.shift(1)
     x["ema_fast"]=c.ewm(span=spec.fast,adjust=False,min_periods=spec.fast).mean()
     x["ema_slow"]=c.ewm(span=spec.slow,adjust=False,min_periods=spec.slow).mean()
-    tr=pd.concat([x.high-x.low,(x.high-prev).abs(),(x.low-prev).abs()],axis=1).max(axis=1)
+    tr=pd.concat([h-l,(h-prev).abs(),(l-prev).abs()],axis=1).max(axis=1)
     x["atr"]=tr.ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
-    x["long_signal"]=(x.ema_fast>x.ema_slow)&(x.ema_fast.shift(1)<=x.ema_slow.shift(1))
-    x["short_signal"]=(x.ema_fast<x.ema_slow)&(x.ema_fast.shift(1)>=x.ema_slow.shift(1))
+    long_signal=(x.ema_fast>x.ema_slow)&(x.ema_fast.shift(1)<=x.ema_slow.shift(1))
+    short_signal=(x.ema_fast<x.ema_slow)&(x.ema_fast.shift(1)>=x.ema_slow.shift(1))
+    family=spec.family
+    if family == "momentum":
+        mom=c.pct_change(spec.lookback)
+        long_signal=mom > spec.momentum_threshold; short_signal=mom < -spec.momentum_threshold
+    elif family in {"rsi_reversal","range_reversion"}:
+        delta=c.diff(); gain=delta.clip(lower=0).ewm(alpha=1/spec.rsi_period,adjust=False,min_periods=spec.rsi_period).mean()
+        loss=(-delta.clip(upper=0)).ewm(alpha=1/spec.rsi_period,adjust=False,min_periods=spec.rsi_period).mean()
+        rs=gain/loss.replace(0,np.nan); rsi=100-(100/(1+rs))
+        if family == "rsi_reversal":
+            long_signal=(rsi.shift(1)<spec.rsi_low)&(rsi>=spec.rsi_low)
+            short_signal=(rsi.shift(1)>spec.rsi_high)&(rsi<=spec.rsi_high)
+        else:
+            long_signal=rsi<=spec.rsi_low; short_signal=rsi>=spec.rsi_high
+    elif family == "bollinger_breakout":
+        mid=c.rolling(spec.lookback,min_periods=spec.lookback).mean()
+        sd=c.rolling(spec.lookback,min_periods=spec.lookback).std(ddof=0)
+        upper=mid+spec.band_std*sd; lower=mid-spec.band_std*sd
+        long_signal=(c>upper)&(prev<=upper.shift(1)); short_signal=(c<lower)&(prev>=lower.shift(1))
+    elif family in {"donchian_breakout","channel_breakout","support_resistance"}:
+        n=spec.lookback
+        ceiling=h.shift(1).rolling(n,min_periods=n).max()
+        floor=l.shift(1).rolling(n,min_periods=n).min()
+        if family == "support_resistance":
+            long_signal=(l<=floor*1.002)&(c>o)&(c.shift(1)<=o.shift(1))
+            short_signal=(h>=ceiling*0.998)&(c<o)&(c.shift(1)>=o.shift(1))
+        else:
+            long_signal=(c>ceiling)&(prev<=ceiling)
+            short_signal=(c<floor)&(prev>=floor)
+    elif family == "volume_breakout":
+        n=spec.lookback
+        ceiling=h.shift(1).rolling(n,min_periods=n).max()
+        floor=l.shift(1).rolling(n,min_periods=n).min()
+        volbase=v.shift(1).rolling(n,min_periods=n).mean()
+        active=v>volbase*spec.volume_mult
+        long_signal=(c>ceiling)&(prev<=ceiling)&active
+        short_signal=(c<floor)&(prev>=floor)&active
+    elif family == "candle_engulfing":
+        prev_open=o.shift(1); prev_close=c.shift(1)
+        bullish=(c>o)&(prev_close<prev_open)&(o<=prev_close)&(c>=prev_open)
+        bearish=(c<o)&(prev_close>prev_open)&(o>=prev_close)&(c<=prev_open)
+        long_signal=bullish; short_signal=bearish
+    elif family == "macd_cross":
+        fast=c.ewm(span=spec.fast,adjust=False,min_periods=spec.fast).mean()
+        slow=c.ewm(span=spec.slow,adjust=False,min_periods=spec.slow).mean()
+        macd=fast-slow; signal=macd.ewm(span=max(2,spec.rsi_period//2),adjust=False,min_periods=max(2,spec.rsi_period//2)).mean()
+        long_signal=(macd>signal)&(macd.shift(1)<=signal.shift(1))
+        short_signal=(macd<signal)&(macd.shift(1)>=signal.shift(1))
+    elif family == "trend_pullback":
+        trend=x.ema_fast>x.ema_slow
+        long_signal=trend&(l<=x.ema_fast)&(c>x.ema_fast)&(c.shift(1)<=x.ema_fast.shift(1))
+        trend_down=x.ema_fast<x.ema_slow
+        short_signal=trend_down&(h>=x.ema_fast)&(c<x.ema_fast)&(c.shift(1)>=x.ema_fast.shift(1))
+    x["long_signal"]=long_signal.fillna(False).astype(bool)
+    x["short_signal"]=short_signal.fillna(False).astype(bool)
     return x
 
 def _risk_budget(cfg: dict[str, Any], balance: float) -> float:
@@ -173,18 +249,31 @@ def backtest(frame, spec=None, contract=None):
     return {"strategy":asdict(spec),"contract":cfg,"metrics":metrics,"ledger":ledger,"data_report":report,"run_hash_sha256":run_hash}
 
 def search_candidates(frame, max_candidates=500, seed=42, contract=None):
-    if not 1<=max_candidates<=10000: raise ValueError("max_candidates must be 1..10000 in this starter API")
+    if not 1<=max_candidates<=500000: raise ValueError("max_candidates must be 1..500000")
     cfg=normalize_contract(contract)
     rng=np.random.default_rng(seed); results=[]; errors=0
+    families=np.asarray(STRATEGY_FAMILIES,dtype=object)
     for _ in range(max_candidates):
-        fast=int(rng.integers(4,40)); slow=int(rng.integers(max(fast+2,20),121)); period=int(rng.integers(7,31)); mult=float(rng.choice([0.8,1.0,1.2,1.5,2.0,2.5]))
-        spec=StrategySpec(f"EMA {fast}/{slow} ATR {period}x{mult:g}",fast,slow,period,mult,"both",seed)
+        fast=int(rng.integers(4,40)); slow=int(rng.integers(max(fast+2,20),121))
+        period=int(rng.integers(7,31)); mult=float(rng.choice([0.8,1.0,1.2,1.5,2.0,2.5]))
+        family=str(rng.choice(families)); lookback=int(rng.integers(8,81))
+        rsi_period=int(rng.integers(7,31)); rsi_low=float(rng.choice([20,25,30,35,40])); rsi_high=float(rng.choice([60,65,70,75,80]))
+        if rsi_low>=rsi_high: rsi_low,rsi_high=30.0,70.0
+        volume_mult=float(rng.choice([1.1,1.25,1.5,1.75,2.0,2.5]))
+        band_std=float(rng.choice([1.0,1.5,2.0,2.25,2.5,3.0]))
+        momentum_threshold=float(rng.choice([0.0,0.0005,0.001,0.002,0.003]))
+        spec=StrategySpec(
+            name=f"{family} f{fast}/s{slow} lb{lookback} ATR {period}x{mult:g}",
+            fast=fast,slow=slow,atr_period=period,stop_atr=mult,direction="both",seed=seed,
+            family=family,lookback=lookback,rsi_period=rsi_period,rsi_low=rsi_low,
+            rsi_high=rsi_high,volume_mult=volume_mult,band_std=band_std,
+            momentum_threshold=momentum_threshold)
         try:
             r=backtest(frame,spec,cfg); m=r["metrics"]
             dist=(max(0,cfg["min_win_rate_pct"]+0.0001-m["win_rate_pct"])/max(cfg["min_win_rate_pct"],1) if cfg["use_min_win_rate"] else 0)+(max(0,cfg["min_profit_factor"]+0.0001-(m["profit_factor"] or 0)) if cfg["use_min_profit_factor"] else 0)+(max(0,cfg["min_tp_per_day"]-m["avg_net_tp_per_day"])/max(cfg["min_tp_per_day"],1) if cfg["use_min_tp_per_day"] else 0)+(max(0,m["max_consecutive_losses"]-cfg["max_consecutive_losses"])/max(cfg["max_consecutive_losses"],1) if cfg["use_max_consecutive_losses"] else 0)
             results.append({"strategy":r["strategy"],"contract":cfg,"metrics":m,"distance":dist,"run_hash_sha256":r["run_hash_sha256"]})
-        except (ValueError,DataIntegrityError,IndexError): errors+=1
+        except (ValueError,DataIntegrityError,IndexError,ZeroDivisionError,FloatingPointError): errors+=1
     results.sort(key=lambda r:(not r["metrics"]["passes_all_targets"],r["distance"],r["metrics"]["max_consecutive_losses"],-r["metrics"]["win_rate_pct"],-r["metrics"]["avg_net_tp_per_day"],-(r["metrics"]["profit_factor"] or 0)))
     passing=[r for r in results if r["metrics"]["passes_all_targets"]]
     selected=passing if passing else results[:5]
-    return {"requested_candidates":max_candidates,"evaluated_candidates":len(results),"failed_candidates":errors,"seed":seed,"contract":cfg,"all_passing":bool(passing),"results":selected,"warning":"Bounded random search only; run on TRAIN data. No 500k+ or OOS certification."}
+    return {"requested_candidates":max_candidates,"evaluated_candidates":len(results),"failed_candidates":errors,"seed":seed,"contract":cfg,"families_searched":list(STRATEGY_FAMILIES),"all_passing":bool(passing),"results":selected,"warning":"Multi-family randomized search. Large candidate counts may be computationally expensive; run on TRAIN data only. OOS certification is separate."}
