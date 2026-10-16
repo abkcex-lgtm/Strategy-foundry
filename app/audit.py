@@ -21,6 +21,48 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
     atr=tr.ewm(alpha=1/period,adjust=False,min_periods=period).mean()
     long=(ef>es)&(ef.shift(1)<=es.shift(1))
     short=(ef<es)&(ef.shift(1)>=es.shift(1))
+    family=spec.get("family","ema_cross")
+    lookback=int(spec.get("lookback",20)); rsi_period=int(spec.get("rsi_period",14))
+    rsi_low=float(spec.get("rsi_low",30)); rsi_high=float(spec.get("rsi_high",70))
+    volume_mult=float(spec.get("volume_mult",1.5)); band_std=float(spec.get("band_std",2.0))
+    momentum_threshold=float(spec.get("momentum_threshold",0.0))
+    o=d["open"].astype(float); h=d["high"].astype(float); l=d["low"].astype(float); v=d["volume"].astype(float)
+    if family=="momentum":
+        mom=close.pct_change(lookback); long=mom>momentum_threshold; short=mom < -momentum_threshold
+    elif family in {"rsi_reversal","range_reversion"}:
+        delta=close.diff(); gain=delta.clip(lower=0).ewm(alpha=1/rsi_period,adjust=False,min_periods=rsi_period).mean()
+        loss=(-delta.clip(upper=0)).ewm(alpha=1/rsi_period,adjust=False,min_periods=rsi_period).mean()
+        rsi=100-(100/(1+gain/loss.replace(0,np.nan)))
+        if family=="rsi_reversal":
+            long=(rsi.shift(1)<rsi_low)&(rsi>=rsi_low); short=(rsi.shift(1)>rsi_high)&(rsi<=rsi_high)
+        else:
+            long=rsi<=rsi_low; short=rsi>=rsi_high
+    elif family=="bollinger_breakout":
+        mid=close.rolling(lookback,min_periods=lookback).mean()
+        sd=close.rolling(lookback,min_periods=lookback).std(ddof=0)
+        upper=mid+band_std*sd; lower=mid-band_std*sd
+        long=(close>upper)&(prev<=upper.shift(1)); short=(close<lower)&(prev>=lower.shift(1))
+    elif family in {"donchian_breakout","channel_breakout","support_resistance","volume_breakout"}:
+        ceiling=h.shift(1).rolling(lookback,min_periods=lookback).max()
+        floor=l.shift(1).rolling(lookback,min_periods=lookback).min()
+        if family=="support_resistance":
+            long=(l<=floor*1.002)&(close>o)&(close.shift(1)<=o.shift(1))
+            short=(h>=ceiling*0.998)&(close<o)&(close.shift(1)>=o.shift(1))
+        elif family=="volume_breakout":
+            volbase=v.shift(1).rolling(lookback,min_periods=lookback).mean(); active=v>volbase*volume_mult
+            long=(close>ceiling)&(prev<=ceiling)&active; short=(close<floor)&(prev>=floor)&active
+        else:
+            long=(close>ceiling)&(prev<=ceiling); short=(close<floor)&(prev>=floor)
+    elif family=="candle_engulfing":
+        po=o.shift(1); pc=close.shift(1)
+        long=(close>o)&(pc<po)&(o<=pc)&(close>=po)
+        short=(close<o)&(pc>po)&(o>=pc)&(close<=po)
+    elif family=="macd_cross":
+        macd=ef-es; signal=macd.ewm(span=max(2,rsi_period//2),adjust=False,min_periods=max(2,rsi_period//2)).mean()
+        long=(macd>signal)&(macd.shift(1)<=signal.shift(1)); short=(macd<signal)&(macd.shift(1)>=signal.shift(1))
+    elif family=="trend_pullback":
+        long=(ef>es)&(l<=ef)&(close>ef)&(close.shift(1)<=ef.shift(1))
+        short=(ef<es)&(h>=ef)&(close<ef)&(close.shift(1)>=ef.shift(1))
     rate=(float(cfg["commission_pct_per_side"])+float(cfg["slippage_pct_per_side"]))/100.0
     balance=float(cfg["initial_balance"]); streak=0; ledger=[]; max_streak=0
     i=max(slow,period)
