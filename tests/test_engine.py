@@ -2,7 +2,8 @@ import math
 import pandas as pd
 import pytest
 from app.data import validate_ohlcv, DataIntegrityError
-from app.engine import backtest, StrategySpec, CONTRACT, normalize_contract, _size_and_target\nfrom app.audit import independent_replay
+from app.engine import backtest, StrategySpec, CONTRACT, normalize_contract, _size_and_target
+from app.audit import independent_replay
 
 def candles(n=300):
     # Synthetic prices are used only for unit tests, never as market data.
