@@ -236,7 +236,7 @@ def indicators(df, spec):
         atr_active=x.atr>atrbase
         trend_strength=(x.ema_fast-x.ema_slow).abs()/x.atr.replace(0,np.nan)
         high_vol_regime=(x.atr/c.abs().replace(0,np.nan))>(atrbase/c.abs().replace(0,np.nan))
-        low_vol_regime=~high_vol_regime
+        low_vol_regime=(x.atr/c.abs().replace(0,np.nan))<(atrbase/c.abs().replace(0,np.nan))
         trend_regime=trend_strength>0.5
         range_regime=trend_strength<0.25
         bullish=c>o; bearish=c<o
