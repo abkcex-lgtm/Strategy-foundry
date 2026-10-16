@@ -41,8 +41,8 @@ def run_validation_pipeline(
     five Train near-misses. This pipeline does not pretend that this starter
     search is the full 500k+ strategy factory.
     """
-    if not 1 <= int(candidates) <= 10_000:
-        raise FactoryPreflightError("candidate count must be between 1 and 10000")
+    if not 1 <= int(candidates) <= 500_000:
+        raise FactoryPreflightError("candidate count must be between 1 and 500000")
 
     splits = split_reference_period(frame)
     counts = {name: int(len(part)) for name, part in splits.items()}
