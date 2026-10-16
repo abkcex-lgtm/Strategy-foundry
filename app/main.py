@@ -37,6 +37,10 @@ class ProfileRequest(BaseModel):
     profile_name:str=Field(min_length=1,max_length=80)
     config:dict[str,Any]=Field(default_factory=dict)
 
+class AIChatRequest(BaseModel):
+    message:str=Field(min_length=1,max_length=8000)
+    history:list[dict[str,str]]=Field(default_factory=list)
+
 @app.get('/',response_class=HTMLResponse)
 def home(): return (ROOT/'static'/'index.html').read_text(encoding='utf-8')
 @app.get('/api/health')
@@ -63,6 +67,16 @@ def put_profile(req:ProfileRequest):
     return {'saved':True,'profile_name':req.profile_name,'config':cfg}
 @app.get('/api/history')
 def history(limit:int=Query(default=100,ge=1,le=500)): return list_history(limit)
+
+@app.get('/api/ai/status')
+def ai_status():
+    from .ai_router import provider_status
+    return provider_status()
+
+@app.post('/api/ai/chat')
+async def ai_chat(req:AIChatRequest):
+    from .ai_router import chat
+    return await chat(req.message,req.history)
 
 @app.post('/api/data/upload')
 async def upload_csv(file:UploadFile=File(...)):
