@@ -65,8 +65,37 @@ def run_backtest(dataset_id:str,req:BacktestRequest):
 def search(dataset_id:str,candidates:int=500,seed:int=42):
     df=DATASETS.get(dataset_id)
     if df is None: raise HTTPException(404,'ابتدا داده را دریافت کنید.')
-    try: return search_candidates(df,candidates,seed)
+    try:
+        splits=split_reference_period(df); train=splits['train']
+        if len(train)<100: raise HTTPException(422,'دادهٔ Train برای بازهٔ قرارداد Apr-Jun 2026 کافی نیست؛ جست‌وجو آغاز نشد.')
+        result=search_candidates(train,candidates,seed)
+        result['dataset_id']=dataset_id
+        result['search_period']='2026-04-01 to 2026-07-01 UTC (TRAIN only)'
+        result['development_period']='2026-07-01 to 2026-08-01 UTC (not used in search)'
+        result['oos_period']='2026-08-01 to 2026-10-01 UTC (not used in search)'
+        return result
+    except HTTPException: raise
     except Exception as exc: raise HTTPException(422,str(exc)) from exc
+
+@app.post('/api/evaluate/{dataset_id}')
+def evaluate_strategy(dataset_id:str,req:BacktestRequest):
+    df=DATASETS.get(dataset_id)
+    if df is None: raise HTTPException(404,'ابتدا داده را دریافت کنید.')
+    try:
+        splits=split_reference_period(df); report={'dataset_id':dataset_id,'strategy':req.strategy,'periods':{},'note':'Evaluate only a frozen strategy. Repeated OOS selection contaminates the holdout.'}
+        for key,part in splits.items():
+            if len(part)<100:
+                report['periods'][key]={'status':'PREFLIGHT_FAILED','rows':len(part),'reason':'Insufficient rows for the fixed reference period'}
+                continue
+            try:
+                result=backtest(part,req.strategy or None,req.contract or None)
+                run_id=result['run_hash_sha256'][:16]; RUNS[run_id]=result
+                report['periods'][key]={'status':'COMPLETED','run_id':run_id,'metrics':result['metrics'],'trade_count':len(result['ledger'])}
+            except Exception as exc:
+                report['periods'][key]={'status':'PREFLIGHT_FAILED','rows':len(part),'reason':str(exc)}
+        report['certified']=False
+        return report
+    except Exception as exc: raise HTTPException(422,f'Split evaluation failed: {exc}') from exc
 @app.get('/api/runs/{run_id}')
 def get_run(run_id:str):
     if run_id not in RUNS: raise HTTPException(404,'Run پیدا نشد.')
