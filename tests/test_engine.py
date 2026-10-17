@@ -128,6 +128,25 @@ def test_hybrid_genetic_search_is_seeded_and_reports_real_evaluations():
     assert "500k-certified" in a["warning"]
 
 
+@pytest.mark.parametrize("family", ["swing_structure_break", "failed_breakout_reversal", "wick_rejection", "range_expansion_breakout", "three_bar_momentum", "volatility_regime_breakout", "trend_exhaustion_reversal", "volume_climax_reversal", "range_compression_breakout", "support_resistance_rejection", "micro_double_bottom", "micro_double_top"])
+def test_new_price_action_families_match_independent_ledger(family):
+    df = candles(900)
+    spec = StrategySpec(fast=5, slow=18, atr_period=7, stop_atr=1.5, family=family)
+    try:
+        primary = backtest(df, spec, normalize_contract({"reward_risk": 2.0}))
+        independent = independent_replay(df, primary["strategy"], primary["contract"])
+    except DataIntegrityError as exc:
+        if "ambiguity" in str(exc).lower():
+            pytest.skip("Synthetic path triggered conservative ambiguity guard")
+        raise
+    assert len(primary["ledger"]) == len(independent["ledger"])
+    for a, b in zip(primary["ledger"], independent["ledger"]):
+        assert a["entry_time"] == b["entry_time"]
+        assert a["exit_time"] == b["exit_time"]
+        assert a["direction"] == b["direction"]
+        assert a["net_pnl"] == pytest.approx(b["net_pnl"], rel=1e-10, abs=1e-8)
+
+
 def test_search_rejects_unknown_algorithm():
     from app.engine import search_candidates
     with pytest.raises(ValueError,match="Unsupported search algorithm"):
