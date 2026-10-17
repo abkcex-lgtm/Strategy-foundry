@@ -21,6 +21,7 @@ def test_home_page_serves_persian_ui():
     assert 'خلاصهٔ زندهٔ پژوهش' in r.text
     assert 'id="chartZoom"' in r.text
     assert 'id="chartLatest"' in r.text
+    assert 'id="searchHistoryList"' in r.text
     assert '<option>30m</option>' in r.text
     assert '<option>2h</option>' in r.text
 
