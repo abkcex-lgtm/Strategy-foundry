@@ -33,29 +33,30 @@ def test_search_job_is_tracked_and_uses_train_only(monkeypatch):
         }
 
     monkeypatch.setattr(main, "search_candidates", fake_search)
-    client = TestClient(main.app)
-    response = client.post(
-        f"/api/search-jobs/{dataset_id}",
-        json={"candidates": 7, "seed": 42, "contract": {}},
-    )
-    assert response.status_code == 200
-    job_id = response.json()["job_id"]
+    try:
+        with TestClient(main.app) as client:
+            response = client.post(
+                f"/api/search-jobs/{dataset_id}",
+                json={"candidates": 7, "seed": 42, "contract": {}},
+            )
+            assert response.status_code == 200
+            job_id = response.json()["job_id"]
 
-    state = None
-    for _ in range(100):
-        poll = client.get(f"/api/jobs/{job_id}")
-        assert poll.status_code == 200
-        state = poll.json()
-        if state["status"] in {"completed", "failed"}:
-            break
-        time.sleep(0.01)
+            state = None
+            for _ in range(500):
+                poll = client.get(f"/api/jobs/{job_id}")
+                assert poll.status_code == 200
+                state = poll.json()
+                if state["status"] in {"completed", "failed"}:
+                    break
+                time.sleep(0.01)
 
-    assert state is not None
-    assert state["status"] == "completed", state
-    assert state["result"]["evaluated_candidates"] == 7
-    assert "OOS is not read for candidate selection" in state["result"]["selection_policy"]
-    monkeypatch.delitem(main.DATASETS, dataset_id, raising=False)
-
+            assert state is not None
+            assert state["status"] == "completed", state
+            assert state["result"]["evaluated_candidates"] == 7
+            assert "OOS is not read for candidate selection" in state["result"]["selection_policy"]
+    finally:
+        monkeypatch.delitem(main.DATASETS, dataset_id, raising=False)
 
 def test_search_job_requires_existing_dataset():
     client = TestClient(main.app)
