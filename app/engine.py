@@ -83,6 +83,8 @@ class StrategySpec:
     direction: str = "both"
     seed: int = 42
     family: str = "ema_crossover"
+    context_filter: str = "none"
+    confirmation_filter: str = "none"
     def validate(self):
         if not (2 <= self.fast < self.slow <= 500): raise ValueError("Require 2 <= fast < slow <= 500")
         if not (2 <= self.atr_period <= 200): raise ValueError("atr_period must be 2..200")
@@ -90,6 +92,10 @@ class StrategySpec:
         if self.direction not in {"both","long","short"}: raise ValueError("Invalid direction")
         if self.family not in {"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal"}:
             raise ValueError("Unsupported strategy family")
+        if self.context_filter not in {"none","ema_trend","adx_strength","volume_confirm","vwap_side","low_volatility"}:
+            raise ValueError("Unsupported context filter")
+        if self.confirmation_filter not in {"none","candle_direction","momentum","rsi_midline"}:
+            raise ValueError("Unsupported confirmation filter")
 
 def indicators(df, spec):
     x=df.copy(); c=x.close.astype(float); prev=c.shift(1)
@@ -224,6 +230,41 @@ def indicators(df, spec):
         lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
         long_signal=(c>c.shift(spec.fast))&(c>upper)&(c.shift(1)<=upper.shift(1))
         short_signal=(c<c.shift(spec.fast))&(c<lower)&(c.shift(1)>=lower.shift(1))
+    if spec.context_filter=="ema_trend":
+        long_signal=long_signal&(x.ema_fast>x.ema_slow)
+        short_signal=short_signal&(x.ema_fast<x.ema_slow)
+    elif spec.context_filter=="adx_strength":
+        up=x.high.diff(); down=-x.low.diff()
+        plus=up.where((up>down)&(up>0),0.0).ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
+        minus=down.where((down>up)&(down>0),0.0).ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
+        pdi=100*plus/x.atr.replace(0,np.nan); mdi=100*minus/x.atr.replace(0,np.nan)
+        dx=100*(pdi-mdi).abs()/(pdi+mdi).replace(0,np.nan)
+        adx=dx.ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
+        long_signal=long_signal&(adx>=20)&(pdi>mdi)
+        short_signal=short_signal&(adx>=20)&(mdi>pdi)
+    elif spec.context_filter=="volume_confirm":
+        baseline=x.volume.rolling(spec.fast,min_periods=spec.fast).mean().shift(1)
+        active=x.volume>=baseline*1.5
+        long_signal=long_signal&active; short_signal=short_signal&active
+    elif spec.context_filter=="vwap_side":
+        typical=(x.high+x.low+c)/3; vol=x.volume.astype(float)
+        vw=(typical*vol).rolling(spec.slow,min_periods=spec.slow).sum()/vol.rolling(spec.slow,min_periods=spec.slow).sum().replace(0,np.nan)
+        long_signal=long_signal&(c>vw); short_signal=short_signal&(c<vw)
+    elif spec.context_filter=="low_volatility":
+        ratio=x.atr/c.replace(0,np.nan)
+        threshold=ratio.rolling(spec.slow,min_periods=spec.slow).quantile(0.35).shift(1)
+        calm=ratio<=threshold
+        long_signal=long_signal&calm; short_signal=short_signal&calm
+    if spec.confirmation_filter=="candle_direction":
+        long_signal=long_signal&(c>x.open); short_signal=short_signal&(c<x.open)
+    elif spec.confirmation_filter=="momentum":
+        long_signal=long_signal&(c>c.shift(spec.fast)); short_signal=short_signal&(c<c.shift(spec.fast))
+    elif spec.confirmation_filter=="rsi_midline":
+        delta=c.diff()
+        gain=delta.clip(lower=0).ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
+        loss=(-delta.clip(upper=0)).ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
+        rsi=100-100/(1+gain/loss.replace(0,np.nan))
+        long_signal=long_signal&(rsi>50); short_signal=short_signal&(rsi<50)
     x["long_signal"]=long_signal.fillna(False)
     x["short_signal"]=short_signal.fillna(False)
     return x
