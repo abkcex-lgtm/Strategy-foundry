@@ -19,7 +19,7 @@ def candles(n=800):
     return pd.DataFrame(rows)
 
 
-@pytest.mark.parametrize("family", ["ema_crossover", "channel_breakout", "rsi_reversion", "volume_breakout"])
+@pytest.mark.parametrize("family", ["ema_crossover", "channel_breakout", "rsi_reversion", "volume_breakout", "ema_pullback", "macd_crossover", "bollinger_reversion", "inside_bar_breakout", "engulfing_reversal", "momentum_breakout"])
 def test_standalone_replay_matches_factory_for_each_family(family):
     frame = candles(800)
     spec = StrategySpec(
