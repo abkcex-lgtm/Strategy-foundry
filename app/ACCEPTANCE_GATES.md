@@ -25,6 +25,7 @@ A checked box means implementation exists; it does not establish profitability o
 - [x] SQLite persistence for datasets, run history, and editable profiles (durability depends on host disk; authentication/multi-user isolation remains open)
 - [x] OHLC candlestick chart with trade SL/TP/entry/exit overlays, candle-window paging, zoom presets, latest-candle jump, and trades spanning the visible window\n- [ ] Smooth pan/zoom, replay controls, indicator and drawing tools, all setup annotations for candidate-library strategies
 - [x] Tracked asynchronous strategy-search jobs with status polling; search and ranking explicitly use TRAIN only
+- [x] Four causal strategy families: EMA crossover, price-channel breakout, RSI reversion, and volume-confirmed breakout; independent replay updated for all four
 - [x] Independent audit selects the exact saved Train/Dev/OOS data slice for split-evaluation runs; real-market replay certification remains pending
 - [x] Multi-provider chat router with automatic fallback across configured OpenAI, Groq, OpenRouter, Cerebras, and custom OpenAI-compatible endpoints
 - [ ] AI assistant autonomous code repair, voice/files/media, and guarded bug-fix workflow
