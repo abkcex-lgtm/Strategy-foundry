@@ -28,7 +28,7 @@ def test_bad_ohlc_rejected():
 def test_strategy_parameters():
     with pytest.raises(ValueError): StrategySpec(fast=36,slow=9).validate()
 
-@pytest.mark.parametrize("family", ["ema_crossover", "channel_breakout", "rsi_reversion", "volume_breakout", "ema_pullback", "macd_crossover", "bollinger_reversion", "inside_bar_breakout", "engulfing_reversal", "momentum_breakout"])
+@pytest.mark.parametrize("family", ["ema_crossover", "channel_breakout", "rsi_reversion", "volume_breakout", "ema_pullback", "macd_crossover", "bollinger_reversion", "inside_bar_breakout", "engulfing_reversal", "momentum_breakout", "stochastic_reversion", "roc_momentum", "adx_trend", "keltner_breakout", "atr_squeeze_breakout", "obv_trend", "vwap_reclaim", "pivot_reversal"])
 def test_supported_strategy_families_produce_causal_signal_columns(family):
     df = candles(500)
     spec = StrategySpec(fast=5, slow=18, atr_period=7, stop_atr=1.5, family=family)
@@ -44,7 +44,7 @@ def test_unknown_strategy_family_is_rejected():
     with pytest.raises(ValueError, match="Unsupported strategy family"):
         StrategySpec(family="future_peeking").validate()
 
-@pytest.mark.parametrize("family", ["ema_crossover", "channel_breakout", "rsi_reversion", "volume_breakout", "ema_pullback", "macd_crossover", "bollinger_reversion", "inside_bar_breakout", "engulfing_reversal", "momentum_breakout"])
+@pytest.mark.parametrize("family", ["ema_crossover", "channel_breakout", "rsi_reversion", "volume_breakout", "ema_pullback", "macd_crossover", "bollinger_reversion", "inside_bar_breakout", "engulfing_reversal", "momentum_breakout", "stochastic_reversion", "roc_momentum", "adx_trend", "keltner_breakout", "atr_squeeze_breakout", "obv_trend", "vwap_reclaim", "pivot_reversal"])
 def test_future_candle_changes_do_not_rewrite_past_signals(family):
     df = candles(500)
     spec = StrategySpec(fast=5, slow=18, atr_period=7, stop_atr=1.5, family=family)
@@ -95,7 +95,7 @@ def test_unsupported_addon_fails_closed():
     with pytest.raises(ValueError,match='not implemented'):
         normalize_contract({'trailing_stop_enabled':True})
 
-@pytest.mark.parametrize("family", ["ema_crossover", "channel_breakout", "rsi_reversion", "volume_breakout", "ema_pullback", "macd_crossover", "bollinger_reversion", "inside_bar_breakout", "engulfing_reversal", "momentum_breakout"])
+@pytest.mark.parametrize("family", ["ema_crossover", "channel_breakout", "rsi_reversion", "volume_breakout", "ema_pullback", "macd_crossover", "bollinger_reversion", "inside_bar_breakout", "engulfing_reversal", "momentum_breakout", "stochastic_reversion", "roc_momentum", "adx_trend", "keltner_breakout", "atr_squeeze_breakout", "obv_trend", "vwap_reclaim", "pivot_reversal"])
 def test_independent_engine_matches_primary_ledger(family):
     df=candles(800)
     spec=StrategySpec(fast=5,slow=18,atr_period=7,stop_atr=1.5,family=family)
