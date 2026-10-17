@@ -38,4 +38,5 @@ A checked box means implementation exists; it does not establish profitability o
 - [ ] Deployment smoke test and persistence check
 
 - [x] 12 additional price-action/regime signal families added to engine and independent audit; signal generation covered by parameterized tests (execution not yet CI-verified)
-- [ ] 500,000+ distinct-candidate search with durable checkpoints, cancellation/resume, bounded-memory result storage, and full-run acceptance test
+- [x] Background batch search request up to 500,000 candidates, global genome fingerprint deduplication, atomic completed-batch checkpoints, and resume endpoint
+- [ ] Run and measure a full 500,000-candidate search on production-sized data; verify wall time, memory, disk, cancellation behavior, and complete all-pass/near-miss aggregation
