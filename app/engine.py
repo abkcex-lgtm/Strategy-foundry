@@ -368,7 +368,7 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
     return sum(distances.values()), failed, distances
 
 
-def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="hybrid_genetic"):
+def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="hybrid_genetic", search_space=None):
     """Deterministic bounded evolutionary search on TRAIN only.
 
     max_candidates counts distinct parameter genomes actually evaluated. This is
@@ -380,15 +380,22 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         raise ValueError("Unsupported search algorithm")
     cfg=normalize_contract(contract)
     rng=np.random.default_rng(seed)
-    families=("ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal")
+    all_families=("ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal")
+    all_context_filters=("none","ema_trend","adx_strength","volume_confirm","vwap_side","low_volatility")
+    all_confirmation_filters=("none","candle_direction","momentum","rsi_midline")
+    space=dict(search_space or {})
+    families=tuple(dict.fromkeys(space.get("families") or all_families))
+    context_filters=tuple(dict.fromkeys(space.get("context_filters") or all_context_filters))
+    confirmation_filters=tuple(dict.fromkeys(space.get("confirmation_filters") or all_confirmation_filters))
+    if not families or any(f not in all_families for f in families): raise ValueError("Search family selection is empty or contains unsupported families")
+    if not context_filters or any(f not in all_context_filters for f in context_filters): raise ValueError("Context filter selection is empty or unsupported")
+    if not confirmation_filters or any(f not in all_confirmation_filters for f in confirmation_filters): raise ValueError("Confirmation filter selection is empty or unsupported")
     names={"ema_crossover":"EMA crossover","channel_breakout":"Price channel breakout","rsi_reversion":"RSI reversion","volume_breakout":"Volume-confirmed breakout","ema_pullback":"EMA trend pullback","macd_crossover":"MACD crossover","bollinger_reversion":"Bollinger mean reversion","inside_bar_breakout":"Inside-bar breakout","engulfing_reversal":"Engulfing candle reversal","momentum_breakout":"Momentum-confirmed breakout","stochastic_reversion":"Stochastic reversion","roc_momentum":"Rate-of-change momentum","adx_trend":"ADX directional trend","keltner_breakout":"Keltner channel breakout","atr_squeeze_breakout":"Volatility squeeze breakout","obv_trend":"OBV volume trend","vwap_reclaim":"VWAP reclaim","pivot_reversal":"Support/resistance pivot reversal"}
     fast_values=np.array([3,4,5,6,8,9,10,12,14,16,18,21,24,28,32,36,40,48,55,64,72,89],dtype=int)
     slow_values=np.array([12,16,18,20,24,28,32,36,40,48,55,64,72,89,100,120,144,180,200,240,300,400,500],dtype=int)
     periods=np.array([5,7,9,10,12,14,16,18,21,24,28,30,40,50],dtype=int)
     stops=np.array([0.5,0.7,0.8,1.0,1.2,1.5,1.8,2.0,2.5,3.0,3.5,4.0,5.0,6.0],dtype=float)
     directions=("both","long","short")
-    context_filters=("none","ema_trend","adx_strength","volume_confirm","vwap_side","low_volatility")
-    confirmation_filters=("none","candle_direction","momentum","rsi_midline")
     evaluated:dict[tuple,dict[str,Any]]={}
     errors=0
     family_counts={f:0 for f in families}
