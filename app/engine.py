@@ -241,7 +241,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None):
                             "failed_conditions":failed,"criterion_distances":criterion_distances,
                             "run_hash_sha256":r["run_hash_sha256"]})
         except (ValueError,DataIntegrityError,IndexError): errors+=1
-    results.sort(key=lambda r:(not r["metrics"]["passes_all_targets"],r["distance"],r["metrics"]["max_consecutive_losses"],-r["metrics"]["win_rate_pct"],-r["metrics"]["avg_net_tp_per_day"],-(r["metrics"]["profit_factor"] or 0)))
+    results.sort(key=lambda r:(not r["metrics"]["passes_all_targets"],r["distance"],r["metrics"]["max_consecutive_losses"],-r["metrics"]["win_rate_pct"],-r["metrics"]["avg_net_tp_per_day"],-(math.inf if r["metrics"]["profit_factor"] is None else float(r["metrics"]["profit_factor"]))))
     passing=[r for r in results if r["metrics"]["passes_all_targets"]]
     selected=passing if passing else results[:5]
     near_miss_shortfall=max(0,5-len(selected)) if not passing else 0
