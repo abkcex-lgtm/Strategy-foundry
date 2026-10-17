@@ -134,6 +134,41 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
         upper=d.high.rolling(slow,min_periods=slow).max().shift(1); lower=d.low.rolling(slow,min_periods=slow).min().shift(1)
         long=(close>close.shift(fast))&(close>upper)&(close.shift(1)<=upper.shift(1))
         short=(close<close.shift(fast))&(close<lower)&(close.shift(1)>=lower.shift(1))
+    context_filter=spec.get("context_filter","none")
+    confirmation_filter=spec.get("confirmation_filter","none")
+    if context_filter=="ema_trend":
+        long=long&(ef>es); short=short&(ef<es)
+    elif context_filter=="adx_strength":
+        up=d.high.diff(); down=-d.low.diff()
+        plus=up.where((up>down)&(up>0),0.0).ewm(alpha=1/period,adjust=False,min_periods=period).mean()
+        minus=down.where((down>up)&(down>0),0.0).ewm(alpha=1/period,adjust=False,min_periods=period).mean()
+        pdi=100*plus/atr.replace(0,np.nan); mdi=100*minus/atr.replace(0,np.nan)
+        dx=100*(pdi-mdi).abs()/(pdi+mdi).replace(0,np.nan)
+        adx=dx.ewm(alpha=1/period,adjust=False,min_periods=period).mean()
+        long=long&(adx>=20)&(pdi>mdi); short=short&(adx>=20)&(mdi>pdi)
+    elif context_filter=="volume_confirm":
+        baseline=d.volume.rolling(fast,min_periods=fast).mean().shift(1)
+        active=d.volume>=baseline*1.5
+        long=long&active; short=short&active
+    elif context_filter=="vwap_side":
+        typical=(d.high+d.low+close)/3; vol=d.volume.astype(float)
+        vw=(typical*vol).rolling(slow,min_periods=slow).sum()/vol.rolling(slow,min_periods=slow).sum().replace(0,np.nan)
+        long=long&(close>vw); short=short&(close<vw)
+    elif context_filter=="low_volatility":
+        ratio=atr/close.replace(0,np.nan)
+        threshold=ratio.rolling(slow,min_periods=slow).quantile(0.35).shift(1)
+        calm=ratio<=threshold
+        long=long&calm; short=short&calm
+    if confirmation_filter=="candle_direction":
+        long=long&(close>d.open); short=short&(close<d.open)
+    elif confirmation_filter=="momentum":
+        long=long&(close>close.shift(fast)); short=short&(close<close.shift(fast))
+    elif confirmation_filter=="rsi_midline":
+        delta=close.diff()
+        gain=delta.clip(lower=0).ewm(alpha=1/period,adjust=False,min_periods=period).mean()
+        loss=(-delta.clip(upper=0)).ewm(alpha=1/period,adjust=False,min_periods=period).mean()
+        rsi=100-100/(1+gain/loss.replace(0,np.nan))
+        long=long&(rsi>50); short=short&(rsi<50)
     long=long.fillna(False)
     short=short.fillna(False)
     rate=(float(cfg["commission_pct_per_side"])+float(cfg["slippage_pct_per_side"]))/100.0
