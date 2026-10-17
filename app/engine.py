@@ -368,7 +368,7 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
     return sum(distances.values()), failed, distances
 
 
-def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="hybrid_genetic", search_space=None):
+def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="surrogate_genetic", search_space=None):
     """Deterministic bounded evolutionary search on TRAIN only.
 
     max_candidates counts distinct parameter genomes actually evaluated. This is
