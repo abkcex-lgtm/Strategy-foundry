@@ -34,7 +34,8 @@ A checked box means implementation exists; it does not establish profitability o
 - [x] Independent audit selects the exact saved Train/Dev/OOS data slice for split-evaluation runs; real-market replay certification remains pending
 - [x] Multi-provider chat router with automatic fallback across configured OpenAI, Groq, OpenRouter, Cerebras, and custom OpenAI-compatible endpoints
 - [ ] AI assistant autonomous code repair, voice/files/media, and guarded bug-fix workflow
-- [ ] Standalone export replay run on exact source CSV and ledger equality verified
+- [ ] Standalone export replay run on exact real-market source CSV and non-empty ledger equality verified (generated-script/hash regression covered by synthetic CI fixture only)
+- [x] Standalone replay embeds causal indicator logic for all 30 strategy families and AND/OR/XOR composition; gap-at-open stop/target fills and same-candle ambiguity handling align with the primary engine
 - [ ] Deployment smoke test and persistence check
 
 - [x] 12 additional price-action/regime signal families added to engine and independent audit; signal generation and ledger parity covered by parameterized tests (execution not yet CI-verified)

@@ -2,6 +2,8 @@
 import sys, json, hashlib, math
 import numpy as np
 import pandas as pd
+from dataclasses import dataclass, replace
+from typing import Any
 SPEC = __SPEC__
 CFG = __CONTRACT__
 EXPECTED_DATA_SHA256 = '__DATA_HASH__'
@@ -14,6 +16,268 @@ def validate(df):
     if df.open_time.duplicated().any() or not df.open_time.is_monotonic_increasing: raise ValueError('Duplicate or out-of-order timestamps')
     if (df[['open','high','low','close']]<=0).any().any() or (df.volume<0).any(): raise ValueError('Invalid price/volume')
     if (df.high<df[['open','close','low']].max(axis=1)).any() or (df.low>df[['open','close','high']].min(axis=1)).any(): raise ValueError('Invalid OHLC')
+@dataclass(frozen=True)
+class StrategySpec:
+    name: str = "EMA trend crossover"
+    fast: int = 9
+    slow: int = 36
+    atr_period: int = 14
+    stop_atr: float = 1.5
+    direction: str = "both"
+    seed: int = 42
+    family: str = "ema_crossover"
+    context_filter: str = "none"
+    confirmation_filter: str = "none"
+    secondary_family: str = "none"
+    signal_composition: str = "single"
+    def validate(self):
+        if not (2 <= self.fast < self.slow <= 500): raise ValueError("Require 2 <= fast < slow <= 500")
+        if not (2 <= self.atr_period <= 200): raise ValueError("atr_period must be 2..200")
+        if not (0.2 <= self.stop_atr <= 10): raise ValueError("stop_atr must be 0.2..10")
+        if self.direction not in {"both","long","short"}: raise ValueError("Invalid direction")
+        if self.family not in {"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top"}:
+            raise ValueError("Unsupported strategy family")
+        valid_families={"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top"}
+        if self.secondary_family not in valid_families | {"none"}: raise ValueError("Unsupported secondary strategy family")
+        if self.signal_composition not in {"single","and","or","xor"}: raise ValueError("Unsupported signal composition")
+        if self.signal_composition=="single" and self.secondary_family!="none": raise ValueError("Single-family strategy cannot set secondary_family")
+        if self.signal_composition!="single" and (self.secondary_family=="none" or self.secondary_family==self.family): raise ValueError("Composite strategy requires a different secondary family")
+        if self.context_filter not in {"none","ema_trend","adx_strength","volume_confirm","vwap_side","low_volatility"}:
+            raise ValueError("Unsupported context filter")
+        if self.confirmation_filter not in {"none","candle_direction","momentum","rsi_midline"}:
+            raise ValueError("Unsupported confirmation filter")
+
+def indicators(df, spec):
+    x=df.copy(); c=x.close.astype(float); prev=c.shift(1)
+    x["ema_fast"]=c.ewm(span=spec.fast,adjust=False,min_periods=spec.fast).mean()
+    x["ema_slow"]=c.ewm(span=spec.slow,adjust=False,min_periods=spec.slow).mean()
+    tr=pd.concat([x.high-x.low,(x.high-prev).abs(),(x.low-prev).abs()],axis=1).max(axis=1)
+    x["atr"]=tr.ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
+    long_signal=(x.ema_fast>x.ema_slow)&(x.ema_fast.shift(1)<=x.ema_slow.shift(1))
+    short_signal=(x.ema_fast<x.ema_slow)&(x.ema_fast.shift(1)>=x.ema_slow.shift(1))
+    if spec.family in {"channel_breakout","volume_breakout"}:
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        long_signal=(c>upper)&(c.shift(1)<=upper.shift(1))
+        short_signal=(c<lower)&(c.shift(1)>=lower.shift(1))
+        if spec.family=="volume_breakout":
+            baseline=x.volume.rolling(spec.fast,min_periods=spec.fast).mean().shift(1)
+            active_volume=x.volume>=baseline*1.5
+            long_signal=long_signal&active_volume
+            short_signal=short_signal&active_volume
+    elif spec.family=="rsi_reversion":
+        delta=c.diff()
+        gain=delta.clip(lower=0).ewm(alpha=1/spec.fast,adjust=False,min_periods=spec.fast).mean()
+        loss=(-delta.clip(upper=0)).ewm(alpha=1/spec.fast,adjust=False,min_periods=spec.fast).mean()
+        rs=gain/loss.replace(0,np.nan)
+        rsi=100-100/(1+rs)
+        long_signal=(rsi.shift(1)<=30)&(rsi>30)
+        short_signal=(rsi.shift(1)>=70)&(rsi<70)
+    elif spec.family=="ema_pullback":
+        trend_up=x.ema_fast>x.ema_slow; trend_down=x.ema_fast<x.ema_slow
+        long_signal=trend_up&(c> x.ema_fast)&(c.shift(1)<=x.ema_fast.shift(1))
+        short_signal=trend_down&(c< x.ema_fast)&(c.shift(1)>=x.ema_fast.shift(1))
+    elif spec.family=="macd_crossover":
+        macd=c.ewm(span=spec.fast,adjust=False,min_periods=spec.fast).mean()-c.ewm(span=spec.slow,adjust=False,min_periods=spec.slow).mean()
+        signal=macd.ewm(span=max(2,spec.fast//2),adjust=False,min_periods=max(2,spec.fast//2)).mean()
+        long_signal=(macd>signal)&(macd.shift(1)<=signal.shift(1))
+        short_signal=(macd<signal)&(macd.shift(1)>=signal.shift(1))
+    elif spec.family=="bollinger_reversion":
+        mid=c.rolling(spec.slow,min_periods=spec.slow).mean(); dev=c.rolling(spec.slow,min_periods=spec.slow).std(ddof=0)
+        upper=mid+2*dev; lower=mid-2*dev
+        long_signal=(c>lower)&(c.shift(1)<=lower.shift(1))
+        short_signal=(c<upper)&(c.shift(1)>=upper.shift(1))
+    elif spec.family=="inside_bar_breakout":
+        inside=(x.high.shift(1)<x.high.shift(2))&(x.low.shift(1)>x.low.shift(2))
+        long_signal=inside&(c>x.high.shift(1))&(c.shift(1)<=x.high.shift(1))
+        short_signal=inside&(c<x.low.shift(1))&(c.shift(1)>=x.low.shift(1))
+    elif spec.family=="engulfing_reversal":
+        prev_open=x.open.shift(1); prev_close=c.shift(1)
+        bullish=(c>x.open)&(prev_close<prev_open)&(x.open<=prev_close)&(c>=prev_open)
+        bearish=(c<x.open)&(prev_close>prev_open)&(x.open>=prev_close)&(c<=prev_open)
+        long_signal=bullish; short_signal=bearish
+    elif spec.family=="momentum_breakout":
+        momentum=c>c.shift(spec.fast); negative=c<c.shift(spec.fast)
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        long_signal=momentum&(c>upper)&(c.shift(1)<=upper.shift(1))
+        short_signal=negative&(c<lower)&(c.shift(1)>=lower.shift(1))
+    elif spec.family=="stochastic_reversion":
+        lo=x.low.rolling(spec.fast,min_periods=spec.fast).min()
+        hi=x.high.rolling(spec.fast,min_periods=spec.fast).max()
+        k=100*(c-lo)/(hi-lo).replace(0,np.nan)
+        long_signal=(k.shift(1)<=20)&(k>20)
+        short_signal=(k.shift(1)>=80)&(k<80)
+    elif spec.family=="roc_momentum":
+        roc=c.pct_change(periods=spec.fast)*100
+        long_signal=(roc>0)&(roc.shift(1)<=0)
+        short_signal=(roc<0)&(roc.shift(1)>=0)
+    elif spec.family=="adx_trend":
+        up=x.high.diff(); down=-x.low.diff()
+        plus=up.where((up>down)&(up>0),0.0).ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
+        minus=down.where((down>up)&(down>0),0.0).ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
+        plus_di=100*plus/x.atr.replace(0,np.nan); minus_di=100*minus/x.atr.replace(0,np.nan)
+        dx=100*(plus_di-minus_di).abs()/(plus_di+minus_di).replace(0,np.nan)
+        adx=dx.ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
+        long_signal=(plus_di>minus_di)&(plus_di.shift(1)<=minus_di.shift(1))&(adx>=20)
+        short_signal=(minus_di>plus_di)&(minus_di.shift(1)<=plus_di.shift(1))&(adx>=20)
+    elif spec.family=="keltner_breakout":
+        mid=c.ewm(span=spec.slow,adjust=False,min_periods=spec.slow).mean()
+        upper=mid+1.5*x.atr; lower=mid-1.5*x.atr
+        long_signal=(c>upper)&(c.shift(1)<=upper.shift(1))
+        short_signal=(c<lower)&(c.shift(1)>=lower.shift(1))
+    elif spec.family=="atr_squeeze_breakout":
+        mid=c.rolling(spec.slow,min_periods=spec.slow).mean()
+        dev=c.rolling(spec.slow,min_periods=spec.slow).std(ddof=0)
+        width=(4*dev/mid.replace(0,np.nan))
+        squeezed=width<width.rolling(spec.slow,min_periods=spec.slow).quantile(0.25).shift(1)
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        long_signal=squeezed.shift(1)&(c>upper)&(c.shift(1)<=upper.shift(1))
+        short_signal=squeezed.shift(1)&(c<lower)&(c.shift(1)>=lower.shift(1))
+    elif spec.family=="obv_trend":
+        signed=np.sign(c.diff()).fillna(0.0)*x.volume.astype(float)
+        obv=signed.cumsum()
+        obv_base=obv.ewm(span=spec.slow,adjust=False,min_periods=spec.slow).mean()
+        long_signal=(obv>obv_base)&(obv.shift(1)<=obv_base.shift(1))&(c>x.ema_fast)
+        short_signal=(obv<obv_base)&(obv.shift(1)>=obv_base.shift(1))&(c<x.ema_fast)
+    elif spec.family=="vwap_reclaim":
+        typical=(x.high+x.low+c)/3
+        vol=x.volume.astype(float)
+        vw=(typical*vol).rolling(spec.slow,min_periods=spec.slow).sum()/vol.rolling(spec.slow,min_periods=spec.slow).sum().replace(0,np.nan)
+        long_signal=(c>vw)&(c.shift(1)<=vw.shift(1))
+        short_signal=(c<vw)&(c.shift(1)>=vw.shift(1))
+    elif spec.family=="pivot_reversal":
+        support=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        resistance=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        tolerance=x.atr*0.25
+        long_signal=(x.low<=support+tolerance)&(c>support)
+        short_signal=(x.high>=resistance-tolerance)&(c<resistance)
+    elif spec.family=="ema_pullback":
+        trend_up=x.ema_fast>x.ema_slow; trend_down=x.ema_fast<x.ema_slow
+        long_signal=trend_up&(c>x.ema_fast)&(c.shift(1)<=x.ema_fast.shift(1))
+        short_signal=trend_down&(c<x.ema_fast)&(c.shift(1)>=x.ema_fast.shift(1))
+    elif spec.family=="macd_crossover":
+        macd=c.ewm(span=spec.fast,adjust=False,min_periods=spec.fast).mean()-c.ewm(span=spec.slow,adjust=False,min_periods=spec.slow).mean()
+        signal=macd.ewm(span=max(2,spec.fast//2),adjust=False,min_periods=max(2,spec.fast//2)).mean()
+        long_signal=(macd>signal)&(macd.shift(1)<=signal.shift(1))
+        short_signal=(macd<signal)&(macd.shift(1)>=signal.shift(1))
+    elif spec.family=="bollinger_reversion":
+        mid=c.rolling(spec.slow,min_periods=spec.slow).mean(); dev=c.rolling(spec.slow,min_periods=spec.slow).std(ddof=0)
+        upper=mid+2*dev; lower=mid-2*dev
+        long_signal=(c>lower)&(c.shift(1)<=lower.shift(1))
+        short_signal=(c<upper)&(c.shift(1)>=upper.shift(1))
+    elif spec.family=="inside_bar_breakout":
+        inside=(x.high.shift(1)<x.high.shift(2))&(x.low.shift(1)>x.low.shift(2))
+        long_signal=inside&(c>x.high.shift(1))&(c.shift(1)<=x.high.shift(1))
+        short_signal=inside&(c<x.low.shift(1))&(c.shift(1)>=x.low.shift(1))
+    elif spec.family=="engulfing_reversal":
+        prev_open=x.open.shift(1); prev_close=c.shift(1)
+        long_signal=(c>x.open)&(prev_close<prev_open)&(x.open<=prev_close)&(c>=prev_open)
+        short_signal=(c<x.open)&(prev_close>prev_open)&(x.open>=prev_close)&(c<=prev_open)
+    elif spec.family=="momentum_breakout":
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        long_signal=(c>c.shift(spec.fast))&(c>upper)&(c.shift(1)<=upper.shift(1))
+        short_signal=(c<c.shift(spec.fast))&(c<lower)&(c.shift(1)>=lower.shift(1))
+
+    elif spec.family=="swing_structure_break":
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1); lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        long_signal=(c>upper)&(c.shift(1)<=upper.shift(1)); short_signal=(c<lower)&(c.shift(1)>=lower.shift(1))
+    elif spec.family=="failed_breakout_reversal":
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(2); lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(2)
+        long_signal=(x.low.shift(1)<lower)&(c.shift(1)<lower)&(c>lower)&(c>x.open)
+        short_signal=(x.high.shift(1)>upper)&(c.shift(1)>upper)&(c<upper)&(c<x.open)
+    elif spec.family=="wick_rejection":
+        body=(c-x.open).abs().clip(lower=1e-12); lower_wick=np.minimum(x.open,c)-x.low; upper_wick=x.high-np.maximum(x.open,c)
+        location=(c-x.low)/(x.high-x.low).replace(0,np.nan)
+        long_signal=(lower_wick>=2.0*body)&(location>=0.65)&(c>x.open); short_signal=(upper_wick>=2.0*body)&(location<=0.35)&(c<x.open)
+    elif spec.family=="range_expansion_breakout":
+        bar_range=x.high-x.low; baseline=bar_range.rolling(spec.fast,min_periods=spec.fast).mean().shift(1)
+        long_signal=(bar_range>=1.5*baseline)&(c>x.high.shift(1))&(c.shift(1)<=x.high.shift(1))
+        short_signal=(bar_range>=1.5*baseline)&(c<x.low.shift(1))&(c.shift(1)>=x.low.shift(1))
+    elif spec.family=="three_bar_momentum":
+        upper=x.high.rolling(spec.fast,min_periods=spec.fast).max().shift(1); lower=x.low.rolling(spec.fast,min_periods=spec.fast).min().shift(1)
+        rising=(c>c.shift(1))&(c.shift(1)>c.shift(2))&(c.shift(2)>c.shift(3)); falling=(c<c.shift(1))&(c.shift(1)<c.shift(2))&(c.shift(2)<c.shift(3))
+        long_signal=rising&(c>upper); short_signal=falling&(c<lower)
+    elif spec.family=="volatility_regime_breakout":
+        atr_base=x.atr.rolling(spec.slow,min_periods=spec.slow).median().shift(1)
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1); lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        active=x.atr>atr_base
+        long_signal=active&(c>upper)&(c.shift(1)<=upper.shift(1)); short_signal=active&(c<lower)&(c.shift(1)>=lower.shift(1))
+    elif spec.family=="trend_exhaustion_reversal":
+        body=(c-x.open).abs().clip(lower=1e-12); lower_wick=np.minimum(x.open,c)-x.low; upper_wick=x.high-np.maximum(x.open,c)
+        long_signal=(c.shift(1)<c.shift(spec.fast+1))&(c.shift(1)<x.open.shift(1))&(c>x.open)&(lower_wick>=body)
+        short_signal=(c.shift(1)>c.shift(spec.fast+1))&(c.shift(1)>x.open.shift(1))&(c<x.open)&(upper_wick>=body)
+    elif spec.family=="volume_climax_reversal":
+        vol_threshold=x.volume.rolling(spec.slow,min_periods=spec.slow).quantile(0.90).shift(1)
+        body=(c-x.open).abs().clip(lower=1e-12); lower_wick=np.minimum(x.open,c)-x.low; upper_wick=x.high-np.maximum(x.open,c)
+        long_signal=(x.volume>vol_threshold)&(lower_wick>=1.5*body)&(c>x.open); short_signal=(x.volume>vol_threshold)&(upper_wick>=1.5*body)&(c<x.open)
+    elif spec.family=="range_compression_breakout":
+        bar_range=x.high-x.low; avg_range=bar_range.rolling(spec.fast,min_periods=spec.fast).mean()
+        compression_level=avg_range.rolling(spec.slow,min_periods=spec.slow).quantile(0.25).shift(1); compressed=avg_range.shift(1)<compression_level
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1); lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        long_signal=compressed&(c>upper)&(c.shift(1)<=upper.shift(1)); short_signal=compressed&(c<lower)&(c.shift(1)>=lower.shift(1))
+    elif spec.family=="support_resistance_rejection":
+        support=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1); resistance=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        body=(c-x.open).abs().clip(lower=1e-12); lower_wick=np.minimum(x.open,c)-x.low; upper_wick=x.high-np.maximum(x.open,c)
+        long_signal=(x.low<=support+x.atr*0.3)&(c>support)&(lower_wick>=body); short_signal=(x.high>=resistance-x.atr*0.3)&(c<resistance)&(upper_wick>=body)
+    elif spec.family=="micro_double_bottom":
+        current_low=x.low.rolling(spec.fast,min_periods=spec.fast).min(); prior_low=x.low.shift(spec.fast).rolling(spec.fast,min_periods=spec.fast).min()
+        trigger=x.high.shift(1).rolling(spec.fast,min_periods=spec.fast).max()
+        long_signal=((current_low-prior_low).abs()<=x.atr*0.35)&(x.low<=current_low+x.atr*0.1)&(c>trigger)&(c>x.open); short_signal=pd.Series(False,index=x.index)
+    elif spec.family=="micro_double_top":
+        current_high=x.high.rolling(spec.fast,min_periods=spec.fast).max(); prior_high=x.high.shift(spec.fast).rolling(spec.fast,min_periods=spec.fast).max()
+        trigger=x.low.shift(1).rolling(spec.fast,min_periods=spec.fast).min()
+        short_signal=((current_high-prior_high).abs()<=x.atr*0.35)&(x.high>=current_high-x.atr*0.1)&(c<trigger)&(c<x.open); long_signal=pd.Series(False,index=x.index)
+    if spec.context_filter=="ema_trend":
+        long_signal=long_signal&(x.ema_fast>x.ema_slow)
+        short_signal=short_signal&(x.ema_fast<x.ema_slow)
+    elif spec.context_filter=="adx_strength":
+        up=x.high.diff(); down=-x.low.diff()
+        plus=up.where((up>down)&(up>0),0.0).ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
+        minus=down.where((down>up)&(down>0),0.0).ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
+        pdi=100*plus/x.atr.replace(0,np.nan); mdi=100*minus/x.atr.replace(0,np.nan)
+        dx=100*(pdi-mdi).abs()/(pdi+mdi).replace(0,np.nan)
+        adx=dx.ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
+        long_signal=long_signal&(adx>=20)&(pdi>mdi)
+        short_signal=short_signal&(adx>=20)&(mdi>pdi)
+    elif spec.context_filter=="volume_confirm":
+        baseline=x.volume.rolling(spec.fast,min_periods=spec.fast).mean().shift(1)
+        active=x.volume>=baseline*1.5
+        long_signal=long_signal&active; short_signal=short_signal&active
+    elif spec.context_filter=="vwap_side":
+        typical=(x.high+x.low+c)/3; vol=x.volume.astype(float)
+        vw=(typical*vol).rolling(spec.slow,min_periods=spec.slow).sum()/vol.rolling(spec.slow,min_periods=spec.slow).sum().replace(0,np.nan)
+        long_signal=long_signal&(c>vw); short_signal=short_signal&(c<vw)
+    elif spec.context_filter=="low_volatility":
+        ratio=x.atr/c.replace(0,np.nan)
+        threshold=ratio.rolling(spec.slow,min_periods=spec.slow).quantile(0.35).shift(1)
+        calm=ratio<=threshold
+        long_signal=long_signal&calm; short_signal=short_signal&calm
+    if spec.confirmation_filter=="candle_direction":
+        long_signal=long_signal&(c>x.open); short_signal=short_signal&(c<x.open)
+    elif spec.confirmation_filter=="momentum":
+        long_signal=long_signal&(c>c.shift(spec.fast)); short_signal=short_signal&(c<c.shift(spec.fast))
+    elif spec.confirmation_filter=="rsi_midline":
+        delta=c.diff()
+        gain=delta.clip(lower=0).ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
+        loss=(-delta.clip(upper=0)).ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
+        rsi=100-100/(1+gain/loss.replace(0,np.nan))
+        long_signal=long_signal&(rsi>50); short_signal=short_signal&(rsi<50)
+    if spec.signal_composition!="single":
+        secondary=indicators(df,replace(spec,family=spec.secondary_family,secondary_family="none",signal_composition="single"))
+        sec_long=secondary["long_signal"]; sec_short=secondary["short_signal"]
+        if spec.signal_composition=="and":
+            long_signal=long_signal&sec_long; short_signal=short_signal&sec_short
+        elif spec.signal_composition=="or":
+            long_signal=long_signal|sec_long; short_signal=short_signal|sec_short
+        elif spec.signal_composition=="xor":
+            long_signal=long_signal^sec_long; short_signal=short_signal^sec_short
+    x["long_signal"]=long_signal.fillna(False)
+    x["short_signal"]=short_signal.fillna(False)
+    return x
+
 def risk_budget(balance):
     if CFG['risk_mode']=='fixed_usd': return float(CFG['risk_usd'])
     base=balance if (CFG['risk_mode']=='percent_equity' or CFG['compound']) else float(CFG['initial_balance'])
@@ -32,83 +296,16 @@ def size_target(entry,stop,side,risk):
     return qty,target,rate
 def replay(df):
     df=df.copy().reset_index(drop=True); validate(df)
+    if len(df)>1:
+        diffs=df.open_time.diff().dropna()
+        interval=int(diffs.mode().iloc[0]) if len(diffs) else None
+        if interval is not None and (diffs != interval).any():
+            raise ValueError('Timestamp gaps detected; replay requires contiguous candles')
     data_hash=digest(df.to_csv(index=False,float_format='%.12g').encode())
-    s=SPEC; x=df.copy(); c=x.close.astype(float); prev=c.shift(1)
-    x['ema_fast']=c.ewm(span=s['fast'],adjust=False,min_periods=s['fast']).mean()
-    x['ema_slow']=c.ewm(span=s['slow'],adjust=False,min_periods=s['slow']).mean()
-    tr=pd.concat([x.high-x.low,(x.high-prev).abs(),(x.low-prev).abs()],axis=1).max(axis=1)
-    x['atr']=tr.ewm(alpha=1/s['atr_period'],adjust=False,min_periods=s['atr_period']).mean()
-    family=s.get('family','ema_crossover')
-    long=(x.ema_fast>x.ema_slow)&(x.ema_fast.shift(1)<=x.ema_slow.shift(1))
-    short=(x.ema_fast<x.ema_slow)&(x.ema_fast.shift(1)>=x.ema_slow.shift(1))
-    if family in ('channel_breakout','volume_breakout'):
-        upper=x.high.rolling(s['slow'],min_periods=s['slow']).max().shift(1)
-        lower=x.low.rolling(s['slow'],min_periods=s['slow']).min().shift(1)
-        long=(c>upper)&(c.shift(1)<=upper.shift(1))
-        short=(c<lower)&(c.shift(1)>=lower.shift(1))
-        if family=='volume_breakout':
-            baseline=x.volume.rolling(s['fast'],min_periods=s['fast']).mean().shift(1)
-            active=x.volume>=baseline*1.5
-            long=long&active
-            short=short&active
-    elif family=='rsi_reversion':
-        delta=c.diff()
-        gain=delta.clip(lower=0).ewm(alpha=1/s['fast'],adjust=False,min_periods=s['fast']).mean()
-        loss=(-delta.clip(upper=0)).ewm(alpha=1/s['fast'],adjust=False,min_periods=s['fast']).mean()
-        rs=gain/loss.replace(0,np.nan)
-        rsi=100-100/(1+rs)
-        long=(rsi.shift(1)<=30)&(rsi>30)
-        short=(rsi.shift(1)>=70)&(rsi<70)
-    elif family=='ema_pullback':
-        up=x.ema_fast>x.ema_slow; down=x.ema_fast<x.ema_slow
-        long=up&(c>x.ema_fast)&(c.shift(1)<=x.ema_fast.shift(1))
-        short=down&(c<x.ema_fast)&(c.shift(1)>=x.ema_fast.shift(1))
-    elif family=='macd_crossover':
-        macd=c.ewm(span=s['fast'],adjust=False,min_periods=s['fast']).mean()-c.ewm(span=s['slow'],adjust=False,min_periods=s['slow']).mean()
-        sig=macd.ewm(span=max(2,s['fast']//2),adjust=False,min_periods=max(2,s['fast']//2)).mean()
-        long=(macd>sig)&(macd.shift(1)<=sig.shift(1)); short=(macd<sig)&(macd.shift(1)>=sig.shift(1))
-    elif family=='bollinger_reversion':
-        mid=c.rolling(s['slow'],min_periods=s['slow']).mean(); dev=c.rolling(s['slow'],min_periods=s['slow']).std(ddof=0)
-        upper=mid+2*dev; lower=mid-2*dev
-        long=(c>lower)&(c.shift(1)<=lower.shift(1)); short=(c<upper)&(c.shift(1)>=upper.shift(1))
-    elif family=='inside_bar_breakout':
-        inside=(x.high.shift(1)<x.high.shift(2))&(x.low.shift(1)>x.low.shift(2))
-        long=inside&(c>x.high.shift(1))&(c.shift(1)<=x.high.shift(1))
-        short=inside&(c<x.low.shift(1))&(c.shift(1)>=x.low.shift(1))
-    elif family=='engulfing_reversal':
-        po=x.open.shift(1); pc=c.shift(1)
-        long=(c>x.open)&(pc<po)&(x.open<=pc)&(c>=po)
-        short=(c<x.open)&(pc>po)&(x.open>=pc)&(c<=po)
-    elif family=='momentum_breakout':
-        upper=x.high.rolling(s['slow'],min_periods=s['slow']).max().shift(1); lower=x.low.rolling(s['slow'],min_periods=s['slow']).min().shift(1)
-        long=(c>c.shift(s['fast']))&(c>upper)&(c.shift(1)<=upper.shift(1))
-        short=(c<c.shift(s['fast']))&(c<lower)&(c.shift(1)>=lower.shift(1))
-    elif family=='ema_pullback':
-        up=x.ema_fast>x.ema_slow; down=x.ema_fast<x.ema_slow
-        long=up&(c>x.ema_fast)&(c.shift(1)<=x.ema_fast.shift(1))
-        short=down&(c<x.ema_fast)&(c.shift(1)>=x.ema_fast.shift(1))
-    elif family=='macd_crossover':
-        macd=c.ewm(span=s['fast'],adjust=False,min_periods=s['fast']).mean()-c.ewm(span=s['slow'],adjust=False,min_periods=s['slow']).mean()
-        sig=macd.ewm(span=max(2,s['fast']//2),adjust=False,min_periods=max(2,s['fast']//2)).mean()
-        long=(macd>sig)&(macd.shift(1)<=sig.shift(1)); short=(macd<sig)&(macd.shift(1)>=sig.shift(1))
-    elif family=='bollinger_reversion':
-        mid=c.rolling(s['slow'],min_periods=s['slow']).mean(); dev=c.rolling(s['slow'],min_periods=s['slow']).std(ddof=0)
-        upper=mid+2*dev; lower=mid-2*dev
-        long=(c>lower)&(c.shift(1)<=lower.shift(1)); short=(c<upper)&(c.shift(1)>=upper.shift(1))
-    elif family=='inside_bar_breakout':
-        inside=(x.high.shift(1)<x.high.shift(2))&(x.low.shift(1)>x.low.shift(2))
-        long=inside&(c>x.high.shift(1))&(c.shift(1)<=x.high.shift(1))
-        short=inside&(c<x.low.shift(1))&(c.shift(1)>=x.low.shift(1))
-    elif family=='engulfing_reversal':
-        po=x.open.shift(1); pc=c.shift(1)
-        long=(c>x.open)&(pc<po)&(x.open<=pc)&(c>=po)
-        short=(c<x.open)&(pc>po)&(x.open>=pc)&(c<=po)
-    elif family=='momentum_breakout':
-        upper=x.high.rolling(s['slow'],min_periods=s['slow']).max().shift(1); lower=x.low.rolling(s['slow'],min_periods=s['slow']).min().shift(1)
-        long=(c>c.shift(s['fast']))&(c>upper)&(c.shift(1)<=upper.shift(1))
-        short=(c<c.shift(s['fast']))&(c<lower)&(c.shift(1)>=lower.shift(1))
-    x['long_signal']=long.fillna(False)
-    x['short_signal']=short.fillna(False)
+    s=SPEC
+    spec_obj=StrategySpec(**s)
+    spec_obj.validate()
+    x=indicators(df,spec_obj)
     balance=float(CFG['initial_balance']); ledger=[]; streak=0; max_streak=0; i=max(s['slow'],s['atr_period'])
     while i<len(x)-1:
         row=x.iloc[i]
@@ -123,7 +320,15 @@ def replay(df):
         except ValueError: i+=1; continue
         exit_i=exit_price=reason=None
         for j in range(entry_i,len(x)):
-            bar=x.iloc[j]; sl=float(bar.low)<=stop if side=='LONG' else float(bar.high)>=stop; tp=float(bar.high)>=target if side=='LONG' else float(bar.low)<=target
+            bar=x.iloc[j]; bar_open=float(bar.open)
+            if side=='LONG':
+                if bar_open<=stop: exit_i=j; exit_price=bar_open; reason='SL'; break
+                if bar_open>=target: exit_i=j; exit_price=target; reason='TP'; break
+                sl=float(bar.low)<=stop; tp=float(bar.high)>=target
+            else:
+                if bar_open>=stop: exit_i=j; exit_price=bar_open; reason='SL'; break
+                if bar_open<=target: exit_i=j; exit_price=target; reason='TP'; break
+                sl=float(bar.high)>=stop; tp=float(bar.low)<=target
             if sl and tp: raise ValueError('Unresolved same-candle SL/TP ambiguity at row '+str(j))
             if sl: exit_i=j; exit_price=stop; reason='SL'; break
             if tp: exit_i=j; exit_price=target; reason='TP'; break
