@@ -23,7 +23,7 @@ def _period_label(frame:pd.DataFrame, note:str='') -> str:
     suffix=f' ({note})' if note else ''
     return f'{first} to {last}{suffix}'
 
-app=FastAPI(title='Strategy Foundry API',version='0.7.5',description='Server-side strategy research and simulation only; never sends live orders.')
+app=FastAPI(title='Strategy Foundry API',version='0.7.6',description='Server-side strategy research and simulation only; never sends live orders.')
 app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')
 DATASETS:dict[str,pd.DataFrame]=load_datasets()
 DATASET_METADATA:dict[str,dict[str,Any]]=load_dataset_metadata()
