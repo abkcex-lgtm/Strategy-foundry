@@ -136,6 +136,56 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
         short=(close<close.shift(fast))&(close<lower)&(close.shift(1)>=lower.shift(1))
     context_filter=spec.get("context_filter","none")
     confirmation_filter=spec.get("confirmation_filter","none")
+
+    elif family=="swing_structure_break":
+        upper=d.high.rolling(slow,min_periods=slow).max().shift(1); lower=d.low.rolling(slow,min_periods=slow).min().shift(1)
+        long=(close>upper)&(close.shift(1)<=upper.shift(1)); short=(close<lower)&(close.shift(1)>=lower.shift(1))
+    elif family=="failed_breakout_reversal":
+        upper=d.high.rolling(slow,min_periods=slow).max().shift(2); lower=d.low.rolling(slow,min_periods=slow).min().shift(2)
+        long=(d.low.shift(1)<lower)&(close.shift(1)<lower)&(close>lower)&(close>d.open)
+        short=(d.high.shift(1)>upper)&(close.shift(1)>upper)&(close<upper)&(close<d.open)
+    elif family=="wick_rejection":
+        body=(close-d.open).abs().clip(lower=1e-12); lower_wick=np.minimum(d.open,close)-d.low; upper_wick=d.high-np.maximum(d.open,close)
+        location=(close-d.low)/(d.high-d.low).replace(0,np.nan)
+        long=(lower_wick>=2.0*body)&(location>=0.65)&(close>d.open); short=(upper_wick>=2.0*body)&(location<=0.35)&(close<d.open)
+    elif family=="range_expansion_breakout":
+        bar_range=d.high-d.low; baseline=bar_range.rolling(fast,min_periods=fast).mean().shift(1)
+        long=(bar_range>=1.5*baseline)&(close>d.high.shift(1))&(close.shift(1)<=d.high.shift(1))
+        short=(bar_range>=1.5*baseline)&(close<d.low.shift(1))&(close.shift(1)>=d.low.shift(1))
+    elif family=="three_bar_momentum":
+        upper=d.high.rolling(fast,min_periods=fast).max().shift(1); lower=d.low.rolling(fast,min_periods=fast).min().shift(1)
+        rising=(close>close.shift(1))&(close.shift(1)>close.shift(2))&(close.shift(2)>close.shift(3)); falling=(close<close.shift(1))&(close.shift(1)<close.shift(2))&(close.shift(2)<close.shift(3))
+        long=rising&(close>upper); short=falling&(close<lower)
+    elif family=="volatility_regime_breakout":
+        atr_base=atr.rolling(slow,min_periods=slow).median().shift(1)
+        upper=d.high.rolling(slow,min_periods=slow).max().shift(1); lower=d.low.rolling(slow,min_periods=slow).min().shift(1)
+        active=atr>atr_base
+        long=active&(close>upper)&(close.shift(1)<=upper.shift(1)); short=active&(close<lower)&(close.shift(1)>=lower.shift(1))
+    elif family=="trend_exhaustion_reversal":
+        body=(close-d.open).abs().clip(lower=1e-12); lower_wick=np.minimum(d.open,close)-d.low; upper_wick=d.high-np.maximum(d.open,close)
+        long=(close.shift(1)<close.shift(fast+1))&(close.shift(1)<d.open.shift(1))&(close>d.open)&(lower_wick>=body)
+        short=(close.shift(1)>close.shift(fast+1))&(close.shift(1)>d.open.shift(1))&(close<d.open)&(upper_wick>=body)
+    elif family=="volume_climax_reversal":
+        vol_threshold=d.volume.rolling(slow,min_periods=slow).quantile(0.90).shift(1)
+        body=(close-d.open).abs().clip(lower=1e-12); lower_wick=np.minimum(d.open,close)-d.low; upper_wick=d.high-np.maximum(d.open,close)
+        long=(d.volume>vol_threshold)&(lower_wick>=1.5*body)&(close>d.open); short=(d.volume>vol_threshold)&(upper_wick>=1.5*body)&(close<d.open)
+    elif family=="range_compression_breakout":
+        bar_range=d.high-d.low; avg_range=bar_range.rolling(fast,min_periods=fast).mean()
+        compression_level=avg_range.rolling(slow,min_periods=slow).quantile(0.25).shift(1); compressed=avg_range.shift(1)<compression_level
+        upper=d.high.rolling(slow,min_periods=slow).max().shift(1); lower=d.low.rolling(slow,min_periods=slow).min().shift(1)
+        long=compressed&(close>upper)&(close.shift(1)<=upper.shift(1)); short=compressed&(close<lower)&(close.shift(1)>=lower.shift(1))
+    elif family=="support_resistance_rejection":
+        support=d.low.rolling(slow,min_periods=slow).min().shift(1); resistance=d.high.rolling(slow,min_periods=slow).max().shift(1)
+        body=(close-d.open).abs().clip(lower=1e-12); lower_wick=np.minimum(d.open,close)-d.low; upper_wick=d.high-np.maximum(d.open,close)
+        long=(d.low<=support+atr*0.3)&(close>support)&(lower_wick>=body); short=(d.high>=resistance-atr*0.3)&(close<resistance)&(upper_wick>=body)
+    elif family=="micro_double_bottom":
+        current_low=d.low.rolling(fast,min_periods=fast).min(); prior_low=d.low.shift(fast).rolling(fast,min_periods=fast).min()
+        trigger=d.high.shift(1).rolling(fast,min_periods=fast).max()
+        long=((current_low-prior_low).abs()<=atr*0.35)&(d.low<=current_low+atr*0.1)&(close>trigger)&(close>d.open); short=pd.Series(False,index=d.index)
+    elif family=="micro_double_top":
+        current_high=d.high.rolling(fast,min_periods=fast).max(); prior_high=d.high.shift(fast).rolling(fast,min_periods=fast).max()
+        trigger=d.low.shift(1).rolling(fast,min_periods=fast).min()
+        short=((current_high-prior_high).abs()<=atr*0.35)&(d.high>=current_high-atr*0.1)&(close<trigger)&(close<d.open); long=pd.Series(False,index=d.index)
     if context_filter=="ema_trend":
         long=long&(ef>es); short=short&(ef<es)
     elif context_filter=="adx_strength":
