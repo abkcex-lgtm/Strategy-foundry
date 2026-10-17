@@ -112,3 +112,23 @@ def test_independent_engine_matches_primary_ledger(family):
             assert a[key]==b[key]
         for key in ('entry_price','stop_loss','take_profit','exit_price','net_pnl','balance_after'):
             assert a[key]==pytest.approx(b[key],rel=1e-10,abs=1e-8)
+
+
+def test_hybrid_genetic_search_is_seeded_and_reports_real_evaluations():
+    from app.engine import search_candidates
+    df=candles(700)
+    a=search_candidates(df,25,seed=123,contract={"use_min_tp_per_day":False})
+    b=search_candidates(df,25,seed=123,contract={"use_min_tp_per_day":False})
+    assert a["algorithm"]=="hybrid_genetic"
+    assert a["seed"]==123
+    assert a["evaluated_candidates"]==b["evaluated_candidates"]
+    assert [r["run_hash_sha256"] for r in a["results"]]==[r["run_hash_sha256"] for r in b["results"]]
+    assert sum(a["family_evaluated_counts"].values())==a["evaluated_candidates"]
+    assert a["evaluated_candidates"]<=a["requested_candidates"]
+    assert "500k-certified" in a["warning"]
+
+
+def test_search_rejects_unknown_algorithm():
+    from app.engine import search_candidates
+    with pytest.raises(ValueError,match="Unsupported search algorithm"):
+        search_candidates(candles(300),10,algorithm="magic")
