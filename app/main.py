@@ -231,6 +231,10 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
         batch_index=int(job.get('completed_batches',0))
         passing=list(job.get('checkpoint_passing_results',[]))
         near=list(job.get('checkpoint_near_misses',[]))
+        family_counts=dict(job.get('checkpoint_family_counts',{}))
+        total_failed=int(job.get('checkpoint_failed_candidates',0))
+        total_generations=int(job.get('checkpoint_generations',0))
+        total_model_fits=int(job.get('checkpoint_surrogate_model_fits',0))
         max_attempts=max(5,math.ceil(req.candidates/10000)*5)
         while completed<req.candidates and batch_index<max_attempts:
             batch_size=min(10000,req.candidates-completed)
@@ -254,6 +258,11 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
             actual=len(hashes)
             completed+=actual
             batch_index+=1
+            total_failed+=int(chunk.get('failed_candidates',0))
+            total_generations+=int(chunk.get('generations',0))
+            total_model_fits+=int(chunk.get('surrogate_model_fits',0))
+            for family,count in chunk.get('family_evaluated_counts',{}).items():
+                family_counts[family]=family_counts.get(family,0)+int(count)
             if chunk.get('all_passing'):
                 known={json.dumps(x.get('strategy',{}),sort_keys=True,separators=(',',':')) for x in passing}
                 for item in chunk.get('results',[]):
@@ -281,6 +290,10 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
                         'unique_genomes_seen':len(seen),
                         'checkpoint_passing_results':passing,
                         'checkpoint_near_misses':near,
+                        'checkpoint_family_counts':family_counts,
+                        'checkpoint_failed_candidates':total_failed,
+                        'checkpoint_generations':total_generations,
+                        'checkpoint_surrogate_model_fits':total_model_fits,
                         'message':f'دستهٔ {batch_index} تکمیل شد؛ {completed:,} نامزد یکتا ارزیابی شد.'})
             save_job_batch_checkpoint(job_id,'strategy_search',job,hashes)
             if actual==0 and batch_index>=max_attempts:
@@ -298,7 +311,8 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
         search_id=uuid.uuid4().hex[:16]
         final_result={'requested_candidates':req.candidates,'evaluated_candidates':completed,
                       'unique_genomes_seen':len(seen),'completed_batches':batch_index,
-                      'failed_candidates':int(job.get('failed_candidates',0)),
+                      'failed_candidates':total_failed,'family_evaluated_counts':family_counts,
+                      'generations':total_generations,'surrogate_model_fits':total_model_fits,
                       'seed':req.seed,'algorithm':req.algorithm,'contract':manifest['contract'],
                       'all_passing':all_passing,'results':selected,
                       'requested_near_misses':0 if all_passing else 5,
