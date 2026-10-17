@@ -348,6 +348,14 @@ def get_search_history_item(search_id:str):
     if result is None: raise HTTPException(404,'جست‌وجوی ذخیره‌شده پیدا نشد.')
     return result
 
+@app.get('/api/search-jobs')
+def list_search_jobs(limit:int=Query(default=20,ge=1,le=100)):
+    visible={'queued','running','interrupted','failed','completed_with_shortfall'}
+    rows=[{k:v for k,v in job.items() if k not in {'result','checkpoint_passing_results','checkpoint_near_misses','checkpoint_family_counts','checkpoint_failed_candidates','checkpoint_generations','checkpoint_surrogate_model_fits'}}
+          for job in SEARCH_JOBS.values() if job.get('status') in visible]
+    rows.sort(key=lambda item:item.get('job_id',''),reverse=True)
+    return rows[:limit]
+
 @app.post('/api/search-jobs/{dataset_id}')
 async def start_search_job(dataset_id:str,req:SearchRequest):
     if dataset_id not in DATASETS: raise HTTPException(404,'ابتدا داده را دریافت کنید.')
