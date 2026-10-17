@@ -6,7 +6,7 @@ import app.engine as engine
 from app.engine import normalize_contract, search_candidates
 
 
-def test_search_explores_four_families_and_returns_five_near_misses(monkeypatch):
+def test_search_explores_ten_families_and_returns_five_near_misses(monkeypatch):
     seen = []
 
     def fake_backtest(frame, spec, contract):
@@ -37,7 +37,7 @@ def test_search_explores_four_families_and_returns_five_near_misses(monkeypatch)
     monkeypatch.setattr(engine, "backtest", fake_backtest)
     result = search_candidates(pd.DataFrame(), max_candidates=60, seed=42, contract=normalize_contract())
 
-    assert set(seen) == {"ema_crossover", "channel_breakout", "rsi_reversion", "volume_breakout"}
+    assert set(seen) == {"ema_crossover", "channel_breakout", "rsi_reversion", "volume_breakout", "ema_pullback", "macd_crossover", "bollinger_reversion", "inside_bar_breakout", "engulfing_reversal", "momentum_breakout"}
     assert result["evaluated_candidates"] == 60
     assert result["all_passing"] is False
     assert result["requested_near_misses"] == 5
