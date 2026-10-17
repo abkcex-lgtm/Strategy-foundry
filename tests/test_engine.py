@@ -132,3 +132,36 @@ def test_search_rejects_unknown_algorithm():
     from app.engine import search_candidates
     with pytest.raises(ValueError,match="Unsupported search algorithm"):
         search_candidates(candles(300),10,algorithm="magic")
+
+
+@pytest.mark.parametrize("context_filter", ["none", "ema_trend", "adx_strength", "volume_confirm", "vwap_side", "low_volatility"])
+def test_compositional_context_filters_are_causal_and_independently_replayed(context_filter):
+    df = candles(800)
+    spec = StrategySpec(fast=5, slow=18, atr_period=7, stop_atr=1.5,
+                        family="momentum_breakout", context_filter=context_filter,
+                        confirmation_filter="rsi_midline")
+    signals = indicators(df, spec)
+    changed = df.copy()
+    changed.loc[500:, ["open", "high", "low", "close"]] *= 1.4
+    changed.loc[500:, "volume"] *= 3
+    revised = indicators(changed, spec)
+    assert signals.loc[:499, "long_signal"].tolist() == revised.loc[:499, "long_signal"].tolist()
+    assert signals.loc[:499, "short_signal"].tolist() == revised.loc[:499, "short_signal"].tolist()
+    try:
+        primary = backtest(df, spec, normalize_contract({"reward_risk": 2.0}))
+        independent = independent_replay(df, primary["strategy"], primary["contract"])
+    except DataIntegrityError as exc:
+        if "ambiguity" in str(exc):
+            pytest.skip("Synthetic path triggered conservative ambiguity guard")
+        raise
+    assert len(primary["ledger"]) == len(independent["ledger"])
+    for a, b in zip(primary["ledger"], independent["ledger"]):
+        assert a["entry_time"] == b["entry_time"]
+        assert a["exit_time"] == b["exit_time"]
+        assert a["direction"] == b["direction"]
+        assert a["net_pnl"] == pytest.approx(b["net_pnl"], rel=1e-10, abs=1e-8)
+
+
+def test_unknown_composition_filter_is_rejected():
+    with pytest.raises(ValueError, match="Unsupported context filter"):
+        StrategySpec(context_filter="future_leak").validate()
