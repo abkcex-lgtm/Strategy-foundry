@@ -360,6 +360,31 @@ def _size_and_target(entry: float, stop: float, side: str, risk_budget: float, c
         if target <= 0: raise ValueError("Configured net target implies non-positive price")
     return qty,target,entry_cost_rate,exit_cost_rate
 
+def _resolve_bar_exit(side: str, bar_open: float, bar_high: float, bar_low: float, stop: float, target: float):
+    """Resolve OHLC exits conservatively, honoring gaps at the bar open first."""
+    if side == "LONG":
+        if bar_open <= stop:
+            return "SL", bar_open
+        if bar_open >= target:
+            return "TP", target  # conservative limit fill; do not assume price improvement
+        sl = bar_low <= stop
+        tp = bar_high >= target
+    else:
+        if bar_open >= stop:
+            return "SL", bar_open
+        if bar_open <= target:
+            return "TP", target  # conservative limit fill; do not assume price improvement
+        sl = bar_high >= stop
+        tp = bar_low <= target
+    if sl and tp:
+        raise DataIntegrityError("Unresolved same-candle SL/TP ambiguity; finer data required")
+    if sl:
+        return "SL", stop
+    if tp:
+        return "TP", target
+    return None
+
+
 def backtest(frame, spec=None, contract=None):
     spec=StrategySpec(**spec) if isinstance(spec,dict) else (spec or StrategySpec()); spec.validate()
     cfg=normalize_contract(contract)
@@ -387,11 +412,9 @@ def backtest(frame, spec=None, contract=None):
         exit_i=exit_price=None; reason=None
         for j in range(entry_i,len(x)):
             c=x.iloc[j]
-            sl=float(c.low)<=stop if side=="LONG" else float(c.high)>=stop
-            tp=float(c.high)>=target if side=="LONG" else float(c.low)<=target
-            if sl and tp: raise DataIntegrityError(f"Unresolved same-candle SL/TP ambiguity at row {j}; finer data required")
-            if sl: exit_i=j; exit_price=stop; reason="SL"; break
-            if tp: exit_i=j; exit_price=target; reason="TP"; break
+            resolution=_resolve_bar_exit(side,float(c.open),float(c.high),float(c.low),stop,target)
+            if resolution is not None:
+                reason,exit_price=resolution; exit_i=j; break
         if exit_i is None: break
         gross=(exit_price-entry)*qty*(1 if side=="LONG" else -1)
         entry_cost=entry*qty*entry_rate; exit_cost=exit_price*qty*exit_rate
