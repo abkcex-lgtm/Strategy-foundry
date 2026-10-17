@@ -21,6 +21,27 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
     atr=tr.ewm(alpha=1/period,adjust=False,min_periods=period).mean()
     long=(ef>es)&(ef.shift(1)<=es.shift(1))
     short=(ef<es)&(ef.shift(1)>=es.shift(1))
+    family=spec.get("family","ema_crossover")
+    if family in {"channel_breakout","volume_breakout"}:
+        upper=d.high.rolling(slow,min_periods=slow).max().shift(1)
+        lower=d.low.rolling(slow,min_periods=slow).min().shift(1)
+        long=(close>upper)&(close.shift(1)<=upper.shift(1))
+        short=(close<lower)&(close.shift(1)>=lower.shift(1))
+        if family=="volume_breakout":
+            baseline=d.volume.rolling(fast,min_periods=fast).mean().shift(1)
+            active=d.volume>=baseline*1.5
+            long=long&active
+            short=short&active
+    elif family=="rsi_reversion":
+        delta=close.diff()
+        gain=delta.clip(lower=0).ewm(alpha=1/fast,adjust=False,min_periods=fast).mean()
+        loss=(-delta.clip(upper=0)).ewm(alpha=1/fast,adjust=False,min_periods=fast).mean()
+        rs=gain/loss.replace(0,np.nan)
+        rsi=100-100/(1+rs)
+        long=(rsi.shift(1)<=30)&(rsi>30)
+        short=(rsi.shift(1)>=70)&(rsi<70)
+    long=long.fillna(False)
+    short=short.fillna(False)
     rate=(float(cfg["commission_pct_per_side"])+float(cfg["slippage_pct_per_side"]))/100.0
     balance=float(cfg["initial_balance"]); streak=0; ledger=[]; max_streak=0
     i=max(slow,period)
