@@ -387,6 +387,8 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     periods=np.array([5,7,9,10,12,14,16,18,21,24,28,30,40,50],dtype=int)
     stops=np.array([0.5,0.7,0.8,1.0,1.2,1.5,1.8,2.0,2.5,3.0,3.5,4.0,5.0,6.0],dtype=float)
     directions=("both","long","short")
+    context_filters=("none","ema_trend","adx_strength","volume_confirm","vwap_side","low_volatility")
+    confirmation_filters=("none","candle_direction","momentum","rsi_midline")
     evaluated:dict[tuple,dict[str,Any]]={}
     errors=0
     family_counts={f:0 for f in families}
@@ -394,22 +396,23 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
 
     def make_spec(family=None, genes=None):
         if genes is not None:
-            family,fast,slow,period,stop,direction=genes
+            family,fast,slow,period,stop,direction,context_filter,confirmation_filter=genes
         else:
             family=str(family or rng.choice(families))
             fast=int(rng.choice(fast_values))
             slow=int(rng.choice(slow_values))
             if slow<=fast: slow=int(min(500,fast+max(2,int(rng.choice([4,8,12,16,24,32,48])))))
             period=int(rng.choice(periods)); stop=float(rng.choice(stops)); direction=str(rng.choice(directions))
+            context_filter=str(rng.choice(context_filters)); confirmation_filter=str(rng.choice(confirmation_filters))
         fast=int(fast); slow=int(slow); period=int(period); stop=float(stop); direction=str(direction)
         if family=="channel_breakout": fast=min(fast, max(2,slow-2))
         elif family=="rsi_reversion": slow=max(fast+2, min(500,fast*2))
         elif family in {"inside_bar_breakout","engulfing_reversal"}: fast=9; slow=max(20,slow)
         if slow<=fast: fast=max(2,slow-2)
-        return StrategySpec(f"{names[family]} {fast}/{slow} ATR {period}x{stop:g} {direction}",fast,slow,period,stop,direction,seed,family)
+        return StrategySpec(f"{names[family]} {fast}/{slow} ATR {period}x{stop:g} {direction} [ctx={context_filter}; confirm={confirmation_filter}]",fast,slow,period,stop,direction,seed,family,context_filter,confirmation_filter)
 
     def genome(spec):
-        return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction)
+        return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction,spec.context_filter,spec.confirmation_filter)
 
     def fitness(row):
         m=row["metrics"]; pf=math.inf if m["profit_factor"] is None else float(m["profit_factor"])
@@ -472,13 +475,17 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 period=int(a.atr_period if rng.random()<0.5 else b.atr_period)
                 stop=float(a.stop_atr if rng.random()<0.5 else b.stop_atr)
                 direction=str(a.direction if rng.random()<0.5 else b.direction)
+                context_filter=str(a.context_filter if rng.random()<0.5 else b.context_filter)
+                confirmation_filter=str(a.confirmation_filter if rng.random()<0.5 else b.confirmation_filter)
                 if rng.random()<0.35: fast=int(rng.choice(fast_values))
                 if rng.random()<0.35: slow=int(rng.choice(slow_values))
                 if rng.random()<0.25: period=int(rng.choice(periods))
                 if rng.random()<0.25: stop=float(rng.choice(stops))
                 if rng.random()<0.18: direction=str(rng.choice(directions))
                 if rng.random()<0.12: family=str(rng.choice(families))
-                spec=make_spec(genes=(family,fast,slow,period,stop,direction))
+                if rng.random()<0.25: context_filter=str(rng.choice(context_filters))
+                if rng.random()<0.20: confirmation_filter=str(rng.choice(confirmation_filters))
+                spec=make_spec(genes=(family,fast,slow,period,stop,direction,context_filter,confirmation_filter))
         if genome(spec) in evaluated:
             duplicate_genomes+=1
             for _ in range(12):
