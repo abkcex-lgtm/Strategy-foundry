@@ -634,7 +634,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 proposals=[spec]
                 for _ in range(63):
                     proposals.append(make_spec())
-                unseen=[candidate for candidate in proposals if genome(candidate) not in evaluated]
+                unseen=[candidate for candidate in proposals if genome(candidate) not in evaluated and genome_hash(genome(candidate)) not in excluded_genome_hashes]
                 if unseen:
                     candidate_X=np.asarray([feature_vector(candidate) for candidate in unseen],dtype=float)
                     tree_predictions=np.vstack([tree.predict(candidate_X) for tree in model.estimators_])
@@ -654,12 +654,12 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 last_model_fit_at=len(evaluated); surrogate_fit_count+=1
             except ImportError as exc:
                 raise ValueError("Surrogate ML search requires scikit-learn; install the declared requirements and restart. Search stopped without fallback.") from exc
-        if genome(spec) in evaluated:
+        if genome(spec) in evaluated or genome_hash(genome(spec)) in excluded_genome_hashes:
             duplicate_genomes+=1
             for _ in range(12):
                 spec=make_spec()
-                if genome(spec) not in evaluated: break
-            if genome(spec) in evaluated:
+                if genome(spec) not in evaluated and genome_hash(genome(spec)) not in excluded_genome_hashes: break
+            if genome(spec) in evaluated or genome_hash(genome(spec)) in excluded_genome_hashes:
                 if duplicate_genomes>max_candidates*30: break
                 continue
         row=evaluate(spec)
