@@ -159,6 +159,7 @@ def list_search_history(limit: int = 30):
                 "all_passing": bool(result.get("all_passing", False)),
                 "result_count": len(result.get("results", [])),
                 "search_period": result.get("search_period"),
+                "search_manifest_sha256": result.get("search_manifest_sha256"),
             })
         return out
     finally:
