@@ -1,5 +1,13 @@
 # Changelog
 
+## V0.5.1 — 2026-10-17
+
+- Persisted asynchronous search and Binance-download job state/progress to SQLite.
+- Restore persisted job records after restart and mark unfinished queued/running jobs as interrupted rather than implying they are still running.
+- Added a round-trip test for persistent job status and exposed the capability through `/api/health`.
+- This is not pause/resume: interrupted computations must be started again. Search remains capped at 10,000 candidates; 500k+ search is not implemented or certified.
+
+
 ## V0.5.0 — 2026-10-17
 
 - Bumped FastAPI metadata and `/api/health` version to `0.5.0`.
