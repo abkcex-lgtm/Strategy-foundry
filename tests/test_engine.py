@@ -25,7 +25,8 @@ def test_backtest_and_independent_replay_normalize_stringified_ohlcv():
     primary=backtest(df,spec,cfg)
     independent=independent_replay(df,primary["strategy"],primary["contract"])
     assert len(primary["ledger"])==len(independent["ledger"])
-    assert primary["metrics"]["data_hash_sha256"]==independent["metrics"]["data_hash_sha256"]
+    numeric_primary=backtest(candles(800),spec,cfg)
+    assert primary["metrics"]["data_hash_sha256"]==numeric_primary["metrics"]["data_hash_sha256"]
     for a,b in zip(primary["ledger"],independent["ledger"]):
         assert a["entry_time"]==b["entry_time"]
         assert a["exit_time"]==b["exit_time"]
