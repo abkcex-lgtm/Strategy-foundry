@@ -136,7 +136,6 @@ def get_job(job_id:str):
     if job is None: raise HTTPException(404,'شناسهٔ عملیات پیدا نشد؛ ممکن است سرور پس از شروع مجدد حافظهٔ عملیات را پاک کرده باشد.')
     return job
 
-') from exc
 
 @app.get('/api/datasets')
 def datasets():
