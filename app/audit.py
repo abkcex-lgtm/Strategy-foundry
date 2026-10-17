@@ -64,6 +64,53 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
         upper=d.high.rolling(slow,min_periods=slow).max().shift(1); lower=d.low.rolling(slow,min_periods=slow).min().shift(1)
         long=(close>close.shift(fast))&(close>upper)&(close.shift(1)<=upper.shift(1))
         short=(close<close.shift(fast))&(close<lower)&(close.shift(1)>=lower.shift(1))
+    elif family=="stochastic_reversion":
+        lo=d.low.rolling(fast,min_periods=fast).min(); hi=d.high.rolling(fast,min_periods=fast).max()
+        k=100*(close-lo)/(hi-lo).replace(0,np.nan)
+        long=(k.shift(1)<=20)&(k>20); short=(k.shift(1)>=80)&(k<80)
+    elif family=="roc_momentum":
+        roc=close.pct_change(periods=fast)*100
+        long=(roc>0)&(roc.shift(1)<=0); short=(roc<0)&(roc.shift(1)>=0)
+    elif family=="adx_trend":
+        up=d.high.diff(); down=-d.low.diff()
+        plus=up.where((up>down)&(up>0),0.0).ewm(alpha=1/period,adjust=False,min_periods=period).mean()
+        minus=down.where((down>up)&(down>0),0.0).ewm(alpha=1/period,adjust=False,min_periods=period).mean()
+        plus_di=100*plus/atr.replace(0,np.nan); minus_di=100*minus/atr.replace(0,np.nan)
+        dx=100*(plus_di-minus_di).abs()/(plus_di+minus_di).replace(0,np.nan)
+        adx=dx.ewm(alpha=1/period,adjust=False,min_periods=period).mean()
+        long=(plus_di>minus_di)&(plus_di.shift(1)<=minus_di.shift(1))&(adx>=20)
+        short=(minus_di>plus_di)&(minus_di.shift(1)<=plus_di.shift(1))&(adx>=20)
+    elif family=="keltner_breakout":
+        mid=close.ewm(span=slow,adjust=False,min_periods=slow).mean()
+        upper=mid+1.5*atr; lower=mid-1.5*atr
+        long=(close>upper)&(close.shift(1)<=upper.shift(1))
+        short=(close<lower)&(close.shift(1)>=lower.shift(1))
+    elif family=="atr_squeeze_breakout":
+        mid=close.rolling(slow,min_periods=slow).mean()
+        dev=close.rolling(slow,min_periods=slow).std(ddof=0)
+        width=4*dev/mid.replace(0,np.nan)
+        squeezed=width<width.rolling(slow,min_periods=slow).quantile(0.25).shift(1)
+        upper=d.high.rolling(slow,min_periods=slow).max().shift(1)
+        lower=d.low.rolling(slow,min_periods=slow).min().shift(1)
+        long=squeezed.shift(1)&(close>upper)&(close.shift(1)<=upper.shift(1))
+        short=squeezed.shift(1)&(close<lower)&(close.shift(1)>=lower.shift(1))
+    elif family=="obv_trend":
+        signed=np.sign(close.diff()).fillna(0.0)*d.volume.astype(float)
+        obv=signed.cumsum()
+        obv_base=obv.ewm(span=slow,adjust=False,min_periods=slow).mean()
+        long=(obv>obv_base)&(obv.shift(1)<=obv_base.shift(1))&(close>ef)
+        short=(obv<obv_base)&(obv.shift(1)>=obv_base.shift(1))&(close<ef)
+    elif family=="vwap_reclaim":
+        typical=(d.high+d.low+close)/3; vol=d.volume.astype(float)
+        vw=(typical*vol).rolling(slow,min_periods=slow).sum()/vol.rolling(slow,min_periods=slow).sum().replace(0,np.nan)
+        long=(close>vw)&(close.shift(1)<=vw.shift(1))
+        short=(close<vw)&(close.shift(1)>=vw.shift(1))
+    elif family=="pivot_reversal":
+        support=d.low.rolling(slow,min_periods=slow).min().shift(1)
+        resistance=d.high.rolling(slow,min_periods=slow).max().shift(1)
+        tolerance=atr*0.25
+        long=(d.low<=support+tolerance)&(close>support)
+        short=(d.high>=resistance-tolerance)&(close<resistance)
     elif family=="ema_pullback":
         long=(ef>es)&(close>ef)&(close.shift(1)<=ef.shift(1))
         short=(ef<es)&(close<ef)&(close.shift(1)>=ef.shift(1))
