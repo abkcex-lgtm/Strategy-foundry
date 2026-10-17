@@ -64,3 +64,26 @@ def test_search_job_requires_existing_dataset():
         json={"candidates": 5, "seed": 42, "contract": {}},
     )
     assert response.status_code == 404
+
+
+def test_search_history_endpoints_expose_saved_results(monkeypatch):
+    saved = {
+        "search_id": "persisted-search",
+        "dataset_id": "ETHUSDT-1m",
+        "results": [{"strategy": {"name": "EMA test"}}],
+        "all_passing": False,
+    }
+    monkeypatch.setattr(main, "list_search_history", lambda limit: [{"search_id": "persisted-search", "result_count": 1}])
+    monkeypatch.setattr(main, "load_search_result", lambda search_id: saved if search_id == "persisted-search" else None)
+    client = TestClient(main.app)
+
+    listing = client.get("/api/search-history?limit=5")
+    assert listing.status_code == 200
+    assert listing.json()[0]["search_id"] == "persisted-search"
+
+    detail = client.get("/api/search-history/persisted-search")
+    assert detail.status_code == 200
+    assert detail.json()["results"][0]["strategy"]["name"] == "EMA test"
+
+    missing = client.get("/api/search-history/missing")
+    assert missing.status_code == 404
