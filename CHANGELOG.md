@@ -4,7 +4,8 @@
 
 - Expanded the executable strategy catalogue from 18 to 30 with 12 price-action/regime-based families, implemented separately in the primary engine and independent audit engine.
 - Added Persian family labels and enabled the new families in both manual strategy selection and search-family selection.
-- Added family signal-generation test coverage. This release does not claim the 500k search target; search remains capped at 10,000 until resumable batch/checkpoint infrastructure is complete.
+- Added family signal-generation and independent-ledger parity test coverage.
+- Added background batch search up to 500,000 requested candidates, 10,000-candidate chunks, global SHA-256 genome deduplication, atomic SQLite checkpoint writes, and a resume endpoint for interrupted/failed jobs. The synchronous search endpoint intentionally remains capped at 10,000. A full 500k run has not yet been performance-tested.
 
 
 ## V0.6.0 — 2026-10-17
