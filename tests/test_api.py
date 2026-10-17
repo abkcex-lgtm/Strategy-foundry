@@ -118,3 +118,21 @@ def test_persistent_job_status_round_trip(tmp_path, monkeypatch):
     assert restored["job-test"]["status"] == "running"
     assert restored["job-test"]["evaluated_candidates"] == 25
     assert restored["job-test"]["kind"] == "strategy_search"
+
+
+def test_search_request_accepts_batch_search_ceiling():
+    from app.main import SearchRequest
+    request = SearchRequest(candidates=500000, seed=42)
+    assert request.candidates == 500000
+
+
+def test_atomic_job_batch_checkpoint_persists_job_and_genomes(tmp_path, monkeypatch):
+    import app.persistence as persistence
+    monkeypatch.setattr(persistence, "DB_PATH", tmp_path / "batch.sqlite3")
+    payload = {"job_id": "batch-job", "status": "running",
+               "completed_batches": 1, "completed_candidates": 10}
+    persistence.save_job_batch_checkpoint("batch-job", "strategy_search", payload,
+                                          ["abc", "def", "abc"])
+    restored = persistence.load_jobs()
+    assert restored["batch-job"]["completed_batches"] == 1
+    assert persistence.load_job_genome_hashes("batch-job") == {"abc", "def"}
