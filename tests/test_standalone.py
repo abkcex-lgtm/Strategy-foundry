@@ -45,10 +45,23 @@ def test_standalone_replay_matches_factory_for_each_family(family):
     actual = namespace["replay"](frame)
 
     assert actual["run_hash_sha256"] == expected["run_hash_sha256"]
-    assert actual["metrics"]["data_hash_sha256"] == expected["metrics"]["data_hash_sha256"]
+    assert set(actual["metrics"]) == set(expected["metrics"])
+    for key, value in expected["metrics"].items():
+        other = actual["metrics"][key]
+        if isinstance(value, bool) or value is None or isinstance(value, str):
+            assert other == value
+        elif isinstance(value, (int, float)):
+            assert other == pytest.approx(value, rel=1e-10, abs=1e-8)
+        else:
+            assert other == value
     assert len(actual["ledger"]) == len(expected["ledger"])
     for left, right in zip(expected["ledger"], actual["ledger"]):
-        for key in ("trade_id", "signal_time", "entry_time", "exit_time", "direction", "exit_reason", "loss_streak_after"):
-            assert left[key] == right[key]
-        for key in ("entry_price", "stop_loss", "take_profit", "exit_price", "net_pnl", "balance_after"):
-            assert left[key] == pytest.approx(right[key], rel=1e-10, abs=1e-8)
+        assert set(left) == set(right)
+        for key, value in left.items():
+            other = right[key]
+            if isinstance(value, bool) or value is None or isinstance(value, str):
+                assert other == value
+            elif isinstance(value, (int, float)):
+                assert other == pytest.approx(value, rel=1e-10, abs=1e-8)
+            else:
+                assert other == value
