@@ -198,6 +198,12 @@ def save_job(job_id: str, kind: str, payload: dict[str, Any]):
             (job_id, kind, status, json.dumps(payload, ensure_ascii=False, sort_keys=True,
                                                default=_json_default, allow_nan=False)),
         )
+        # Keep active jobs regardless of age, but bound completed history so large
+        # search results do not grow the job table without limit. Full search results
+        # remain separately available in the searches table.
+        c.execute("DELETE FROM jobs WHERE status NOT IN ('queued','running') AND job_id NOT IN ("
+                  "SELECT job_id FROM jobs WHERE status NOT IN ('queued','running') "
+                  "ORDER BY updated_at DESC LIMIT 100)")
         c.commit()
     finally:
         c.close()
