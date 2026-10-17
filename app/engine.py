@@ -384,9 +384,9 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     all_context_filters=("none","ema_trend","adx_strength","volume_confirm","vwap_side","low_volatility")
     all_confirmation_filters=("none","candle_direction","momentum","rsi_midline")
     space=dict(search_space or {})
-    families=tuple(dict.fromkeys(space.get("families") or all_families))
-    context_filters=tuple(dict.fromkeys(space.get("context_filters") or all_context_filters))
-    confirmation_filters=tuple(dict.fromkeys(space.get("confirmation_filters") or all_confirmation_filters))
+    families=tuple(dict.fromkeys(space["families"])) if "families" in space else all_families
+    context_filters=tuple(dict.fromkeys(space["context_filters"])) if "context_filters" in space else all_context_filters
+    confirmation_filters=tuple(dict.fromkeys(space["confirmation_filters"])) if "confirmation_filters" in space else all_confirmation_filters
     if not families or any(f not in all_families for f in families): raise ValueError("Search family selection is empty or contains unsupported families")
     if not context_filters or any(f not in all_context_filters for f in context_filters): raise ValueError("Context filter selection is empty or unsupported")
     if not confirmation_filters or any(f not in all_confirmation_filters for f in confirmation_filters): raise ValueError("Confirmation filter selection is empty or unsupported")
