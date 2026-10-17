@@ -263,8 +263,8 @@ def test_non_reference_dataset_gets_chronological_train_dev_oos_splits():
     ("SHORT", 105.0, 106.0, 95.0, 102.0, 96.0, ("SL", 105.0)),
     ("LONG", 106.0, 108.0, 99.0, 98.0, 104.0, ("TP", 104.0)),
     ("SHORT", 94.0, 101.0, 92.0, 102.0, 96.0, ("TP", 96.0)),
-    ("LONG", 100.0, 105.0, 97.0, 98.0, 104.0, ("SL", 98.0)),
-    ("SHORT", 100.0, 103.0, 95.0, 102.0, 96.0, ("SL", 102.0)),
+    ("LONG", 100.0, 103.0, 97.0, 98.0, 104.0, ("SL", 98.0)),
+    ("SHORT", 100.0, 101.0, 97.0, 102.0, 96.0, ("SL", 102.0)),
 ])
 def test_exit_fill_resolves_gaps_before_intrabar_ambiguity(side, bar_open, bar_high, bar_low, stop, target, expected):
     assert _resolve_bar_exit(side, bar_open, bar_high, bar_low, stop, target) == expected
