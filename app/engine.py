@@ -355,7 +355,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         if genes is not None:
             family,fast,slow,period,stop,direction=genes
         else:
-            family=str(rng.choice(families))
+            family=str(family or rng.choice(families))
             fast=int(rng.choice(fast_values))
             slow=int(rng.choice(slow_values))
             if slow<=fast: slow=int(min(500,fast+max(2,int(rng.choice([4,8,12,16,24,32,48])))))
