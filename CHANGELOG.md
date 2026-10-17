@@ -5,6 +5,7 @@
 - Persisted asynchronous search and Binance-download job state/progress to SQLite.
 - Restore persisted job records after restart and mark unfinished queued/running jobs as interrupted rather than implying they are still running.
 - Added a round-trip test for persistent job status and exposed the capability through `/api/health`.
+- Fixed fail-closed search reporting: if apparent passing candidates fail independent ledger replay, the engine continues auditing ranked non-passing candidates and returns verified near-misses where available.
 - This is not pause/resume: interrupted computations must be started again. Search remains capped at 10,000 candidates; 500k+ search is not implemented or certified.
 
 
