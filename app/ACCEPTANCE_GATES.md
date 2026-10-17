@@ -24,6 +24,7 @@ A checked box means implementation exists; it does not establish profitability o
 - [ ] Exactly five near-misses when none pass, ranked by OOS proximity
 - [ ] Two-year 1m performance and memory benchmark
 - [x] SQLite persistence for datasets, run history, and editable profiles (durability depends on host disk; authentication/multi-user isolation remains open)
+- [x] On first switch to an available `/data` volume, copy the legacy SQLite database with SQLite's backup API; preserve the source and fall back to it if migration fails; report migration status in health
 - [x] SQLite persistence and UI/API reopening for full strategy-search results and reproducibility manifests
 - [x] OHLC candlestick chart with trade SL/TP/entry/exit overlays, candle-window paging, zoom presets, latest-candle jump, and trades spanning the visible window\n- [ ] Smooth pan/zoom, replay controls, indicator and drawing tools, all setup annotations for candidate-library strategies
 - [x] Tracked asynchronous strategy-search jobs with status polling; search and ranking explicitly use TRAIN only
