@@ -329,9 +329,9 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
                       'near_miss_shortfall':max(0,5-len(selected)) if not all_passing else 0,
                       'search_id':search_id,'dataset_id':dataset_id,
                       'search_manifest':manifest,'search_manifest_sha256':manifest_hash,
-                      'search_period':'2026-04-01 to 2026-07-01 UTC (TRAIN only)',
-                      'development_period':'2026-07-01 to 2026-08-01 UTC (not used in search)',
-                      'oos_period':'2026-08-01 to 2026-10-01 UTC (not used in search)',
+                      'search_period':_period_label(splits['train'],'TRAIN only'),
+                      'development_period':_period_label(splits['development'],'not used in search'),
+                      'oos_period':_period_label(splits['oos'],'not used in search'),
                       'selection_policy':'Candidates are globally deduplicated across batches and ranked on TRAIN only; OOS is not read for candidate selection.',
                       'warning':('Completed all requested globally unique candidate evaluations; all reported passing candidates were independently replayed.' if completed>=req.candidates else
                                  'INCOMPLETE SEARCH: candidate space/attempt limit prevented the requested unique evaluation count. Do not treat this as a completed 500k search.') }
