@@ -26,6 +26,22 @@ def _connect():
     """)
     return c
 
+def load_dataset_metadata() -> dict[str, dict[str, Any]]:
+    c = _connect()
+    try:
+        rows = c.execute("SELECT dataset_id,metadata_json FROM datasets").fetchall()
+        out: dict[str, dict[str, Any]] = {}
+        for dataset_id, payload in rows:
+            try:
+                value = json.loads(payload)
+                out[dataset_id] = value if isinstance(value, dict) else {}
+            except (ValueError, TypeError):
+                out[dataset_id] = {}
+        return out
+    finally:
+        c.close()
+
+
 def save_dataset(dataset_id: str, frame: pd.DataFrame, metadata: dict[str, Any] | None = None):
     c = _connect()
     try:
