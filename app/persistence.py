@@ -31,6 +31,10 @@ def _connect():
       job_id TEXT PRIMARY KEY, kind TEXT NOT NULL, status TEXT NOT NULL,
       payload_json TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS job_genomes (
+      job_id TEXT NOT NULL, genome_hash TEXT NOT NULL,
+      PRIMARY KEY(job_id, genome_hash)
+    );
     """)
     return c
 
@@ -225,5 +229,30 @@ def load_jobs() -> dict[str, dict[str, Any]]:
             except (ValueError, TypeError):
                 continue
         return out
+    finally:
+        c.close()
+
+
+
+def save_job_genome_hashes(job_id: str, hashes: list[str]):
+    """Persist globally unique candidate genome fingerprints at batch boundaries."""
+    if not hashes:
+        return
+    c = _connect()
+    try:
+        c.executemany("INSERT OR IGNORE INTO job_genomes(job_id,genome_hash) VALUES(?,?)",
+                      [(job_id, str(value)) for value in hashes])
+        c.commit()
+    finally:
+        c.close()
+
+
+def load_job_genome_hashes(job_id: str) -> set[str]:
+    """Load previously evaluated genome fingerprints for deterministic batch deduplication."""
+    c = _connect()
+    try:
+        return {row[0] for row in c.execute(
+            "SELECT genome_hash FROM job_genomes WHERE job_id=?", (job_id,)
+        ).fetchall()}
     finally:
         c.close()
