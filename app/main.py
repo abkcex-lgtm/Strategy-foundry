@@ -10,7 +10,7 @@ from pydantic import BaseModel,Field
 from .engine import backtest,search_candidates
 from .audit import independent_replay, FIELDS
 from .data import download_binance_month,validate_ohlcv,split_reference_period
-from .persistence import load_datasets,load_dataset_metadata,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles,save_search,list_search_history,load_search_result,save_job,load_jobs
+from .persistence import load_datasets,load_dataset_metadata,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles,save_search,list_search_history,load_search_result,save_job,load_jobs,save_job_genome_hashes,load_job_genome_hashes
 
 ROOT=Path(__file__).resolve().parent
 app=FastAPI(title='Strategy Foundry API',version='0.6.0',description='Server-side strategy research and simulation only; never sends live orders.')
@@ -24,7 +24,7 @@ class BacktestRequest(BaseModel):
     strategy:dict[str,Any]=Field(default_factory=dict)
     contract:dict[str,Any]=Field(default_factory=dict)
 class SearchRequest(BaseModel):
-    candidates:int=Field(default=500,ge=1,le=10000)
+    candidates:int=Field(default=500,ge=1,le=500000)
     seed:int=42
     algorithm:str="surrogate_genetic"  # hybrid_genetic | stratified_random
     search_space:dict[str,Any]=Field(default_factory=dict)
@@ -188,12 +188,12 @@ def run_backtest(dataset_id:str,req:BacktestRequest):
         return {'run_id':run_id,**result}
     except Exception as exc: raise HTTPException(422,f'اجرای بک‌تست رد شد: {exc}') from exc
 
-def _perform_search(dataset_id:str,req:SearchRequest,progress_callback=None):
+def _perform_search(dataset_id:str,req:SearchRequest,progress_callback=None,excluded_genome_hashes=None,include_genome_hashes=False,save_result=True):
     df=DATASETS.get(dataset_id)
     if df is None: raise ValueError('ابتدا داده را دریافت کنید.')
     splits=split_reference_period(df); train=splits['train']
     if len(train)<100: raise ValueError('دادهٔ Train برای بازهٔ Apr-Jun 2026 کافی نیست؛ جست‌وجو آغاز نشد.')
-    result=search_candidates(train,req.candidates,req.seed,req.contract,req.algorithm,req.search_space,progress_callback)
+    result=search_candidates(train,req.candidates,req.seed,req.contract,req.algorithm,req.search_space,progress_callback,excluded_genome_hashes)
     manifest={'dataset_id':dataset_id,'train_data_hash_sha256':hashlib.sha256(train.to_csv(index=False,float_format='%.12g').encode()).hexdigest(),
               'candidates':req.candidates,'seed':req.seed,'contract':result.get('contract',{})}
     manifest_hash=hashlib.sha256(json.dumps(manifest,sort_keys=True,allow_nan=False).encode()).hexdigest()
@@ -203,11 +203,14 @@ def _perform_search(dataset_id:str,req:SearchRequest,progress_callback=None):
       'development_period':'2026-07-01 to 2026-08-01 UTC (not used in search)',
       'oos_period':'2026-08-01 to 2026-10-01 UTC (not used in search)',
       'selection_policy':'Candidates are searched and ranked on TRAIN only. OOS is not read for candidate selection.'})
-    save_search(search_id,dataset_id,manifest,result)
+    genome_hashes=result.pop('evaluated_genome_hashes',[])
+    if save_result: save_search(search_id,dataset_id,manifest,result)
+    if include_genome_hashes: result['_internal_evaluated_genome_hashes']=genome_hashes
     return result
 
 @app.post('/api/search/{dataset_id}')
 def search(dataset_id:str,req:SearchRequest):
+    if req.candidates>10000: raise HTTPException(422,'برای جست‌وجوی بیش از ۱۰٬۰۰۰ نامزد از اجرای پس‌زمینه‌ای استفاده کنید تا جست‌وجو دسته‌ای و قابل‌بازیابی باشد.')
     if dataset_id not in DATASETS: raise HTTPException(404,'ابتدا داده را دریافت کنید.')
     try: return _perform_search(dataset_id,req)
     except ValueError as exc:
