@@ -20,6 +20,7 @@ A checked box means implementation exists; it does not establish profitability o
 - [ ] Resolve ambiguous 1m bars using 1s Binance data, failing if unavailable
 - [ ] Slippage model with direction/volatility/order-type sensitivity; current setting is a configurable percentage approximation
 - [ ] Search 500,000+ candidates under measured resource budget
+- [x] Backtest execution skips non-signal rows in the Python loop while preserving full-resolution candles; independent-ledger CI passes (production throughput and memory benchmark remains open)
 - [x] Train/dev/OOS evaluation freezes one effective strategy/contract first, hashes each split, and emits a reproducibility manifest; OOS is evaluation-only and never feeds app-side selection (real-market certification remains pending)
 - [x] When no TRAIN candidate passes, return exactly five independently audited near misses when five are auditable; rank the frozen near-miss pool on DEVELOPMENT and keep OOS untouched (honestly report any shortfall)
 - [ ] Two-year 1m performance and memory benchmark
@@ -39,7 +40,7 @@ A checked box means implementation exists; it does not establish profitability o
 - [x] Standalone replay embeds causal indicator logic for all 30 strategy families and AND/OR/XOR composition; gap-at-open stop/target fills and same-candle ambiguity handling align with the primary engine
 - [ ] Deployment smoke test and persistence check
 
-- [x] 12 additional price-action/regime signal families added to engine and independent audit; signal generation and ledger parity covered by parameterized tests (execution not yet CI-verified)
+- [x] 12 additional price-action/regime signal families added to engine and independent audit; signal generation and execution/ledger parity covered by parameterized CI tests on deterministic fixtures (real-market certification pending)
 - [x] Two-family AND/OR/XOR composition included in genome, genetic variation, surrogate feature vectors, manual strategy settings, and independent audit
 - [x] Background batch search request up to 500,000 candidates, global genome fingerprint deduplication, atomic completed-batch checkpoints, and resume endpoint
 - [ ] Run and measure a full 500,000-candidate search on production-sized data; verify wall time, memory, disk, cancellation behavior, and complete all-pass/near-miss aggregation
