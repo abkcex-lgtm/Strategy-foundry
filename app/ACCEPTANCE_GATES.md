@@ -21,7 +21,7 @@ A checked box means implementation exists; it does not establish profitability o
 - [ ] Slippage model with direction/volatility/order-type sensitivity; current setting is a configurable percentage approximation
 - [ ] Search 500,000+ candidates under measured resource budget
 - [x] Train/dev/OOS evaluation freezes one effective strategy/contract first, hashes each split, and emits a reproducibility manifest; OOS is evaluation-only and never feeds app-side selection (real-market certification remains pending)
-- [ ] Exactly five near-misses when none pass, ranked by OOS proximity
+- [x] When no TRAIN candidate passes, return exactly five independently audited near misses when five are auditable; rank the frozen near-miss pool on DEVELOPMENT and keep OOS untouched (honestly report any shortfall)
 - [ ] Two-year 1m performance and memory benchmark
 - [x] SQLite persistence for datasets, run history, and editable profiles (durability depends on host disk; authentication/multi-user isolation remains open)
 - [x] SQLite persistence and UI/API reopening for full strategy-search results and reproducibility manifests
