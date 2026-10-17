@@ -465,7 +465,10 @@ def backtest(frame, spec=None, contract=None, execution_frame=None):
         entry_i=i+1; entry=float(open_values[entry_i]); dist=float(row.atr*spec.stop_atr)
         stop=entry-dist if side=="LONG" else entry+dist
         risk_budget=_risk_budget(cfg,balance if cfg["compound"] or cfg["risk_mode"]=="percent_equity" else cfg["initial_balance"])
-        if risk_budget<=0 or risk_budget>=balance and cfg["risk_mode"]=="percent_equity": i+=1; continue
+        if risk_budget<=0: i+=1; continue
+        # A trade risking the entire remaining equity or more is not executable.
+        # Stop conservatively before fixed-risk losses can drive the account negative.
+        if balance<=risk_budget+1e-9: break
         try: qty,target,entry_rate,exit_rate=_size_and_target(entry,stop,side,risk_budget,cfg)
         except ValueError: i+=1; continue
         if qty<=0: i+=1; continue
