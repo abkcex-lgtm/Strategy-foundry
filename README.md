@@ -69,7 +69,7 @@ Configure provider keys as host-side secret environment variables, never in fron
 
 The router does not create API access or credits. Unconfigured providers are skipped, and when no key is configured the API reports that clearly. The assistant is not yet an autonomous source-code repair agent; ordinary chat must not be described as code changes or tests being executed.
 
-## V0.7.2 release notes
+## V0.7.3 release notes
 
 - Improved duplicate avoidance in surrogate proposal pools and mutation retries so prior-batch genomes are filtered before expensive evaluation.
 - Runtime verification is still pending: this environment cannot reach GitHub from the local container, and the latest repository test suite has not been confirmed by CI.
@@ -112,7 +112,7 @@ The router does not create API access or credits. Unconfigured providers are ski
 
 ## Status
 
-Current API/workspace version: **0.7.2**. The header reports the live API version; verify `/api/health` returns `0.5.0` to confirm the server update. The workspace header reads the running server version from `/api/health`.
+Current API/workspace version: **0.7.3**. The header reports the live API version; verify `/api/health` returns `0.7.3` to confirm the server update. The workspace header reads the running server version from `/api/health`.
 
 Implemented in this foundation: server-side API, OHLCV checks, Binance archive download path, tracked download and asynchronous search jobs with status polling, TRAIN-only search selection, persisted source provenance and data SHA-256 fingerprints, live dashboard summary of data/risk/filters/fees, editable settings/profile validation, SQLite dataset/run/profile/search-result persistence with saved search manifests and reopenable result history, risk/cost-aware ledger, deterministic genetic search with crossover/mutation/stratified seeds/immigrant exploration, an ExtraTrees surrogate-guided proposal mode, a stratified-random baseline, user-selectable family/context/confirmation search space, and 18 causal signal families (EMA crossover, channel breakout, RSI reversion, volume breakout, EMA pullback, MACD crossover, Bollinger reversion, inside-bar breakout, engulfing reversal, momentum breakout, stochastic reversion, ROC momentum, ADX/DMI trend, Keltner breakout, volatility squeeze breakout, OBV trend, VWAP reclaim, and support/resistance pivot reversal). Reported search results are independently replayed against a separate ledger engine; UI exposes search mode and family labels. Other implemented elements include per-filter failures/distances, OHLC candlestick view with trade overlays, paging/zoom presets, clickable/keyboard-selectable ledger rows that focus a selected trade on the chart, TP-only/winner/loser filters, CSV and standalone Python replay export, run history and reproducibility manifests.
 
