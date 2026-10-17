@@ -69,6 +69,12 @@ Configure provider keys as host-side secret environment variables, never in fron
 
 The router does not create API access or credits. Unconfigured providers are skipped, and when no key is configured the API reports that clearly. The assistant is not yet an autonomous source-code repair agent; ordinary chat must not be described as code changes or tests being executed.
 
+## V0.7.4 release notes
+
+- Search now handles incomplete terminal status correctly and the dashboard reflects all 30 implemented strategy families.
+- The exact Apr–Sep 2026 reference split remains in place when available; arbitrary dataset date ranges use chronological 60/20/20 train/dev/OOS partitions. Search manifests show the actual split timestamps.
+- Regression coverage added for chronological split ordering. Runtime tests and live deployment remain unverified.
+
 ## V0.7.3 release notes
 
 - Improved duplicate avoidance in surrogate proposal pools and mutation retries so prior-batch genomes are filtered before expensive evaluation.
