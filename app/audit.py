@@ -40,6 +40,30 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
         rsi=100-100/(1+rs)
         long=(rsi.shift(1)<=30)&(rsi>30)
         short=(rsi.shift(1)>=70)&(rsi<70)
+    elif family=="ema_pullback":
+        trend_up=ef>es; trend_down=ef<es
+        long=(trend_up)&(close>ef)&(close.shift(1)<=ef.shift(1))
+        short=(trend_down)&(close<ef)&(close.shift(1)>=ef.shift(1))
+    elif family=="macd_crossover":
+        macd=close.ewm(span=fast,adjust=False,min_periods=fast).mean()-close.ewm(span=slow,adjust=False,min_periods=slow).mean()
+        sig=macd.ewm(span=max(2,fast//2),adjust=False,min_periods=max(2,fast//2)).mean()
+        long=(macd>sig)&(macd.shift(1)<=sig.shift(1)); short=(macd<sig)&(macd.shift(1)>=sig.shift(1))
+    elif family=="bollinger_reversion":
+        mid=close.rolling(slow,min_periods=slow).mean(); dev=close.rolling(slow,min_periods=slow).std(ddof=0)
+        upper=mid+2*dev; lower=mid-2*dev
+        long=(close>lower)&(close.shift(1)<=lower.shift(1)); short=(close<upper)&(close.shift(1)>=upper.shift(1))
+    elif family=="inside_bar_breakout":
+        inside=(d.high.shift(1)<d.high.shift(2))&(d.low.shift(1)>d.low.shift(2))
+        long=inside&(close>d.high.shift(1))&(close.shift(1)<=d.high.shift(1))
+        short=inside&(close<d.low.shift(1))&(close.shift(1)>=d.low.shift(1))
+    elif family=="engulfing_reversal":
+        po=d.open.shift(1); pc=close.shift(1)
+        long=(close>d.open)&(pc<po)&(d.open<=pc)&(close>=po)
+        short=(close<d.open)&(pc>po)&(d.open>=pc)&(close<=po)
+    elif family=="momentum_breakout":
+        upper=d.high.rolling(slow,min_periods=slow).max().shift(1); lower=d.low.rolling(slow,min_periods=slow).min().shift(1)
+        long=(close>close.shift(fast))&(close>upper)&(close.shift(1)<=upper.shift(1))
+        short=(close<close.shift(fast))&(close<lower)&(close.shift(1)>=lower.shift(1))
     long=long.fillna(False)
     short=short.fillna(False)
     rate=(float(cfg["commission_pct_per_side"])+float(cfg["slippage_pct_per_side"]))/100.0
