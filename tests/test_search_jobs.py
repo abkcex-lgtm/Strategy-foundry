@@ -19,13 +19,14 @@ def test_search_job_is_tracked_and_uses_train_only(monkeypatch):
     })
     monkeypatch.setitem(main.DATASETS, dataset_id, frame)
 
-    def fake_search(train, candidates, seed, contract):
+    def fake_search(train, candidates, seed, contract, algorithm="hybrid_genetic"):
         assert len(train) == 120
         return {
             "requested_candidates": candidates,
             "evaluated_candidates": candidates,
             "failed_candidates": 0,
             "seed": seed,
+            "algorithm": algorithm,
             "contract": contract or {},
             "all_passing": False,
             "results": [],
