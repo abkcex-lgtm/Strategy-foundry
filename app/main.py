@@ -386,9 +386,10 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
                       'search_id':search_id,'dataset_id':dataset_id,
                       'search_manifest':manifest,'search_manifest_sha256':manifest_hash,
                       'search_period':_period_label(splits['train'],'TRAIN only'),
-                      'development_period':_period_label(splits['development'],'not used in search'),
+                      'development_period':_period_label(splits['development'],'near-miss ranking only when no TRAIN candidate passes'),
                       'oos_period':_period_label(splits['oos'],'not used in search'),
                       'selection_policy':'Candidates are globally deduplicated and pass detection uses TRAIN. If no TRAIN candidate passes, the frozen near-miss pool is ranked on DEVELOPMENT. OOS is not read for candidate selection.',
+                      'near_miss_ranking_policy':manifest['near_miss_ranking_policy'],
                       'warning':('Completed all requested globally unique candidate evaluations; all reported passing candidates were independently replayed.' if completed>=req.candidates else
                                  'INCOMPLETE SEARCH: candidate space/attempt limit prevented the requested unique evaluation count. Do not treat this as a completed 500k search.') }
         save_search(search_id,dataset_id,manifest,final_result)
