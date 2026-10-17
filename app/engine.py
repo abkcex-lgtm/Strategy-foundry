@@ -1,6 +1,6 @@
 from __future__ import annotations
 import hashlib, json, math, time
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 from typing import Any
 import numpy as np
 import pandas as pd
@@ -85,6 +85,8 @@ class StrategySpec:
     family: str = "ema_crossover"
     context_filter: str = "none"
     confirmation_filter: str = "none"
+    secondary_family: str = "none"
+    signal_composition: str = "single"
     def validate(self):
         if not (2 <= self.fast < self.slow <= 500): raise ValueError("Require 2 <= fast < slow <= 500")
         if not (2 <= self.atr_period <= 200): raise ValueError("atr_period must be 2..200")
@@ -92,6 +94,11 @@ class StrategySpec:
         if self.direction not in {"both","long","short"}: raise ValueError("Invalid direction")
         if self.family not in {"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top"}:
             raise ValueError("Unsupported strategy family")
+        valid_families={"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top"}
+        if self.secondary_family not in valid_families | {"none"}: raise ValueError("Unsupported secondary strategy family")
+        if self.signal_composition not in {"single","and","or","xor"}: raise ValueError("Unsupported signal composition")
+        if self.signal_composition=="single" and self.secondary_family!="none": raise ValueError("Single-family strategy cannot set secondary_family")
+        if self.signal_composition!="single" and (self.secondary_family=="none" or self.secondary_family==self.family): raise ValueError("Composite strategy requires a different secondary family")
         if self.context_filter not in {"none","ema_trend","adx_strength","volume_confirm","vwap_side","low_volatility"}:
             raise ValueError("Unsupported context filter")
         if self.confirmation_filter not in {"none","candle_direction","momentum","rsi_midline"}:
@@ -315,6 +322,15 @@ def indicators(df, spec):
         loss=(-delta.clip(upper=0)).ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
         rsi=100-100/(1+gain/loss.replace(0,np.nan))
         long_signal=long_signal&(rsi>50); short_signal=short_signal&(rsi<50)
+    if spec.signal_composition!="single":
+        secondary=indicators(df,replace(spec,family=spec.secondary_family,secondary_family="none",signal_composition="single"))
+        sec_long=secondary["long_signal"]; sec_short=secondary["short_signal"]
+        if spec.signal_composition=="and":
+            long_signal=long_signal&sec_long; short_signal=short_signal&sec_short
+        elif spec.signal_composition=="or":
+            long_signal=long_signal|sec_long; short_signal=short_signal|sec_short
+        elif spec.signal_composition=="xor":
+            long_signal=long_signal^sec_long; short_signal=short_signal^sec_short
     x["long_signal"]=long_signal.fillna(False)
     x["short_signal"]=short_signal.fillna(False)
     return x
@@ -471,7 +487,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
 
     def make_spec(family=None, genes=None):
         if genes is not None:
-            family,fast,slow,period,stop,direction,context_filter,confirmation_filter=genes
+            family,fast,slow,period,stop,direction,context_filter,confirmation_filter,secondary_family,signal_composition=genes
         else:
             family=str(family or rng.choice(families))
             fast=int(rng.choice(fast_values))
@@ -479,15 +495,26 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             if slow<=fast: slow=int(min(500,fast+max(2,int(rng.choice([4,8,12,16,24,32,48])))))
             period=int(rng.choice(periods)); stop=float(rng.choice(stops)); direction=str(rng.choice(directions))
             context_filter=str(rng.choice(context_filters)); confirmation_filter=str(rng.choice(confirmation_filters))
+            if len(families)>1 and rng.random()<0.45:
+                signal_composition=str(rng.choice(["and","or","xor"],p=[0.50,0.35,0.15]))
+                secondary_family=str(rng.choice([f for f in families if f!=family]))
+            else:
+                signal_composition="single"; secondary_family="none"
         fast=int(fast); slow=int(slow); period=int(period); stop=float(stop); direction=str(direction)
         if family=="channel_breakout": fast=min(fast, max(2,slow-2))
         elif family=="rsi_reversion": slow=max(fast+2, min(500,fast*2))
         elif family in {"inside_bar_breakout","engulfing_reversal"}: fast=9; slow=max(20,slow)
         if slow<=fast: fast=max(2,slow-2)
-        return StrategySpec(f"{names[family]} {fast}/{slow} ATR {period}x{stop:g} {direction} [ctx={context_filter}; confirm={confirmation_filter}]",fast,slow,period,stop,direction,seed,family,context_filter,confirmation_filter)
+        if signal_composition=="single": secondary_family="none"
+        elif secondary_family in {"none",family}:
+            options=[f for f in families if f!=family]
+            if not options: signal_composition="single"; secondary_family="none"
+            else: secondary_family=str(rng.choice(options))
+        label=f"{names[family]}"+(f" {signal_composition.upper()} {names[secondary_family]}" if signal_composition!="single" else "")
+        return StrategySpec(f"{label} {fast}/{slow} ATR {period}x{stop:g} {direction} [ctx={context_filter}; confirm={confirmation_filter}]",fast,slow,period,stop,direction,seed,family,context_filter,confirmation_filter,secondary_family,signal_composition)
 
     def genome(spec):
-        return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction,spec.context_filter,spec.confirmation_filter)
+        return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction,spec.context_filter,spec.confirmation_filter,spec.secondary_family,spec.signal_composition)
 
     def fitness(row):
         m=row["metrics"]; pf=math.inf if m["profit_factor"] is None else float(m["profit_factor"])
@@ -501,6 +528,8 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         vals.extend([1.0 if spec.direction==d else 0.0 for d in directions])
         vals.extend([1.0 if spec.context_filter==f else 0.0 for f in all_context_filters])
         vals.extend([1.0 if spec.confirmation_filter==f else 0.0 for f in all_confirmation_filters])
+        vals.extend([1.0 if spec.secondary_family==f else 0.0 for f in all_families]+[1.0 if spec.secondary_family=="none" else 0.0])
+        vals.extend([1.0 if spec.signal_composition==f else 0.0 for f in ("single","and","or","xor")])
         return vals
 
     def surrogate_target(row):
@@ -575,6 +604,10 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 direction=str(a.direction if rng.random()<0.5 else b.direction)
                 context_filter=str(a.context_filter if rng.random()<0.5 else b.context_filter)
                 confirmation_filter=str(a.confirmation_filter if rng.random()<0.5 else b.confirmation_filter)
+                secondary_family=str(a.secondary_family if rng.random()<0.5 else b.secondary_family)
+                signal_composition=str(a.signal_composition if rng.random()<0.5 else b.signal_composition)
+                if rng.random()<0.20: signal_composition=str(rng.choice(["single","and","or","xor"]))
+                if rng.random()<0.25: secondary_family=str(rng.choice(["none"]+[f for f in families if f!=family]))
                 if rng.random()<0.35: fast=int(rng.choice(fast_values))
                 if rng.random()<0.35: slow=int(rng.choice(slow_values))
                 if rng.random()<0.25: period=int(rng.choice(periods))
@@ -583,7 +616,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 if rng.random()<0.12: family=str(rng.choice(families))
                 if rng.random()<0.25: context_filter=str(rng.choice(context_filters))
                 if rng.random()<0.20: confirmation_filter=str(rng.choice(confirmation_filters))
-                spec=make_spec(genes=(family,fast,slow,period,stop,direction,context_filter,confirmation_filter))
+                spec=make_spec(genes=(family,fast,slow,period,stop,direction,context_filter,confirmation_filter,secondary_family,signal_composition))
         if algorithm=="surrogate_genetic" and len(evaluated)>=32 and (last_model_fit_at<0 or len(evaluated)-last_model_fit_at>=256):
             try:
                 from sklearn.ensemble import ExtraTreesRegressor
