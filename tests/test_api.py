@@ -149,3 +149,38 @@ def test_search_resume_frontend_reuses_existing_job_and_handles_shortfall():
     search_handler = source.split("async function search(")[1].split("async function evaluateStrategy(")[0]
     assert "completed_with_shortfall" in search_handler
     assert "includes(state.status)" in search_handler
+
+
+def test_split_evaluation_freezes_strategy_and_hashes_each_split(monkeypatch):
+    dataset_id = "frozen-evaluation-test"
+    n = 600
+    frame = pd.DataFrame({
+        "open_time": [i * 60_000 for i in range(n)],
+        "open": [100.0] * n,
+        "high": [101.0] * n,
+        "low": [99.0] * n,
+        "close": [100.0] * n,
+        "volume": [10.0] * n,
+    })
+    monkeypatch.setitem(main.DATASETS, dataset_id, frame)
+    monkeypatch.setattr(main, "_store_result", lambda result, dataset_id: "eval-" + result["evaluation_split"])
+    response = client.post(f"/api/evaluate/{dataset_id}", json={
+        "strategy": {"fast": 5, "slow": 18, "atr_period": 7, "family": "micro_double_top",
+                     "secondary_family": "wick_rejection", "signal_composition": "or"},
+        "contract": {"reward_risk": 2.0},
+    })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["certified"] is False
+    assert body["oos_used_for_selection"] is False
+    assert len(body["dataset_hash_sha256"]) == 64
+    assert len(body["evaluation_manifest_sha256"]) == 64
+    assert body["evaluation_manifest"]["oos_used_for_selection"] is False
+    assert body["evaluation_manifest"]["frozen_strategy"] == body["strategy"]
+    assert body["evaluation_manifest"]["effective_contract"] == body["contract"]
+    assert set(body["periods"]) == {"train", "development", "oos"}
+    for split in ("train", "development", "oos"):
+        result = body["periods"][split]
+        assert result["status"] == "COMPLETED", result
+        assert len(result["data_hash_sha256"]) == 64
+        assert result["run_id"] == "eval-" + split
