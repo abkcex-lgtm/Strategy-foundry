@@ -36,3 +36,6 @@ A checked box means implementation exists; it does not establish profitability o
 - [ ] AI assistant autonomous code repair, voice/files/media, and guarded bug-fix workflow
 - [ ] Standalone export replay run on exact source CSV and ledger equality verified
 - [ ] Deployment smoke test and persistence check
+
+- [x] 12 additional price-action/regime signal families added to engine and independent audit; signal generation covered by parameterized tests (execution not yet CI-verified)
+- [ ] 500,000+ distinct-candidate search with durable checkpoints, cancellation/resume, bounded-memory result storage, and full-run acceptance test
