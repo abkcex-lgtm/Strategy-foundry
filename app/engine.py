@@ -418,7 +418,7 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
     return sum(distances.values()), failed, distances
 
 
-def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="surrogate_genetic", search_space=None, progress_callback=None):
+def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="surrogate_genetic", search_space=None, progress_callback=None, excluded_genome_hashes=None):
     """Deterministic bounded evolutionary search on TRAIN only.
 
     max_candidates counts distinct parameter genomes actually evaluated. This is
@@ -430,6 +430,9 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         raise ValueError("Unsupported search algorithm")
     cfg=normalize_contract(contract)
     rng=np.random.default_rng(seed)
+    excluded_genome_hashes=set(excluded_genome_hashes or ())
+    def genome_hash(key):
+        return hashlib.sha256(json.dumps(list(key),separators=(",",":"),ensure_ascii=False).encode()).hexdigest()
     all_families=("ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top")
     all_context_filters=("none","ema_trend","adx_strength","volume_confirm","vwap_side","low_volatility")
     all_confirmation_filters=("none","candle_direction","momentum","rsi_midline")
@@ -517,6 +520,9 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         if key in evaluated:
             duplicate_genomes+=1
             return evaluated[key]
+        if genome_hash(key) in excluded_genome_hashes:
+            duplicate_genomes+=1
+            return None
         try:
             r=backtest(frame,spec,cfg); m=r["metrics"]
             dist,failed,distances=_candidate_distance(m,cfg)
@@ -690,6 +696,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             "failed_candidates":errors,"duplicate_genomes_skipped":duplicate_genomes,
             "seed":seed,"algorithm":algorithm,"generations":generation,"surrogate_model_fits":surrogate_fit_count,
             "family_evaluated_counts":family_counts,"contract":cfg,"all_passing":all_passing,
+            "evaluated_genome_hashes":[genome_hash(key) for key in evaluated.keys()],
             "independent_audit_failures":audit_failures,
             "results":selected,"requested_near_misses":0 if all_passing else 5,
             "returned_near_misses":0 if all_passing else len(selected),"near_miss_shortfall":near_miss_shortfall,
