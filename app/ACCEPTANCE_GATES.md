@@ -5,6 +5,7 @@ A checked box means implementation exists; it does not establish profitability o
 - [x] Server-side API and Persian responsive UI
 - [x] OHLCV validation and SHA-256 fingerprints
 - [x] Persisted dataset source metadata, monthly Binance archive hashes, and exposed full normalized-data SHA-256 in dataset listing
+- [x] Live dashboard summary for selected dataset/splits, risk, fees, active target filters, management toggles, and search configuration
 - [x] Strict gap rejection for 1m archive downloads, CSV uploads marked as 1m, and backtests
 - [x] Editable contract settings: initial balance, fixed/percentage risk, compounding, net/gross R:R, commission, slippage, pass thresholds
 - [x] Each acceptance filter can be enabled/disabled independently; disabled filters are excluded from pass/fail and near-miss distance
