@@ -90,7 +90,9 @@ async def upload_csv(file:UploadFile=File(...)):
         key=str(report['rows'])+'-'+str(int(df.open_time.iloc[0]))+'-'+hashlib.sha256(raw).hexdigest()[:8]
         DATASETS[key]=df; save_dataset(key,df,{'source':'user_csv','sha256_csv':hashlib.sha256(raw).hexdigest()})
         return {'dataset_id':key,'report':report,'sha256_csv':hashlib.sha256(raw).hexdigest()}
-    except Exception as exc: raise HTTPException(422,f'بررسی داده رد شد: {exc}DOWNLOAD_JOBS:dict[str,dict[str,Any]]={}
+    except Exception as exc: raise HTTPException(422,f'بررسی داده رد شد: {exc}') from exc
+
+DOWNLOAD_JOBS:dict[str,dict[str,Any]]={}
 
 async def _run_download_job(job_id:str,req:DownloadRequest):
     job=DOWNLOAD_JOBS[job_id]
