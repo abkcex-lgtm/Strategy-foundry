@@ -146,6 +146,33 @@ def indicators(df, spec):
         lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
         long_signal=momentum&(c>upper)&(c.shift(1)<=upper.shift(1))
         short_signal=negative&(c<lower)&(c.shift(1)>=lower.shift(1))
+    elif spec.family=="ema_pullback":
+        trend_up=x.ema_fast>x.ema_slow; trend_down=x.ema_fast<x.ema_slow
+        long_signal=trend_up&(c>x.ema_fast)&(c.shift(1)<=x.ema_fast.shift(1))
+        short_signal=trend_down&(c<x.ema_fast)&(c.shift(1)>=x.ema_fast.shift(1))
+    elif spec.family=="macd_crossover":
+        macd=c.ewm(span=spec.fast,adjust=False,min_periods=spec.fast).mean()-c.ewm(span=spec.slow,adjust=False,min_periods=spec.slow).mean()
+        signal=macd.ewm(span=max(2,spec.fast//2),adjust=False,min_periods=max(2,spec.fast//2)).mean()
+        long_signal=(macd>signal)&(macd.shift(1)<=signal.shift(1))
+        short_signal=(macd<signal)&(macd.shift(1)>=signal.shift(1))
+    elif spec.family=="bollinger_reversion":
+        mid=c.rolling(spec.slow,min_periods=spec.slow).mean(); dev=c.rolling(spec.slow,min_periods=spec.slow).std(ddof=0)
+        upper=mid+2*dev; lower=mid-2*dev
+        long_signal=(c>lower)&(c.shift(1)<=lower.shift(1))
+        short_signal=(c<upper)&(c.shift(1)>=upper.shift(1))
+    elif spec.family=="inside_bar_breakout":
+        inside=(x.high.shift(1)<x.high.shift(2))&(x.low.shift(1)>x.low.shift(2))
+        long_signal=inside&(c>x.high.shift(1))&(c.shift(1)<=x.high.shift(1))
+        short_signal=inside&(c<x.low.shift(1))&(c.shift(1)>=x.low.shift(1))
+    elif spec.family=="engulfing_reversal":
+        prev_open=x.open.shift(1); prev_close=c.shift(1)
+        long_signal=(c>x.open)&(prev_close<prev_open)&(x.open<=prev_close)&(c>=prev_open)
+        short_signal=(c<x.open)&(prev_close>prev_open)&(x.open>=prev_close)&(c<=prev_open)
+    elif spec.family=="momentum_breakout":
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        long_signal=(c>c.shift(spec.fast))&(c>upper)&(c.shift(1)<=upper.shift(1))
+        short_signal=(c<c.shift(spec.fast))&(c<lower)&(c.shift(1)>=lower.shift(1))
     x["long_signal"]=long_signal.fillna(False)
     x["short_signal"]=short_signal.fillna(False)
     return x
