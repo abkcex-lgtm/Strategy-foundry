@@ -1,5 +1,14 @@
 # Changelog
 
+## V0.7.4 — 2026-10-17
+
+- Fixed the search UI to treat `completed_with_shortfall` as a terminal state, preventing long polling after an incomplete run.
+- Corrected the displayed strategy-family count to match the 30-family catalogue.
+- Kept the fixed Apr–Sep 2026 reference split when the dataset covers it; other date ranges now receive a chronological 60/20/20 train/dev/OOS split instead of silently returning empty reference windows.
+- Search manifests now report the actual first and last candle timestamps for each split.
+- Added a chronological split regression test. Full CI and live-host deployment still require verification.
+
+
 ## V0.7.3 — 2026-10-17
 
 - Fixed a recovery bug where the UI created a fresh search instead of polling the selected interrupted/running job after requesting resume.
