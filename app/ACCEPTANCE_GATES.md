@@ -37,6 +37,7 @@ A checked box means implementation exists; it does not establish profitability o
 - [ ] Standalone export replay run on exact source CSV and ledger equality verified
 - [ ] Deployment smoke test and persistence check
 
-- [x] 12 additional price-action/regime signal families added to engine and independent audit; signal generation covered by parameterized tests (execution not yet CI-verified)
+- [x] 12 additional price-action/regime signal families added to engine and independent audit; signal generation and ledger parity covered by parameterized tests (execution not yet CI-verified)
+- [x] Two-family AND/OR/XOR composition included in genome, genetic variation, surrogate feature vectors, manual strategy settings, and independent audit
 - [x] Background batch search request up to 500,000 candidates, global genome fingerprint deduplication, atomic completed-batch checkpoints, and resume endpoint
 - [ ] Run and measure a full 500,000-candidate search on production-sized data; verify wall time, memory, disk, cancellation behavior, and complete all-pass/near-miss aggregation
