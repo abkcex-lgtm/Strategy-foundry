@@ -143,4 +143,6 @@ def test_search_resume_frontend_reuses_existing_job_and_handles_shortfall():
     assert response.status_code == 200
     source = response.text
     assert "existingJobId?{job_id:existingJobId}:await api('/api/search-jobs/'" in source
-    assert "['completed','completed_with_shortfall'].includes(state.status)" in source
+    search_handler = source.split("async function search(")[1].split("async function evaluateStrategy(")[0]
+    assert "completed_with_shortfall" in search_handler
+    assert "includes(state.status)" in search_handler
