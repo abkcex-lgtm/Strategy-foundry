@@ -75,3 +75,36 @@ def test_infinite_profit_factor_is_not_ranked_as_zero(monkeypatch):
     cfg = normalize_contract({"use_min_profit_factor": False})
     result = search_candidates(pd.DataFrame(), max_candidates=60, seed=42, contract=cfg)
     assert result["results"][0]["metrics"]["profit_factor"] is None
+
+
+def test_search_space_restricts_families_and_composition_filters(monkeypatch):
+    seen = []
+    def fake_backtest(frame, spec, contract):
+        seen.append((spec.family, spec.context_filter, spec.confirmation_filter))
+        metrics = {
+            "trades": 10, "wins": 2, "losses": 8, "win_rate_pct": 20.0,
+            "profit_factor": 0.5, "avg_net_tp_per_day": 0.1,
+            "max_consecutive_losses": 8, "net_pnl": -50.0,
+            "final_balance": 950.0, "total_costs": 1.0,
+            "data_hash_sha256": "d" * 64, "rows": 500, "span_days": 1.0,
+            "passes_all_targets": False,
+        }
+        return {"strategy": engine.asdict(spec), "contract": contract, "metrics": metrics,
+                "run_hash_sha256": hashlib.sha256(repr(spec).encode()).hexdigest(), "ledger": []}
+    monkeypatch.setattr(engine, "backtest", fake_backtest)
+    monkeypatch.setattr(audit, "independent_replay", lambda frame, spec, cfg: {"ledger": []})
+    result = search_candidates(pd.DataFrame(), max_candidates=12, seed=7,
+        search_space={"families": ["ema_crossover"],
+                      "context_filters": ["none", "ema_trend"],
+                      "confirmation_filters": ["none"]})
+    assert result["evaluated_candidates"] == 12
+    assert set(f for f, _, _ in seen) == {"ema_crossover"}
+    assert set(cf for _, cf, _ in seen) <= {"none", "ema_trend"}
+    assert set(xf for _, _, xf in seen) == {"none"}
+
+
+def test_empty_search_space_selection_is_rejected():
+    import pytest
+    with pytest.raises(ValueError, match="family selection is empty"):
+        search_candidates(pd.DataFrame(), max_candidates=1,
+                          search_space={"families": []})
