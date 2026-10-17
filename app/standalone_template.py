@@ -346,7 +346,9 @@ def replay(df, execution_df=None):
         entry_i=i+1; entry=float(x.iloc[entry_i].open); dist=float(row.atr*s['stop_atr'])
         stop=entry-dist if side=='LONG' else entry+dist
         risk=risk_budget(balance if (CFG['compound'] or CFG['risk_mode']=='percent_equity') else CFG['initial_balance'])
-        if risk<=0 or (CFG['risk_mode']=='percent_equity' and risk>=balance): i+=1; continue
+        if risk<=0: i+=1; continue
+        # Never open a trade that risks all remaining equity or more.
+        if balance<=risk+1e-9: break
         try: qty,target,rate=size_target(entry,stop,side,risk)
         except ValueError: i+=1; continue
         exit_i=exit_price=reason=exit_time=None; resolution_status='resolved_base_ohlc'
