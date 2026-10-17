@@ -82,11 +82,14 @@ class StrategySpec:
     stop_atr: float = 1.5
     direction: str = "both"
     seed: int = 42
+    family: str = "ema_crossover"
     def validate(self):
         if not (2 <= self.fast < self.slow <= 500): raise ValueError("Require 2 <= fast < slow <= 500")
         if not (2 <= self.atr_period <= 200): raise ValueError("atr_period must be 2..200")
         if not (0.2 <= self.stop_atr <= 10): raise ValueError("stop_atr must be 0.2..10")
         if self.direction not in {"both","long","short"}: raise ValueError("Invalid direction")
+        if self.family not in {"ema_crossover","channel_breakout","rsi_reversion","volume_breakout"}:
+            raise ValueError("Unsupported strategy family")
 
 def indicators(df, spec):
     x=df.copy(); c=x.close.astype(float); prev=c.shift(1)
@@ -94,8 +97,28 @@ def indicators(df, spec):
     x["ema_slow"]=c.ewm(span=spec.slow,adjust=False,min_periods=spec.slow).mean()
     tr=pd.concat([x.high-x.low,(x.high-prev).abs(),(x.low-prev).abs()],axis=1).max(axis=1)
     x["atr"]=tr.ewm(alpha=1/spec.atr_period,adjust=False,min_periods=spec.atr_period).mean()
-    x["long_signal"]=(x.ema_fast>x.ema_slow)&(x.ema_fast.shift(1)<=x.ema_slow.shift(1))
-    x["short_signal"]=(x.ema_fast<x.ema_slow)&(x.ema_fast.shift(1)>=x.ema_slow.shift(1))
+    long_signal=(x.ema_fast>x.ema_slow)&(x.ema_fast.shift(1)<=x.ema_slow.shift(1))
+    short_signal=(x.ema_fast<x.ema_slow)&(x.ema_fast.shift(1)>=x.ema_slow.shift(1))
+    if spec.family in {"channel_breakout","volume_breakout"}:
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        long_signal=(c>upper)&(c.shift(1)<=upper.shift(1))
+        short_signal=(c<lower)&(c.shift(1)>=lower.shift(1))
+        if spec.family=="volume_breakout":
+            baseline=x.volume.rolling(spec.fast,min_periods=spec.fast).mean().shift(1)
+            active_volume=x.volume>=baseline*1.5
+            long_signal=long_signal&active_volume
+            short_signal=short_signal&active_volume
+    elif spec.family=="rsi_reversion":
+        delta=c.diff()
+        gain=delta.clip(lower=0).ewm(alpha=1/spec.fast,adjust=False,min_periods=spec.fast).mean()
+        loss=(-delta.clip(upper=0)).ewm(alpha=1/spec.fast,adjust=False,min_periods=spec.fast).mean()
+        rs=gain/loss.replace(0,np.nan)
+        rsi=100-100/(1+rs)
+        long_signal=(rsi.shift(1)<=30)&(rsi>30)
+        short_signal=(rsi.shift(1)>=70)&(rsi<70)
+    x["long_signal"]=long_signal.fillna(False)
+    x["short_signal"]=short_signal.fillna(False)
     return x
 
 def _risk_budget(cfg: dict[str, Any], balance: float) -> float:
@@ -176,9 +199,10 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None):
     if not 1<=max_candidates<=10000: raise ValueError("max_candidates must be 1..10000 in this starter API")
     cfg=normalize_contract(contract)
     rng=np.random.default_rng(seed); results=[]; errors=0
+    families=("ema_crossover","channel_breakout","rsi_reversion","volume_breakout")
     for _ in range(max_candidates):
-        fast=int(rng.integers(4,40)); slow=int(rng.integers(max(fast+2,20),121)); period=int(rng.integers(7,31)); mult=float(rng.choice([0.8,1.0,1.2,1.5,2.0,2.5]))
-        spec=StrategySpec(f"EMA {fast}/{slow} ATR {period}x{mult:g}",fast,slow,period,mult,"both",seed)
+        fast=int(rng.integers(4,40)); slow=int(rng.integers(max(fast+2,20),121)); period=int(rng.integers(7,31)); mult=float(rng.choice([0.8,1.0,1.2,1.5,2.0,2.5])); family=str(rng.choice(families))
+        spec=StrategySpec(f"{family} {fast}/{slow} ATR {period}x{mult:g}",fast,slow,period,mult,"both",seed,family)
         try:
             r=backtest(frame,spec,cfg); m=r["metrics"]
             dist=(max(0,cfg["min_win_rate_pct"]+0.0001-m["win_rate_pct"])/max(cfg["min_win_rate_pct"],1) if cfg["use_min_win_rate"] else 0)+(max(0,cfg["min_profit_factor"]+0.0001-(m["profit_factor"] or 0)) if cfg["use_min_profit_factor"] else 0)+(max(0,cfg["min_tp_per_day"]-m["avg_net_tp_per_day"])/max(cfg["min_tp_per_day"],1) if cfg["use_min_tp_per_day"] else 0)+(max(0,m["max_consecutive_losses"]-cfg["max_consecutive_losses"])/max(cfg["max_consecutive_losses"],1) if cfg["use_max_consecutive_losses"] else 0)
