@@ -93,3 +93,53 @@ def test_search_history_endpoints_expose_saved_results(monkeypatch):
 
     missing = client.get("/api/search-history/missing")
     assert missing.status_code == 404
+
+
+def test_near_misses_are_ranked_on_development_without_reading_oos(monkeypatch):
+    dataset_id = "dev-ranked-near-miss-test"
+    n = 600
+    start = int(pd.Timestamp("2026-01-01T00:00:00Z").timestamp() * 1000)
+    frame = pd.DataFrame({
+        "open_time": [start + i * 60_000 for i in range(n)],
+        "open": [100.0] * n,
+        "high": [101.0] * n,
+        "low": [99.0] * n,
+        "close": [100.0] * n,
+        "volume": [10.0] * n,
+    })
+    monkeypatch.setitem(main.DATASETS, dataset_id, frame)
+    cfg = main.normalize_contract({})
+
+    def fake_search(train, candidates, seed, contract, algorithm, search_space, progress_callback, excluded_genome_hashes):
+        assert len(train) == 360
+        return {
+            "all_passing": False,
+            "results": [
+                {"strategy": {"fast": 6}, "contract": cfg, "metrics": {"win_rate_pct": 39, "profit_factor": 0.9, "avg_net_tp_per_day": 2.5, "max_consecutive_losses": 14}, "distance": 0.1, "failed_filters": ["train-only"]},
+                {"strategy": {"fast": 5}, "contract": cfg, "metrics": {"win_rate_pct": 20, "profit_factor": 0.2, "avg_net_tp_per_day": 0.2, "max_consecutive_losses": 30}, "distance": 2.0, "failed_filters": ["train-only"]},
+            ],
+            "contract": cfg,
+            "evaluated_genome_hashes": [],
+        }
+
+    def fake_backtest(part, strategy, contract):
+        assert len(part) == 120  # only DEVELOPMENT is evaluated for near-miss ranking
+        if strategy["fast"] == 5:
+            metrics = {"win_rate_pct": 35.0, "profit_factor": 0.9, "avg_net_tp_per_day": 2.8, "max_consecutive_losses": 14}
+        else:
+            metrics = {"win_rate_pct": 10.0, "profit_factor": 0.2, "avg_net_tp_per_day": 0.2, "max_consecutive_losses": 30}
+        metrics["data_hash_sha256"] = "d" * 64
+        return {"metrics": metrics, "ledger": []}
+
+    monkeypatch.setattr(main, "search_candidates", fake_search)
+    monkeypatch.setattr(main, "backtest", fake_backtest)
+    req = main.SearchRequest(candidates=2, seed=42, algorithm="stratified_random")
+    result = main._perform_search(dataset_id, req, save_result=False)
+
+    assert result["results"][0]["strategy"]["fast"] == 5
+    assert result["results"][0]["metrics_split"] == "development"
+    assert result["results"][0]["train_metrics"]["win_rate_pct"] == 20
+    assert result["results"][0]["metrics"]["win_rate_pct"] == 35
+    assert "DEVELOPMENT" in result["near_miss_ranking_policy"]
+    assert "OOS is not read" in result["near_miss_ranking_policy"]
+    assert result["search_manifest"]["development_data_hash_sha256"]

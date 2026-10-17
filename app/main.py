@@ -8,7 +8,7 @@ from fastapi import FastAPI,HTTPException,UploadFile,File,Query
 from fastapi.responses import HTMLResponse,StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel,Field
-from .engine import backtest,search_candidates,StrategySpec,normalize_contract
+from .engine import backtest,search_candidates,StrategySpec,normalize_contract,_candidate_distance
 from .audit import independent_replay, FIELDS
 from .data import download_binance_month,validate_ohlcv,split_reference_period
 from .persistence import load_datasets,load_dataset_metadata,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles,save_search,list_search_history,load_search_result,save_job,load_jobs,save_job_genome_hashes,load_job_genome_hashes,save_job_batch_checkpoint,storage_status
@@ -198,21 +198,73 @@ def run_backtest(dataset_id:str,req:BacktestRequest):
         return {'run_id':run_id,**result}
     except Exception as exc: raise HTTPException(422,f'اجرای بک‌تست رد شد: {exc}') from exc
 
+def _rank_near_misses_on_development(result:dict[str,Any],splits:dict[str,pd.DataFrame],req:SearchRequest):
+    """Rank a frozen TRAIN near-miss pool on DEVELOPMENT; never inspect OOS."""
+    if result.get('all_passing') or not result.get('results'):
+        return
+    development=splits.get('development',pd.DataFrame())
+    if len(development)<100:
+        result['near_miss_ranking_policy']='TRAIN-only fallback: DEVELOPMENT has fewer than 100 rows; OOS was not read.'
+        return
+    for item in result['results']:
+        train_metrics=item.get('metrics',{})
+        train_distance=float(item.get('distance',1e30))
+        item['train_metrics']=train_metrics
+        item['train_distance']=train_distance
+        try:
+            cfg=normalize_contract(item.get('contract') or result.get('contract') or req.contract)
+            dev_run=backtest(development,item['strategy'],cfg)
+            distance,failed,distances=_candidate_distance(dev_run['metrics'],cfg)
+            item['metrics']=dev_run['metrics']
+            item['metrics_split']='development'
+            item['distance']=float(distance)
+            item['failed_filters']=failed
+            item['filter_distances']=distances
+            item['development_evaluation_status']='COMPLETED'
+            item['development_data_hash_sha256']=dev_run['metrics']['data_hash_sha256']
+        except Exception as exc:
+            # Keep the TRAIN metrics visible, but rank an unevaluable candidate after
+            # all candidates with a valid DEVELOPMENT evaluation.
+            item['metrics']=train_metrics
+            item['metrics_split']='train'
+            item['distance']=1e30
+            item['development_evaluation_status']='PREFLIGHT_FAILED'
+            item['development_evaluation_reason']=str(exc)
+    def key(item):
+        metrics=item.get('metrics',{})
+        pf=metrics.get('profit_factor')
+        return (
+            0 if item.get('development_evaluation_status')=='COMPLETED' else 1,
+            float(item.get('distance',1e30)),
+            int(metrics.get('max_consecutive_losses',10**9)),
+            -float(metrics.get('win_rate_pct',0)),
+            -float(metrics.get('avg_net_tp_per_day',0)),
+            -float(pf if pf is not None else 1e9),
+        )
+    result['results']=sorted(result['results'],key=key)[:5]
+    result['near_miss_ranking_policy']='Candidate generation and pass detection use TRAIN; when no TRAIN candidate passes, near misses are ranked on DEVELOPMENT after the pool is frozen. OOS is not read.'
+
+
 def _perform_search(dataset_id:str,req:SearchRequest,progress_callback=None,excluded_genome_hashes=None,include_genome_hashes=False,save_result=True):
     df=DATASETS.get(dataset_id)
     if df is None: raise ValueError('ابتدا داده را دریافت کنید.')
     splits=split_reference_period(df); train=splits['train']
     if len(train)<100: raise ValueError('دادهٔ Train برای بازهٔ Apr-Jun 2026 کافی نیست؛ جست‌وجو آغاز نشد.')
     result=search_candidates(train,req.candidates,req.seed,req.contract,req.algorithm,req.search_space,progress_callback,excluded_genome_hashes)
-    manifest={'dataset_id':dataset_id,'train_data_hash_sha256':hashlib.sha256(train.to_csv(index=False,float_format='%.12g').encode()).hexdigest(),
+    _rank_near_misses_on_development(result,splits,req)
+    train_hash=hashlib.sha256(train.to_csv(index=False,float_format='%.12g').encode()).hexdigest()
+    development_hash=hashlib.sha256(splits['development'].to_csv(index=False,float_format='%.12g').encode()).hexdigest()
+    manifest={'dataset_id':dataset_id,'train_data_hash_sha256':train_hash,
+              'development_data_hash_sha256':development_hash,
+              'near_miss_ranking_policy':result.get('near_miss_ranking_policy','Passing strategies are selected on TRAIN only; OOS is not read.'),
               'candidates':req.candidates,'seed':req.seed,'contract':result.get('contract',{})}
     manifest_hash=hashlib.sha256(json.dumps(manifest,sort_keys=True,allow_nan=False).encode()).hexdigest()
     search_id=uuid.uuid4().hex[:16]
     result.update({'dataset_id':dataset_id,'search_id':search_id,'search_manifest':manifest,'search_manifest_sha256':manifest_hash,
-      'search_period':_period_label(splits['train'],'TRAIN only'),
-      'development_period':_period_label(splits['development'],'not used in search'),
-      'oos_period':_period_label(splits['oos'],'not used in search'),
-      'selection_policy':'Candidates are searched and ranked on TRAIN only. OOS is not read for candidate selection.'})
+      'search_period':_period_label(splits['train'],'TRAIN candidate generation and pass detection'),
+      'development_period':_period_label(splits['development'],'near-miss ranking only when no TRAIN candidate passes'),
+      'oos_period':_period_label(splits['oos'],'untouched evaluation; not used for selection'),
+      'selection_policy':'Candidate generation and pass detection use TRAIN. If no TRAIN candidate passes, the frozen near-miss pool is ranked on DEVELOPMENT. OOS is not read for candidate selection.'})
     genome_hashes=result.pop('evaluated_genome_hashes',[])
     if save_result: save_search(search_id,dataset_id,manifest,result)
     if include_genome_hashes: result['_internal_evaluated_genome_hashes']=genome_hashes
@@ -311,8 +363,11 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
         all_passing=bool(passing)
         selected=passing if all_passing else near[:5]
         splits=split_reference_period(DATASETS[dataset_id]); train=splits['train']
+        development=splits['development']
         manifest={'dataset_id':dataset_id,
                   'train_data_hash_sha256':hashlib.sha256(train.to_csv(index=False,float_format='%.12g').encode()).hexdigest(),
+                  'development_data_hash_sha256':hashlib.sha256(development.to_csv(index=False,float_format='%.12g').encode()).hexdigest(),
+                  'near_miss_ranking_policy':'TRAIN pass detection; DEVELOPMENT ranks frozen near-miss pool only when no TRAIN candidate passes; OOS untouched.',
                   'requested_candidates':req.candidates,'evaluated_unique_candidates':completed,
                   'completed_batches':batch_index,'seed':req.seed,'algorithm':req.algorithm,
                   'contract':selected[0].get('contract',{}) if selected else req.contract,
@@ -331,9 +386,10 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
                       'search_id':search_id,'dataset_id':dataset_id,
                       'search_manifest':manifest,'search_manifest_sha256':manifest_hash,
                       'search_period':_period_label(splits['train'],'TRAIN only'),
-                      'development_period':_period_label(splits['development'],'not used in search'),
+                      'development_period':_period_label(splits['development'],'near-miss ranking only when no TRAIN candidate passes'),
                       'oos_period':_period_label(splits['oos'],'not used in search'),
-                      'selection_policy':'Candidates are globally deduplicated across batches and ranked on TRAIN only; OOS is not read for candidate selection.',
+                      'selection_policy':'Candidates are globally deduplicated and pass detection uses TRAIN. If no TRAIN candidate passes, the frozen near-miss pool is ranked on DEVELOPMENT. OOS is not read for candidate selection.',
+                      'near_miss_ranking_policy':manifest['near_miss_ranking_policy'],
                       'warning':('Completed all requested globally unique candidate evaluations; all reported passing candidates were independently replayed.' if completed>=req.candidates else
                                  'INCOMPLETE SEARCH: candidate space/attempt limit prevented the requested unique evaluation count. Do not treat this as a completed 500k search.') }
         save_search(search_id,dataset_id,manifest,final_result)
