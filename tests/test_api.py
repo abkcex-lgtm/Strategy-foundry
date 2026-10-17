@@ -7,6 +7,8 @@ def test_health_endpoint():
     r=client.get('/api/health')
     assert r.status_code==200
     assert r.json()['live_trading'] is False
+    assert r.json()['features']['tracked_binance_download_jobs'] is True
+    assert r.json()['version']=='0.3.0'
 
 def test_home_page_serves_persian_ui():
     r=client.get('/')
@@ -35,3 +37,17 @@ def test_settings_validation_accepts_custom_costs_and_rr():
 def test_settings_validation_rejects_unimplemented_management():
     r=client.post('/api/settings/validate',json={'contract':{'trailing_stop_enabled':True}})
     assert r.status_code==422
+
+
+def test_download_job_unknown_id_is_clear_404():
+    r=client.get('/api/jobs/does-not-exist')
+    assert r.status_code==404
+    assert 'شناسهٔ عملیات' in r.json()['detail']
+
+def test_download_rejects_unsupported_interval_before_scheduling():
+    r=client.post('/api/data/binance',json={
+        'symbol':'ETHUSDT','interval':'7m',
+        'start_year':2026,'start_month':4,'end_year':2026,'end_month':4
+    })
+    assert r.status_code==400
+    assert 'پشتیبانی‌نشده' in r.json()['detail']
