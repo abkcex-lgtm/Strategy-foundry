@@ -224,6 +224,7 @@ def evaluate_strategy(dataset_id:str,req:BacktestRequest):
                 continue
             try:
                 result=backtest(part,req.strategy or None,req.contract or None)
+                result['evaluation_split']=key
                 run_id=_store_result(result,dataset_id)
                 report['periods'][key]={'status':'COMPLETED','run_id':run_id,'metrics':result['metrics'],'trade_count':len(result['ledger'])}
             except Exception as exc:
@@ -245,10 +246,14 @@ def audit_run(run_id:str):
     df=DATASETS.get(dataset_id) if dataset_id else None
     if df is None: raise HTTPException(409,'دادهٔ اصلی این اجرا در ذخیره‌سازی موجود نیست؛ تطبیق مستقل انجام نشد.')
     try:
-        full_hash=hashlib.sha256(df.to_csv(index=False,float_format='%.12g').encode()).hexdigest()
+        scope=r.get('evaluation_split')
+        audit_frame=split_reference_period(df).get(scope) if scope in {'train','development','oos'} else df
+        if audit_frame is None or audit_frame.empty:
+            raise HTTPException(409,'بازهٔ دادهٔ لازم برای ممیزی این اجرا موجود نیست.')
+        full_hash=hashlib.sha256(audit_frame.to_csv(index=False,float_format='%.12g').encode()).hexdigest()
         if full_hash != r.get('metrics',{}).get('data_hash_sha256'):
-            raise HTTPException(409,'این اجرا روی یک بخش Train/Dev/OOS انجام شده، نه کل دیتاست؛ برای جلوگیری از تطبیق اشتباه، audit مستقل روی همین قطعه در این نسخه در دسترس نیست.')
-        second=independent_replay(df,r['strategy'],r['contract'])
+            raise HTTPException(409,'هش داده با اجرای ذخیره‌شده تطبیق ندارد؛ ممیزی مستقل متوقف شد.')
+        second=independent_replay(audit_frame,r['strategy'],r['contract'])
         first=r['ledger']; other=second['ledger']
         if len(first)!=len(other):
             return {'status':'MISMATCH','engine_a_trades':len(first),'engine_b_trades':len(other),'matched':False}
