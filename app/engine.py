@@ -587,16 +587,31 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 for training_row in training_rows:
                     training_spec=StrategySpec(**training_row["strategy"])
                     X.append(feature_vector(training_spec)); y.append(surrogate_target(training_row))
-                model=ExtraTreesRegressor(n_estimators=48,min_samples_leaf=2,max_features=0.9,
+                model=ExtraTreesRegressor(n_estimators=96,min_samples_leaf=2,max_features=0.9,
                                           random_state=int(seed+len(evaluated)),n_jobs=1)
                 model.fit(np.asarray(X,dtype=float),np.asarray(y,dtype=float))
+                # Active-learning proposal pool: exploit low predicted loss, explore
+                # model disagreement, and prefer structurally novel genomes.
                 proposals=[spec]
-                for _ in range(11):
+                for _ in range(127):
                     proposals.append(make_spec())
                 unseen=[candidate for candidate in proposals if genome(candidate) not in evaluated]
                 if unseen:
-                    predictions=model.predict(np.asarray([feature_vector(candidate) for candidate in unseen],dtype=float))
-                    spec=unseen[int(np.argmin(predictions))]
+                    candidate_X=np.asarray([feature_vector(candidate) for candidate in unseen],dtype=float)
+                    tree_predictions=np.vstack([tree.predict(candidate_X) for tree in model.estimators_])
+                    predicted_mean=tree_predictions.mean(axis=0)
+                    predicted_uncertainty=tree_predictions.std(axis=0)
+                    known_X=np.asarray(X,dtype=float)
+                    novelty=np.asarray([
+                        np.sqrt(np.mean(np.square(known_X-vector),axis=1)).min()
+                        for vector in candidate_X
+                    ],dtype=float)
+                    uncertainty_scale=max(float(predicted_uncertainty.max()),1e-12)
+                    novelty_scale=max(float(novelty.max()),1e-12)
+                    acquisition=(predicted_mean
+                                -0.50*(predicted_uncertainty/uncertainty_scale)
+                                -0.15*(novelty/novelty_scale))
+                    spec=unseen[int(np.argmin(acquisition))]
                 last_model_fit_at=len(evaluated); surrogate_fit_count+=1
             except ImportError as exc:
                 raise ValueError("Surrogate ML search requires scikit-learn; install the declared requirements and restart. Search stopped without fallback.") from exc
