@@ -251,54 +251,168 @@ def backtest(frame, spec=None, contract=None):
     run_hash=sha256_bytes(json.dumps({"spec":asdict(spec),"contract":cfg,"data_hash":data_hash},sort_keys=True).encode())
     return {"strategy":asdict(spec),"contract":cfg,"metrics":metrics,"ledger":ledger,"data_report":report,"run_hash_sha256":run_hash}
 
-def search_candidates(frame, max_candidates=500, seed=42, contract=None):
-    if not 1<=max_candidates<=10000: raise ValueError("max_candidates must be 1..10000 in this starter API")
+def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[float, list[str], dict[str, float]]:
+    failed: list[str] = []
+    distances: dict[str, float] = {}
+    if cfg["use_min_win_rate"]:
+        gap=max(0.0,cfg["min_win_rate_pct"]+0.0001-float(metrics["win_rate_pct"]))
+        distances["win_rate_pct"]=gap/max(cfg["min_win_rate_pct"],1.0)
+        if float(metrics["win_rate_pct"])<=cfg["min_win_rate_pct"]: failed.append("win_rate_pct")
+    if cfg["use_min_profit_factor"]:
+        pf=math.inf if metrics["profit_factor"] is None else float(metrics["profit_factor"])
+        gap=max(0.0,cfg["min_profit_factor"]+0.0001-pf)
+        distances["profit_factor"]=gap
+        if pf<=cfg["min_profit_factor"]: failed.append("profit_factor")
+    if cfg["use_min_tp_per_day"]:
+        tp_day=float(metrics["avg_net_tp_per_day"])
+        gap=max(0.0,cfg["min_tp_per_day"]-tp_day)
+        distances["avg_net_tp_per_day"]=gap/max(cfg["min_tp_per_day"],1.0)
+        if tp_day<cfg["min_tp_per_day"]: failed.append("avg_net_tp_per_day")
+    if cfg["use_max_consecutive_losses"]:
+        streak=int(metrics["max_consecutive_losses"])
+        gap=max(0.0,streak-int(cfg["max_consecutive_losses"]))
+        distances["max_consecutive_losses"]=gap/max(int(cfg["max_consecutive_losses"]),1)
+        if streak>int(cfg["max_consecutive_losses"]): failed.append("max_consecutive_losses")
+    return sum(distances.values()), failed, distances
+
+
+def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="hybrid_genetic"):
+    """Deterministic bounded evolutionary search on TRAIN only.
+
+    max_candidates counts distinct parameter genomes actually evaluated. This is
+    deliberately capped by the API until resumable, resource-bounded batch jobs
+    are available; this function does not claim to support 500k candidates yet.
+    """
+    if not 1<=max_candidates<=10000: raise ValueError("max_candidates must be 1..10000 until resumable batch execution is enabled")
+    if algorithm not in {"hybrid_genetic","stratified_random"}:
+        raise ValueError("Unsupported search algorithm")
     cfg=normalize_contract(contract)
-    rng=np.random.default_rng(seed); results=[]; errors=0
+    rng=np.random.default_rng(seed)
     families=("ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout")
     names={"ema_crossover":"EMA crossover","channel_breakout":"Price channel breakout","rsi_reversion":"RSI reversion","volume_breakout":"Volume-confirmed breakout","ema_pullback":"EMA trend pullback","macd_crossover":"MACD crossover","bollinger_reversion":"Bollinger mean reversion","inside_bar_breakout":"Inside-bar breakout","engulfing_reversal":"Engulfing candle reversal","momentum_breakout":"Momentum-confirmed breakout"}
-    for _ in range(max_candidates):
-        family=str(rng.choice(families))
-        fast=int(rng.integers(4,40))
-        slow=int(rng.integers(max(fast+2,20),121))
-        if family=="channel_breakout": fast=min(9,slow-2)
-        elif family=="rsi_reversion": slow=fast+2
-        elif family=="inside_bar_breakout": fast=5; slow=max(20,slow)
-        elif family=="engulfing_reversal": fast=9; slow=max(20,slow)
-        name_prefix=names[family]
-        period=int(rng.integers(7,31)); mult=float(rng.choice([0.8,1.0,1.2,1.5,2.0,2.5]))
-        spec=StrategySpec(f"{name_prefix} {fast}/{slow} ATR {period}x{mult:g}",fast,slow,period,mult,"both",seed,family)
+    fast_values=np.array([3,4,5,6,8,9,10,12,14,16,18,21,24,28,32,36,40,48,55,64,72,89],dtype=int)
+    slow_values=np.array([12,16,18,20,24,28,32,36,40,48,55,64,72,89,100,120,144,180,200,240,300,400,500],dtype=int)
+    periods=np.array([5,7,9,10,12,14,16,18,21,24,28,30,40,50],dtype=int)
+    stops=np.array([0.5,0.7,0.8,1.0,1.2,1.5,1.8,2.0,2.5,3.0,3.5,4.0,5.0,6.0],dtype=float)
+    directions=("both","long","short")
+    evaluated:dict[tuple,dict[str,Any]]={}
+    errors=0
+    family_counts={f:0 for f in families}
+    duplicate_genomes=0
+
+    def make_spec(family=None, genes=None):
+        if genes is not None:
+            family,fast,slow,period,stop,direction=genes
+        else:
+            family=str(rng.choice(families))
+            fast=int(rng.choice(fast_values))
+            slow=int(rng.choice(slow_values))
+            if slow<=fast: slow=int(min(500,fast+max(2,int(rng.choice([4,8,12,16,24,32,48])))))
+            period=int(rng.choice(periods)); stop=float(rng.choice(stops)); direction=str(rng.choice(directions))
+        fast=int(fast); slow=int(slow); period=int(period); stop=float(stop); direction=str(direction)
+        if family=="channel_breakout": fast=min(fast, max(2,slow-2))
+        elif family=="rsi_reversion": slow=max(fast+2, min(500,fast*2))
+        elif family in {"inside_bar_breakout","engulfing_reversal"}: fast=9; slow=max(20,slow)
+        if slow<=fast: fast=max(2,slow-2)
+        return StrategySpec(f"{names[family]} {fast}/{slow} ATR {period}x{stop:g} {direction}",fast,slow,period,stop,direction,seed,family)
+
+    def genome(spec):
+        return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction)
+
+    def fitness(row):
+        m=row["metrics"]; pf=math.inf if m["profit_factor"] is None else float(m["profit_factor"])
+        return (not m["passes_all_targets"],row["distance"],int(m["max_consecutive_losses"]),
+                -min(float(m["win_rate_pct"]),100.0),-min(float(m["avg_net_tp_per_day"]),1000.0),
+                -min(pf,1000.0),-int(m["trades"]))
+
+    def evaluate(spec):
+        nonlocal errors,duplicate_genomes
+        key=genome(spec)
+        if key in evaluated:
+            duplicate_genomes+=1
+            return evaluated[key]
         try:
             r=backtest(frame,spec,cfg); m=r["metrics"]
-            failed=[]; criterion_distances={}
-            if cfg["use_min_win_rate"]:
-                gap=max(0.0,cfg["min_win_rate_pct"]+0.0001-m["win_rate_pct"])
-                criterion_distances["win_rate_pct"]=gap/max(cfg["min_win_rate_pct"],1.0)
-                if m["win_rate_pct"]<=cfg["min_win_rate_pct"]: failed.append("win_rate_pct")
-            if cfg["use_min_profit_factor"]:
-                pf=math.inf if m["profit_factor"] is None else float(m["profit_factor"])
-                gap=max(0.0,cfg["min_profit_factor"]+0.0001-pf)
-                criterion_distances["profit_factor"]=gap
-                if pf<=cfg["min_profit_factor"]: failed.append("profit_factor")
-            if cfg["use_min_tp_per_day"]:
-                gap=max(0.0,cfg["min_tp_per_day"]-m["avg_net_tp_per_day"])
-                criterion_distances["avg_net_tp_per_day"]=gap/max(cfg["min_tp_per_day"],1.0)
-                if m["avg_net_tp_per_day"]<cfg["min_tp_per_day"]: failed.append("avg_net_tp_per_day")
-            if cfg["use_max_consecutive_losses"]:
-                gap=max(0.0,m["max_consecutive_losses"]-cfg["max_consecutive_losses"])
-                criterion_distances["max_consecutive_losses"]=gap/max(cfg["max_consecutive_losses"],1)
-                if m["max_consecutive_losses"]>cfg["max_consecutive_losses"]: failed.append("max_consecutive_losses")
-            dist=sum(criterion_distances.values())
-            results.append({"strategy":r["strategy"],"contract":cfg,"metrics":m,"distance":dist,
-                            "failed_conditions":failed,"criterion_distances":criterion_distances,
-                            "run_hash_sha256":r["run_hash_sha256"]})
-        except (ValueError,DataIntegrityError,IndexError): errors+=1
-    results.sort(key=lambda r:(not r["metrics"]["passes_all_targets"],r["distance"],r["metrics"]["max_consecutive_losses"],-r["metrics"]["win_rate_pct"],-r["metrics"]["avg_net_tp_per_day"],-(math.inf if r["metrics"]["profit_factor"] is None else float(r["metrics"]["profit_factor"]))))
+            dist,failed,distances=_candidate_distance(m,cfg)
+            row={"strategy":r["strategy"],"contract":cfg,"metrics":m,"distance":dist,
+                 "failed_conditions":failed,"criterion_distances":distances,
+                 "run_hash_sha256":r["run_hash_sha256"],"_genome":key}
+            evaluated[key]=row; family_counts[spec.family]+=1
+            return row
+        except (ValueError,DataIntegrityError,IndexError,KeyError,FloatingPointError):
+            errors+=1
+            return None
+
+    initial=[]
+    quota=max(1,min(max_candidates//len(families),max(1,64//len(families))))
+    for family in families:
+        for _ in range(quota):
+            if len(initial)>=max_candidates: break
+            initial.append(make_spec(family=family))
+    while len(initial)<min(max_candidates,64):
+        initial.append(make_spec())
+    population=[]
+    for spec in initial:
+        if len(evaluated)>=max_candidates: break
+        row=evaluate(spec)
+        if row is not None: population.append((spec,row))
+
+    generation=0
+    while len(evaluated)<max_candidates:
+        generation+=1
+        if algorithm=="stratified_random" or len(population)<8:
+            spec=make_spec()
+        else:
+            ranked=sorted(population,key=lambda pair:fitness(pair[1]))
+            elite_count=max(4,min(48,int(math.sqrt(max_candidates))+4,len(ranked)))
+            elites=ranked[:elite_count]
+            if rng.random()<0.20:
+                spec=make_spec()
+            else:
+                def parent():
+                    k=min(4,len(elites))
+                    contestants=[elites[int(rng.integers(0,len(elites)))] for _ in range(k)]
+                    return min(contestants,key=lambda pair:fitness(pair[1]))[0]
+                a=parent(); b=parent()
+                family=str(rng.choice([a.family,b.family])) if rng.random()<0.55 else str(rng.choice(families))
+                fast=int(a.fast if rng.random()<0.5 else b.fast)
+                slow=int(a.slow if rng.random()<0.5 else b.slow)
+                period=int(a.atr_period if rng.random()<0.5 else b.atr_period)
+                stop=float(a.stop_atr if rng.random()<0.5 else b.stop_atr)
+                direction=str(a.direction if rng.random()<0.5 else b.direction)
+                if rng.random()<0.35: fast=int(rng.choice(fast_values))
+                if rng.random()<0.35: slow=int(rng.choice(slow_values))
+                if rng.random()<0.25: period=int(rng.choice(periods))
+                if rng.random()<0.25: stop=float(rng.choice(stops))
+                if rng.random()<0.18: direction=str(rng.choice(directions))
+                if rng.random()<0.12: family=str(rng.choice(families))
+                spec=make_spec(genes=(family,fast,slow,period,stop,direction))
+        if genome(spec) in evaluated:
+            duplicate_genomes+=1
+            for _ in range(12):
+                spec=make_spec()
+                if genome(spec) not in evaluated: break
+            if genome(spec) in evaluated:
+                if duplicate_genomes>max_candidates*30: break
+                continue
+        row=evaluate(spec)
+        if row is not None:
+            population.append((spec,row))
+            if len(population)>256:
+                population=sorted(population,key=lambda pair:fitness(pair[1]))[:192]
+        if errors+duplicate_genomes>max_candidates*30: break
+
+    results=list(evaluated.values())
+    results.sort(key=fitness)
     passing=[r for r in results if r["metrics"]["passes_all_targets"]]
     selected=passing if passing else results[:5]
     near_miss_shortfall=max(0,5-len(selected)) if not passing else 0
-    return {"requested_candidates":max_candidates,"evaluated_candidates":len(results),"failed_candidates":errors,
-            "seed":seed,"contract":cfg,"all_passing":bool(passing),"results":selected,
-            "requested_near_misses":0 if passing else 5,"returned_near_misses":0 if passing else len(selected),
-            "near_miss_shortfall":near_miss_shortfall,
-            "warning":"Bounded random search only; ranked on TRAIN to preserve untouched OOS. No 500k+ or OOS certification."}
+    for row in results: row.pop("_genome",None)
+    return {"requested_candidates":max_candidates,"evaluated_candidates":len(results),
+            "failed_candidates":errors,"duplicate_genomes_skipped":duplicate_genomes,
+            "seed":seed,"algorithm":algorithm,"generations":generation,
+            "family_evaluated_counts":family_counts,"contract":cfg,"all_passing":bool(passing),
+            "results":selected,"requested_near_misses":0 if passing else 5,
+            "returned_near_misses":0 if passing else len(selected),"near_miss_shortfall":near_miss_shortfall,
+            "warning":("Deterministic stratified random baseline; no OOS certification." if algorithm=="stratified_random" else
+                       "Hybrid genetic search with stratified seeds, crossover, mutation, and immigrant exploration. Bounded to 10,000 candidates pending resumable resource-managed batch jobs; ranked on TRAIN only. Not 500k-certified.") }
