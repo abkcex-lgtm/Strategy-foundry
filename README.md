@@ -72,7 +72,7 @@ The router does not create API access or credits. Unconfigured providers are ski
 ## V0.5.0 release notes
 
 - The API version and health endpoint now report **0.5.0**.
-- Selecting a row in the canonical trade ledger requests a server-side chart window centered on that trade's entry, highlights its entry/exit and SL/TP levels, and scrolls the chart into view. Keyboard Enter/Space selection is supported.
+- Selecting a row in the canonical trade ledger requests a server-side chart window centered on that trade's entry, highlights its entry/exit and SL/TP levels, and scrolls the chart into view. Keyboard Enter/Space selection and previous/next trade navigation are supported.
 - Added a distinct **TP-only** ledger filter; it filters by actual `exit_reason == TP` rather than assuming every profitable trade was a TP.
 - Versioned frontend asset URLs (`?v=0.5.0`) reduce stale browser-cache confusion.
 - This release does **not** claim 500,000-candidate search, durable pause/resume checkpoints, a completed full strategy catalogue, or verified NetRun deployment. Search remains capped at 10,000 until bounded, checkpointed search is implemented and tested.
