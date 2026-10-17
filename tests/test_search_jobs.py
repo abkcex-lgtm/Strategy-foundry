@@ -10,12 +10,12 @@ def test_search_job_is_tracked_and_uses_train_only(monkeypatch):
     dataset_id = "search-job-test"
     start = int(pd.Timestamp("2026-04-01T00:00:00Z").timestamp() * 1000)
     frame = pd.DataFrame({
-        "open_time": [start + i * 60_000 for i in range(120)],
-        "open": [100.0] * 120,
-        "high": [101.0] * 120,
-        "low": [99.0] * 120,
-        "close": [100.5] * 120,
-        "volume": [1.0] * 120,
+        "open_time": [start + i * 60_000 for i in range(200)],
+        "open": [100.0] * 200,
+        "high": [101.0] * 200,
+        "low": [99.0] * 200,
+        "close": [100.5] * 200,
+        "volume": [1.0] * 200,
     })
     monkeypatch.setitem(main.DATASETS, dataset_id, frame)
 
