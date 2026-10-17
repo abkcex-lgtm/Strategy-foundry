@@ -177,12 +177,12 @@ def run_backtest(dataset_id:str,req:BacktestRequest):
         return {'run_id':run_id,**result}
     except Exception as exc: raise HTTPException(422,f'اجرای بک‌تست رد شد: {exc}') from exc
 
-def _perform_search(dataset_id:str,req:SearchRequest):
+def _perform_search(dataset_id:str,req:SearchRequest,progress_callback=None):
     df=DATASETS.get(dataset_id)
     if df is None: raise ValueError('ابتدا داده را دریافت کنید.')
     splits=split_reference_period(df); train=splits['train']
     if len(train)<100: raise ValueError('دادهٔ Train برای بازهٔ Apr-Jun 2026 کافی نیست؛ جست‌وجو آغاز نشد.')
-    result=search_candidates(train,req.candidates,req.seed,req.contract,req.algorithm,req.search_space)
+    result=search_candidates(train,req.candidates,req.seed,req.contract,req.algorithm,req.search_space,progress_callback)
     manifest={'dataset_id':dataset_id,'train_data_hash_sha256':hashlib.sha256(train.to_csv(index=False,float_format='%.12g').encode()).hexdigest(),
               'candidates':req.candidates,'seed':req.seed,'contract':result.get('contract',{})}
     manifest_hash=hashlib.sha256(json.dumps(manifest,sort_keys=True,allow_nan=False).encode()).hexdigest()
@@ -207,7 +207,10 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
     job=SEARCH_JOBS[job_id]
     job.update({'status':'running','message':'جست‌وجوی محدود روی بخش TRAIN؛ توسعه و OOS وارد انتخاب نمی‌شوند.'})
     try:
-        result=await asyncio.to_thread(_perform_search,dataset_id,req)
+        def on_progress(progress):
+            job.update(progress)
+            job.update({'status':'running','message':'در حال ارزیابی نامزدها؛ انتخاب فقط از TRAIN انجام می‌شود.'})
+        result=await asyncio.to_thread(_perform_search,dataset_id,req,on_progress)
         job.update({'status':'completed','message':'جست‌وجو پایان یافت','result':result,
                     'evaluated_candidates':result.get('evaluated_candidates',0),
                     'requested_candidates':result.get('requested_candidates',req.candidates)})
