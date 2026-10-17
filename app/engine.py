@@ -376,7 +376,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     are available; this function does not claim to support 500k candidates yet.
     """
     if not 1<=max_candidates<=10000: raise ValueError("max_candidates must be 1..10000 until resumable batch execution is enabled")
-    if algorithm not in {"hybrid_genetic","stratified_random"}:
+    if algorithm not in {"hybrid_genetic","surrogate_genetic","stratified_random"}:
         raise ValueError("Unsupported search algorithm")
     cfg=normalize_contract(contract)
     rng=np.random.default_rng(seed)
@@ -426,6 +426,25 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         return (not m["passes_all_targets"],row["distance"],int(m["max_consecutive_losses"]),
                 -min(float(m["win_rate_pct"]),100.0),-min(float(m["avg_net_tp_per_day"]),1000.0),
                 -min(pf,1000.0),-int(m["trades"]))
+
+    def feature_vector(spec):
+        vals=[1.0 if spec.family==f else 0.0 for f in all_families]
+        vals.extend([spec.fast/500.0,spec.slow/500.0,spec.atr_period/200.0,spec.stop_atr/10.0])
+        vals.extend([1.0 if spec.direction==d else 0.0 for d in directions])
+        vals.extend([1.0 if spec.context_filter==f else 0.0 for f in all_context_filters])
+        vals.extend([1.0 if spec.confirmation_filter==f else 0.0 for f in all_confirmation_filters])
+        return vals
+
+    def surrogate_target(row):
+        m=row["metrics"]
+        pf=10.0 if m["profit_factor"] is None else min(10.0,float(m["profit_factor"]))
+        return (float(row["distance"])+(0.0 if m["passes_all_targets"] else 1.0)
+                +min(float(m["max_consecutive_losses"]),100.0)*0.01
+                -min(float(m["win_rate_pct"]),100.0)*0.001
+                -min(float(m["avg_net_tp_per_day"]),100.0)*0.002-pf*0.01)
+
+    last_model_fit_at=-1
+    surrogate_fit_count=0
 
     def evaluate(spec):
         nonlocal errors,duplicate_genomes
@@ -493,6 +512,28 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 if rng.random()<0.25: context_filter=str(rng.choice(context_filters))
                 if rng.random()<0.20: confirmation_filter=str(rng.choice(confirmation_filters))
                 spec=make_spec(genes=(family,fast,slow,period,stop,direction,context_filter,confirmation_filter))
+        if algorithm=="surrogate_genetic" and len(evaluated)>=32 and (last_model_fit_at<0 or len(evaluated)-last_model_fit_at>=64):
+            try:
+                from sklearn.ensemble import ExtraTreesRegressor
+                training_rows=list(evaluated.values())
+                if len(training_rows)>2000: training_rows=training_rows[-2000:]
+                X=[]; y=[]
+                for training_row in training_rows:
+                    training_spec=StrategySpec(**training_row["strategy"])
+                    X.append(feature_vector(training_spec)); y.append(surrogate_target(training_row))
+                model=ExtraTreesRegressor(n_estimators=48,min_samples_leaf=2,max_features=0.9,
+                                          random_state=int(seed+len(evaluated)),n_jobs=1)
+                model.fit(np.asarray(X,dtype=float),np.asarray(y,dtype=float))
+                proposals=[spec]
+                for _ in range(11):
+                    proposals.append(make_spec())
+                unseen=[candidate for candidate in proposals if genome(candidate) not in evaluated]
+                if unseen:
+                    predictions=model.predict(np.asarray([feature_vector(candidate) for candidate in unseen],dtype=float))
+                    spec=unseen[int(np.argmin(predictions))]
+                last_model_fit_at=len(evaluated); surrogate_fit_count+=1
+            except ImportError as exc:
+                raise ValueError("Surrogate ML search requires scikit-learn; install the declared requirements and restart. Search stopped without fallback.") from exc
         if genome(spec) in evaluated:
             duplicate_genomes+=1
             for _ in range(12):
@@ -560,10 +601,11 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     for row in results: row.pop("_genome",None)
     return {"requested_candidates":max_candidates,"evaluated_candidates":len(results),
             "failed_candidates":errors,"duplicate_genomes_skipped":duplicate_genomes,
-            "seed":seed,"algorithm":algorithm,"generations":generation,
+            "seed":seed,"algorithm":algorithm,"generations":generation,"surrogate_model_fits":surrogate_fit_count,
             "family_evaluated_counts":family_counts,"contract":cfg,"all_passing":all_passing,
             "independent_audit_failures":audit_failures,
             "results":selected,"requested_near_misses":0 if all_passing else 5,
             "returned_near_misses":0 if all_passing else len(selected),"near_miss_shortfall":near_miss_shortfall,
             "warning":("Deterministic stratified random baseline; selected results independently replayed; OOS not certified." if algorithm=="stratified_random" else
-                       "Hybrid genetic search with stratified seeds, crossover, mutation, immigrant exploration and independent ledger replay of reported results. Bounded to 10,000 candidates pending resumable resource-managed batch jobs; ranked on TRAIN only. Not 500k-certified.") }
+                       ("Surrogate-assisted genetic search: ExtraTrees model ranks proposal pools; model fits and independent ledger replay are recorded. Bounded to 10,000 candidates pending resumable resource-managed batch jobs; ranked on TRAIN only. Not 500k-certified." if algorithm=="surrogate_genetic" else
+                        "Hybrid genetic search with stratified seeds, crossover, mutation, immigrant exploration and independent ledger replay of reported results. Bounded to 10,000 candidates pending resumable resource-managed batch jobs; ranked on TRAIN only. Not 500k-certified.")) }
