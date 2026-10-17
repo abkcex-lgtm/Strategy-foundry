@@ -10,12 +10,12 @@ def test_split_evaluation_run_can_be_audited_against_exact_split(monkeypatch):
     dataset_id = "audit-split-test"
     start = int(pd.Timestamp("2026-04-01T00:00:00Z").timestamp() * 1000)
     frame = pd.DataFrame({
-        "open_time": [start + i * 60_000 for i in range(120)],
-        "open": [100.0] * 120,
-        "high": [101.0] * 120,
-        "low": [99.0] * 120,
-        "close": [100.5] * 120,
-        "volume": [1.0] * 120,
+        "open_time": [start + i * 60_000 for i in range(500)],
+        "open": [100.0] * 500,
+        "high": [101.0] * 500,
+        "low": [99.0] * 500,
+        "close": [100.5] * 500,
+        "volume": [1.0] * 500,
     })
     monkeypatch.setitem(main.DATASETS, dataset_id, frame)
     run_hash = "a" * 64
@@ -29,7 +29,7 @@ def test_split_evaluation_run_can_be_audited_against_exact_split(monkeypatch):
             "contract": {},
             "metrics": {"data_hash_sha256": data_hash, "max_consecutive_losses": 0, "trades": 0},
             "ledger": [],
-            "run_hash_sha256": run_hash,
+            "run_hash_sha256": data_hash,
         }
 
     monkeypatch.setattr(main, "backtest", fake_backtest)
