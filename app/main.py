@@ -10,12 +10,13 @@ from pydantic import BaseModel,Field
 from .engine import backtest,search_candidates
 from .audit import independent_replay, FIELDS
 from .data import download_binance_month,validate_ohlcv,split_reference_period
-from .persistence import load_datasets,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles
+from .persistence import load_datasets,load_dataset_metadata,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles
 
 ROOT=Path(__file__).resolve().parent
 app=FastAPI(title='Strategy Foundry API',version='0.3.0',description='Server-side strategy research and simulation only; never sends live orders.')
 app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')
 DATASETS:dict[str,pd.DataFrame]=load_datasets()
+DATASET_METADATA:dict[str,dict[str,Any]]=load_dataset_metadata()
 RUNS:dict[str,dict[str,Any]]=load_runs()
 RUN_DATASET:dict[str,str]={}
 
@@ -87,9 +88,11 @@ async def upload_csv(file:UploadFile=File(...)):
         df=df.rename(columns={c:aliases.get(c.lower(),c.lower()) for c in df.columns})
         if 'open_time' in df and pd.api.types.is_datetime64_any_dtype(df['open_time']): df['open_time']=df['open_time'].astype('int64')//1000000
         report=validate_ohlcv(df,60000 if '1m' in file.filename.lower() else None,strict_gaps=('1m' in file.filename.lower()))
-        key=str(report['rows'])+'-'+str(int(df.open_time.iloc[0]))+'-'+hashlib.sha256(raw).hexdigest()[:8]
-        DATASETS[key]=df; save_dataset(key,df,{'source':'user_csv','sha256_csv':hashlib.sha256(raw).hexdigest()})
-        return {'dataset_id':key,'report':report,'sha256_csv':hashlib.sha256(raw).hexdigest()}
+        csv_hash=hashlib.sha256(raw).hexdigest()
+        key=str(report['rows'])+'-'+str(int(df.open_time.iloc[0]))+'-'+csv_hash[:8]
+        metadata={'source':'user_csv','sha256_csv':csv_hash}
+        DATASETS[key]=df; DATASET_METADATA[key]=metadata; save_dataset(key,df,metadata)
+        return {'dataset_id':key,'report':report,'sha256_csv':csv_hash}
     except Exception as exc: raise HTTPException(422,f'بررسی داده رد شد: {exc}') from exc
 
 DOWNLOAD_JOBS:dict[str,dict[str,Any]]={}
@@ -113,7 +116,7 @@ async def _run_download_job(job_id:str,req:DownloadRequest):
         key=f'{req.symbol.upper()}-{req.interval}-{req.start_year}{req.start_month:02d}-{req.end_year}{req.end_month:02d}'
         metadata={'source':'binance_vision','symbol':req.symbol.upper(),'interval':req.interval,'monthly_archive_hashes':hashes}
         save_dataset(key,merged,metadata)
-        DATASETS[key]=merged
+        DATASETS[key]=merged; DATASET_METADATA[key]=metadata
         result={'dataset_id':key,'symbol':req.symbol.upper(),'interval':req.interval,'report':report,'monthly_archive_hashes':hashes,'rows':len(merged),'splits':{k:len(v) for k,v in split_reference_period(merged).items()}}
         job.update({'status':'completed','message':'داده دریافت، اعتبارسنجی و ذخیره شد','result':result,'rows_downloaded':len(merged),'completed_months':job['total_months']})
     except Exception as exc:
@@ -144,7 +147,8 @@ def datasets():
     out=[]
     for key,frame in DATASETS.items():
         split_counts={name:int(len(part)) for name,part in split_reference_period(frame).items()}
-        out.append({'dataset_id':key,'rows':len(frame),'first_open_time':int(frame.open_time.iloc[0]),'last_open_time':int(frame.open_time.iloc[-1]),'splits':split_counts})
+        data_hash=hashlib.sha256(frame.to_csv(index=False,float_format='%.12g').encode()).hexdigest()
+        out.append({'dataset_id':key,'rows':len(frame),'first_open_time':int(frame.open_time.iloc[0]),'last_open_time':int(frame.open_time.iloc[-1]),'splits':split_counts,'data_hash_sha256':data_hash,'metadata':DATASET_METADATA.get(key,{})})
     return out
 
 @app.get('/api/datasets/{dataset_id}/candles')
