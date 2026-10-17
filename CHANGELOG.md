@@ -5,6 +5,7 @@
 - Bumped FastAPI metadata and `/api/health` version to `0.5.0`.
 - Added an explicit `VERSION` file and cache-busted frontend asset URLs.
 - Made the canonical trade ledger interactive: click or keyboard-select a trade to center its entry on the server-rendered chart window, highlight its entry/exit and SL/TP levels, and scroll the chart into view.
+- Added previous/next trade navigation that follows the active ledger filter.
 - Added a distinct TP-only filter based on the ledger's actual `exit_reason == "TP"`.
 - Added API tests for selected-trade chart centering and unknown trade IDs.
 - Search remains capped at 10,000 candidates. The 500,000+ resumable, checkpointed search architecture is not part of this release.
