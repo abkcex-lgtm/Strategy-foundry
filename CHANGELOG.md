@@ -1,5 +1,11 @@
 # Changelog
 
+## V0.7.2 — 2026-10-17
+
+- Filter globally seen genomes from surrogate proposal pools and genetic mutation retries before evaluation to reduce repeated-work overhead in long batch searches.
+- Repository syntax checks were performed for the frontend JavaScript; Python test execution remains unverified in this session.
+
+
 ## V0.7.1 — 2026-10-17
 
 - Added a UI recovery panel for queued/running/interrupted/failed background jobs and a resume-from-checkpoint flow.
