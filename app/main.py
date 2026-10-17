@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio,io,csv,hashlib,json,math,uuid
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 import pandas as pd
@@ -7,7 +8,7 @@ from fastapi import FastAPI,HTTPException,UploadFile,File,Query
 from fastapi.responses import HTMLResponse,StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel,Field
-from .engine import backtest,search_candidates
+from .engine import backtest,search_candidates,StrategySpec,normalize_contract
 from .audit import independent_replay, FIELDS
 from .data import download_binance_month,validate_ohlcv,split_reference_period
 from .persistence import load_datasets,load_dataset_metadata,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles,save_search,list_search_history,load_search_result,save_job,load_jobs,save_job_genome_hashes,load_job_genome_hashes,save_job_batch_checkpoint,storage_status
@@ -399,20 +400,72 @@ def evaluate_strategy(dataset_id:str,req:BacktestRequest):
     if df is None: raise HTTPException(404,'ابتدا داده را دریافت کنید.')
     try:
         splits=split_reference_period(df)
-        report={'dataset_id':dataset_id,'strategy':req.strategy,'periods':{},
-          'note':'هر بار استفاده از OOS برای انتخاب/تنظیم استراتژی، استقلال مجموعهٔ آزمون را تضعیف می‌کند.'}
+        # Freeze one effective strategy and contract before evaluating any split.
+        # OOS results are reported after freezing; they never feed selection logic.
+        spec=StrategySpec(**req.strategy) if req.strategy else StrategySpec()
+        spec.validate()
+        cfg=normalize_contract(req.contract)
+        full_hash=hashlib.sha256(df.to_csv(index=False,float_format='%.12g').encode()).hexdigest()
+        split_manifest={}
         for key,part in splits.items():
+            split_hash=hashlib.sha256(part.to_csv(index=False,float_format='%.12g').encode()).hexdigest()
+            split_manifest[key]={
+                'rows':int(len(part)),
+                'data_hash_sha256':split_hash,
+                'period':_period_label(part,key.upper()),
+            }
+        frozen_strategy=asdict(spec)
+        frozen_strategy_hash=hashlib.sha256(json.dumps(frozen_strategy,sort_keys=True,allow_nan=False).encode()).hexdigest()
+        contract_hash=hashlib.sha256(json.dumps(cfg,sort_keys=True,allow_nan=False).encode()).hexdigest()
+        manifest={
+            'schema_version':1,
+            'dataset_id':dataset_id,
+            'full_data_hash_sha256':full_hash,
+            'splits':split_manifest,
+            'frozen_strategy':frozen_strategy,
+            'frozen_strategy_sha256':frozen_strategy_hash,
+            'effective_contract':cfg,
+            'contract_sha256':contract_hash,
+            'selection_policy':'Strategy and contract are frozen before split evaluation; OOS is evaluation-only and must not be used for selection or tuning.',
+            'oos_used_for_selection':False,
+        }
+        manifest_hash=hashlib.sha256(json.dumps(manifest,sort_keys=True,allow_nan=False).encode()).hexdigest()
+        report={
+            'dataset_id':dataset_id,
+            'dataset_hash_sha256':full_hash,
+            'strategy':frozen_strategy,
+            'strategy_sha256':frozen_strategy_hash,
+            'contract':cfg,
+            'contract_sha256':contract_hash,
+            'evaluation_manifest':manifest,
+            'evaluation_manifest_sha256':manifest_hash,
+            'periods':{},
+            'oos_used_for_selection':False,
+            'selection_policy':manifest['selection_policy'],
+            'note':'این گزارش اجرای ثابت‌شده روی هر بخش را ثبت می‌کند؛ استفادهٔ بعدی از OOS برای انتخاب یا تنظیم استراتژی، استقلال آزمون را تضعیف می‌کند.',
+        }
+        for key,part in splits.items():
+            split_hash=split_manifest[key]['data_hash_sha256']
             if len(part)<100:
-                report['periods'][key]={'status':'PREFLIGHT_FAILED','rows':len(part),'reason':'Insufficient rows for the fixed reference period'}
+                report['periods'][key]={'status':'PREFLIGHT_FAILED','rows':len(part),'data_hash_sha256':split_hash,'period':split_manifest[key]['period'],'reason':'Insufficient rows for split evaluation'}
                 continue
             try:
-                result=backtest(part,req.strategy or None,req.contract or None)
+                result=backtest(part,frozen_strategy,cfg)
                 result['evaluation_split']=key
                 run_id=_store_result(result,dataset_id)
-                report['periods'][key]={'status':'COMPLETED','run_id':run_id,'metrics':result['metrics'],'trade_count':len(result['ledger'])}
+                report['periods'][key]={
+                    'status':'COMPLETED',
+                    'run_id':run_id,
+                    'rows':len(part),
+                    'data_hash_sha256':split_hash,
+                    'period':split_manifest[key]['period'],
+                    'metrics':result['metrics'],
+                    'trade_count':len(result['ledger']),
+                }
             except Exception as exc:
-                report['periods'][key]={'status':'PREFLIGHT_FAILED','rows':len(part),'reason':str(exc)}
+                report['periods'][key]={'status':'PREFLIGHT_FAILED','rows':len(part),'data_hash_sha256':split_hash,'period':split_manifest[key]['period'],'reason':str(exc)}
         report['certified']=False
+        report['certification_note']='Evaluation manifest and split metrics are reproducibility evidence, not production certification or a profitability guarantee.'
         return report
     except Exception as exc: raise HTTPException(422,f'Split evaluation failed: {exc}') from exc
 

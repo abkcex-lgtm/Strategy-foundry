@@ -20,7 +20,7 @@ A checked box means implementation exists; it does not establish profitability o
 - [ ] Resolve ambiguous 1m bars using 1s Binance data, failing if unavailable
 - [ ] Slippage model with direction/volatility/order-type sensitivity; current setting is a configurable percentage approximation
 - [ ] Search 500,000+ candidates under measured resource budget
-- [ ] Train/dev/OOS evaluation with frozen strategy and truly untouched OOS report
+- [x] Train/dev/OOS evaluation freezes one effective strategy/contract first, hashes each split, and emits a reproducibility manifest; OOS is evaluation-only and never feeds app-side selection (real-market certification remains pending)
 - [ ] Exactly five near-misses when none pass, ranked by OOS proximity
 - [ ] Two-year 1m performance and memory benchmark
 - [x] SQLite persistence for datasets, run history, and editable profiles (durability depends on host disk; authentication/multi-user isolation remains open)
