@@ -19,7 +19,7 @@ def test_search_job_is_tracked_and_uses_train_only(monkeypatch):
     })
     monkeypatch.setitem(main.DATASETS, dataset_id, frame)
 
-    def fake_search(train, candidates, seed, contract, algorithm="hybrid_genetic", search_space=None, progress_callback=None):
+    def fake_search(train, candidates, seed, contract, algorithm="hybrid_genetic", search_space=None, progress_callback=None, excluded_genome_hashes=None):
         assert len(train) == 120
         if progress_callback:
             progress_callback({"evaluated_candidates": candidates, "requested_candidates": candidates})
