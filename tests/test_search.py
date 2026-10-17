@@ -49,3 +49,24 @@ def test_search_explores_four_families_and_returns_five_near_misses(monkeypatch)
         "win_rate_pct", "profit_factor", "avg_net_tp_per_day"
     }
     assert "criterion_distances" in result["results"][0]
+
+
+def test_infinite_profit_factor_is_not_ranked_as_zero(monkeypatch):
+    def fake_backtest(frame, spec, contract):
+        metrics = {
+            "trades": 10, "wins": 2, "losses": 8, "win_rate_pct": 20.0,
+            "profit_factor": None if spec.family == "rsi_reversion" else 0.5,
+            "avg_net_tp_per_day": 0.1, "max_consecutive_losses": 8,
+            "net_pnl": -50.0, "final_balance": 950.0, "total_costs": 1.0,
+            "data_hash_sha256": "d" * 64, "rows": 500, "span_days": 1.0,
+            "passes_all_targets": False,
+        }
+        return {
+            "strategy": engine.asdict(spec), "contract": contract, "metrics": metrics,
+            "run_hash_sha256": hashlib.sha256(repr(spec).encode()).hexdigest(),
+        }
+
+    monkeypatch.setattr(engine, "backtest", fake_backtest)
+    cfg = normalize_contract({"use_min_profit_factor": False})
+    result = search_candidates(pd.DataFrame(), max_candidates=60, seed=42, contract=cfg)
+    assert result["results"][0]["metrics"]["profit_factor"] is None
