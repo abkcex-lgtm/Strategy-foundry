@@ -67,9 +67,11 @@ def test_infinite_profit_factor_is_not_ranked_as_zero(monkeypatch):
         return {
             "strategy": engine.asdict(spec), "contract": contract, "metrics": metrics,
             "run_hash_sha256": hashlib.sha256(repr(spec).encode()).hexdigest(),
+            "ledger": [],
         }
 
     monkeypatch.setattr(engine, "backtest", fake_backtest)
+    monkeypatch.setattr(audit, "independent_replay", lambda frame, spec, cfg: {"ledger": []})
     cfg = normalize_contract({"use_min_profit_factor": False})
     result = search_candidates(pd.DataFrame(), max_candidates=60, seed=42, contract=cfg)
     assert result["results"][0]["metrics"]["profit_factor"] is None
