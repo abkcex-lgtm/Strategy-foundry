@@ -12,3 +12,5 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - run: python -m pytest -q
+      - name: Check browser JavaScript syntax
+        run: node --check app/static/app.js
