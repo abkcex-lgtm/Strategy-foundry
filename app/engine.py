@@ -576,8 +576,9 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     from .audit import independent_replay, FIELDS
     audit_failures=[]
     audited=[]
-    audit_pool=passing if passing else results
-    for row in audit_pool:
+    passing_ids={id(row) for row in passing}
+    audit_pool=passing+[row for row in results if id(row) not in passing_ids]
+    for audit_index,row in enumerate(audit_pool):
         try:
             primary=backtest(frame,StrategySpec(**row["strategy"]),cfg)
             second=independent_replay(frame,row["strategy"],cfg)
@@ -604,16 +605,19 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         except Exception as exc:
             row["independent_audit"]={"status":"FAILED","reason":str(exc),"engine":"app.audit.independent_replay"}
             audit_failures.append({"strategy":row["strategy"],"reason":str(exc)})
-        if not passing and len(audited)>=5:
+        # Audit every raw passing candidate. If none survives independent replay,
+        # continue through ranked non-passing candidates to provide verified near-misses.
+        has_verified_pass=any(item["metrics"]["passes_all_targets"] for item in audited)
+        if audit_index>=len(passing) and len(audited)>=5 and (not passing or has_verified_pass):
             break
-    if passing:
-        selected=[r for r in audited if r["metrics"]["passes_all_targets"]]
-        all_passing=bool(selected)
-        if not selected:
-            # Fail closed: do not call a strategy passing if independent replay disagrees.
-            selected=[]
+    verified_passing=[r for r in audited if r["metrics"]["passes_all_targets"]]
+    if verified_passing:
+        selected=verified_passing
+        all_passing=True
     else:
-        selected=audited[:5]
+        # Fail closed: a raw pass that fails independent replay is not a pass.
+        # Return up to five independently matched near-misses instead.
+        selected=[r for r in audited if not r["metrics"]["passes_all_targets"]][:5]
         all_passing=False
     near_miss_shortfall=max(0,5-len(selected)) if not all_passing else 0
     for row in results: row.pop("_genome",None)
