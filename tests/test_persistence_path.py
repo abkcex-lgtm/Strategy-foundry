@@ -79,3 +79,28 @@ def test_existing_volume_database_is_never_overwritten_by_legacy_file(tmp_path):
     assert status == "existing_volume_database"
     with sqlite3.connect(selected) as connection:
         assert connection.execute("SELECT value FROM volume_data").fetchone()[0] == "new"
+
+
+def test_legacy_database_migrates_when_volume_file_exists_but_is_empty(tmp_path):
+    import sqlite3
+    from app.persistence import _choose_db_path
+
+    root = tmp_path / "project"
+    legacy_dir = root / "data"
+    legacy_dir.mkdir(parents=True)
+    legacy = legacy_dir / "foundry.sqlite3"
+    with sqlite3.connect(legacy) as connection:
+        connection.execute("CREATE TABLE datasets (dataset_id TEXT PRIMARY KEY, csv_text TEXT, metadata_json TEXT)")
+        connection.execute("INSERT INTO datasets VALUES ('saved-dataset', 'open_time,open,high,low,close,volume', '{}')")
+
+    mounted = tmp_path / "mounted-volume"
+    mounted.mkdir()
+    destination = mounted / "strategy_foundry.sqlite3"
+    with sqlite3.connect(destination) as connection:
+        connection.execute("CREATE TABLE datasets (dataset_id TEXT PRIMARY KEY, csv_text TEXT, metadata_json TEXT)")
+
+    selected, status = _choose_db_path({}, data_dir=mounted, project_root=root)
+    assert selected == destination
+    assert status == "migrated_legacy_into_empty_volume_database"
+    with sqlite3.connect(destination) as connection:
+        assert connection.execute("SELECT dataset_id FROM datasets").fetchone()[0] == "saved-dataset"
