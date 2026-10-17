@@ -29,7 +29,7 @@ def test_standalone_template_contains_all_engine_families_and_composition():
     assert "bar_open<=stop" in template
     assert "bar_open>=stop" in template
     assert "Unresolved same-candle SL/TP ambiguity" in template
-    assert "def indicators(df, spec: StrategySpec)" in engine
+    assert "def indicators(df, spec)" in engine
     compile(template, "standalone_template.py", "exec")
 
 
