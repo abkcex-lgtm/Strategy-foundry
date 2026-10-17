@@ -12,12 +12,18 @@ A checked box means implementation exists; it does not establish profitability o
 - [x] Settings passed into backtest and candidate search; settings included in run fingerprint
 - [x] Exact modeled net-risk/net-reward sizing for the selected SL/TP prices
 - [x] Unsupported trade-management toggles fail closed instead of silently changing behavior
-- [x] Same-candle SL/TP ambiguity fails closed
+- [x] Engine, independent audit, and standalone replay conservatively book unresolved execution ambiguity/data gaps as modeled stop-loss outcomes including applicable costs, increment the loss streak, and flag the ledger (unit tests added; API/search execution-data integration remains open)
 - [x] CSV ledger and self-contained Python replay template
 - [x] Unit tests for editable contract, exact net risk/reward sizing, API smoke paths
 - [x] GitHub Actions passed for the configurable-settings/test commit (cfda2eb3)
 - [x] Independent second replay engine and trade-by-trade audit endpoint (synthetic-data test only; real-market certification pending)
-- [ ] Resolve ambiguous 1m bars using 1s Binance data, failing if unavailable
+- [ ] End-to-end execution resolution: acquire and pair verified same-venue, same-market, same-instrument lower-timeframe data for the full holding path of every evaluated trade (not only same-candle SL/TP collisions), fail closed on gaps, and wire this through API, candidate search, split evaluation, audit, and export
+- [ ] Global instrument/timeframe architecture: symbol, venue, market type (spot/perpetual/futures), contract specification, quote/settlement currency, base timeframe, and execution-data resolution are explicit per dataset/run; do not hard-code ETHUSDT or 1m as system limits
+- [ ] Adaptive resolution ladder: choose the coarsest verified lower timeframe that can prove the execution path (e.g. 1m data may resolve many 3m/5m trades; 5m/15m may help inspect a 1h trade), then step down only where required; these are starting points, not guarantees
+- [ ] Escalation is per trade/path: when a lower-timeframe candle still contains unresolved event order, fetch/inspect finer same-market data for that interval (e.g. 1m -> 1s for a 1m strategy); if the finest verified available source still cannot prove ordering, conservatively book that trade as a loss at the modeled stop-loss outcome with applicable costs, increment the loss streak, and flag it as ambiguous in the ledger
+- [ ] Optional multi-timeframe strategy mode: single-timeframe is the default; users can enable/disable multi-timeframe logic in settings and choose signal/context timeframes. Higher-timeframe features must use only candles fully closed at signal time, with explicit alignment/warm-up rules and look-ahead regression tests
+- [ ] Data resolver provenance: record the chosen resolution for each trade, source/venue/market identity, gaps, ambiguity/escalation reason, and hashes in the ledger/manifest; never silently substitute spot data for futures or one venue for another
+- [x] Core primary/independent/standalone resolvers replay supplied lower-timeframe OHLC chronologically; unresolved same-second collisions or per-interval missing seconds are booked as flagged conservative losses. API/data acquisition/search integration and real-market certification remain open
 - [ ] Slippage model with direction/volatility/order-type sensitivity; current setting is a configurable percentage approximation
 - [ ] Search 500,000+ candidates under measured resource budget
 - [x] Backtest execution skips non-signal rows in the Python loop while preserving full-resolution candles; independent-ledger CI passes (production throughput and memory benchmark remains open)

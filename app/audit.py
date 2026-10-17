@@ -8,7 +8,7 @@ import pandas as pd
 FIELDS = ("trade_id","signal_time","entry_time","exit_time","direction","signal_price",
           "entry_price","stop_loss","take_profit","exit_price","exit_reason","quantity",
           "risk_budget","gross_pnl","entry_cost","exit_cost","fees_slippage","net_pnl",
-          "balance_after","loss_streak_after")
+          "balance_after","loss_streak_after","resolution_status","execution_ambiguity")
 
 def _independent_signals(d: pd.DataFrame, spec: dict[str, Any]):
     close=d["close"].astype(float); prev=close.shift(1)
@@ -250,9 +250,40 @@ def _resolve_bar_exit_independent(side: str, bar_open: float, bar_high: float, b
     return None
 
 
-def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str, Any]) -> dict[str, Any]:
+def _resolve_execution_interval_independent(side, execution_frame, start_ms, interval_ms, stop, target):
+    if interval_ms < 1000 or interval_ms % 1000:
+        raise ValueError("Base interval cannot be resolved with 1-second data")
+    times=execution_frame["open_time"].to_numpy(dtype=np.int64)
+    first=int(np.searchsorted(times,start_ms,side="left")); end_ms=start_ms+interval_ms
+    last=int(np.searchsorted(times,end_ms,side="left")); expected=interval_ms//1000
+    bars=execution_frame.iloc[first:last]
+    if len(bars)!=expected or int(bars.open_time.iloc[0])!=start_ms or int(bars.open_time.iloc[-1])!=end_ms-1000:
+        raise ValueError("Missing/incomplete 1-second execution data")
+    for bar in bars.itertuples(index=False):
+        result=_resolve_bar_exit_independent(side,float(bar.open),float(bar.high),float(bar.low),stop,target)
+        if result is not None:
+            reason,price=result
+            return reason,price,int(bar.open_time)
+    return None
+
+
+def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str, Any], execution_frame=None) -> dict[str, Any]:
     """Recompute the trade ledger independently for deterministic cross-engine checks."""
     d=frame.copy().reset_index(drop=True)
+    exec_df=None
+    base_interval=int(d.open_time.diff().dropna().mode().iloc[0]) if len(d)>1 else None
+    if execution_frame is not None:
+        exec_df=execution_frame.copy().reset_index(drop=True)
+        required=["open_time","open","high","low","close","volume"]
+        if any(c not in exec_df.columns for c in required):
+            raise ValueError("Missing columns in execution data")
+        for c in required: exec_df[c]=pd.to_numeric(exec_df[c],errors="coerce")
+        if exec_df[required].isna().any().any() or exec_df.open_time.duplicated().any() or not exec_df.open_time.is_monotonic_increasing:
+            raise ValueError("Invalid execution data")
+        # Gaps are evaluated per held-trade interval so they can be conservatively
+        # recorded as losses instead of aborting the entire replay.
+        if base_interval is None or base_interval % 1000:
+            raise ValueError("Base interval cannot be resolved with 1-second data")
     close=d["close"].astype(float)
     long,short,atr,fast,slow,period=_independent_signals(d,spec)
     rate=(float(cfg["commission_pct_per_side"])+float(cfg["slippage_pct_per_side"]))/100.0
@@ -277,21 +308,34 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
             reward=risk*float(cfg["reward_risk"])
             target=(entry*(1+rate)+reward/qty)/(1-rate) if side=="LONG" else (entry*(1-rate)-reward/qty)/(1+rate)
         if target<=0: i+=1; continue
-        ex=None; px=None; reason=None
+        ex=None; px=None; reason=None; exit_time=None; resolution_status="resolved_base_ohlc"
         for j in range(ei,len(d)):
-            bar=d.iloc[j]
-            resolution=_resolve_bar_exit_independent(side,float(bar.open),float(bar.high),float(bar.low),stop,target)
-            if resolution is not None:
-                reason,px=resolution; ex=j; break
+            if exec_df is not None:
+                try:
+                    resolution=_resolve_execution_interval_independent(side,exec_df,int(d.open_time.iloc[j]),base_interval,stop,target)
+                except ValueError:
+                    reason,px,exit_time="SL_UNRESOLVED",stop,int(d.open_time.iloc[j])
+                    ex=j; resolution_status="unresolved_as_loss"; break
+                if resolution is not None:
+                    reason,px,exit_time=resolution; ex=j; resolution_status="resolved_1s_ohlc"; break
+            else:
+                bar=d.iloc[j]
+                try:
+                    resolution=_resolve_bar_exit_independent(side,float(bar.open),float(bar.high),float(bar.low),stop,target)
+                except ValueError:
+                    reason,px,exit_time="SL_UNRESOLVED",stop,int(d.open_time.iloc[j])
+                    ex=j; resolution_status="unresolved_as_loss"; break
+                if resolution is not None:
+                    reason,px=resolution; ex=j; exit_time=int(d.open_time.iloc[j]); resolution_status="resolved_base_ohlc"; break
         if ex is None: break
         gross=(px-entry)*qty*(1 if side=="LONG" else -1)
         ec=entry*qty*rate; xc=px*qty*rate; net=gross-ec-xc; balance+=net
         streak=0 if reason=="TP" else streak+1
         max_streak=max(max_streak,streak)
         ledger.append({"trade_id":len(ledger)+1,"signal_time":int(d.open_time.iloc[i]),"entry_time":int(d.open_time.iloc[ei]),
-          "exit_time":int(d.open_time.iloc[ex]),"direction":side,"signal_price":float(close.iloc[i]),"entry_price":entry,
+          "exit_time":int(exit_time),"direction":side,"signal_price":float(close.iloc[i]),"entry_price":entry,
           "stop_loss":stop,"take_profit":target,"exit_price":float(px),"exit_reason":reason,"quantity":qty,"risk_budget":risk,
           "gross_pnl":gross,"entry_cost":ec,"exit_cost":xc,"fees_slippage":ec+xc,"net_pnl":net,
-          "balance_after":balance,"loss_streak_after":streak})
+          "balance_after":balance,"loss_streak_after":streak,"resolution_status":resolution_status,"execution_ambiguity":resolution_status=="unresolved_as_loss"})
         i=ex+1
     return {"ledger":ledger,"max_consecutive_losses":max_streak}

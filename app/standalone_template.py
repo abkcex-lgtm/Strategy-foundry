@@ -294,7 +294,31 @@ def size_target(entry,stop,side,risk):
         target=(entry*(1+rate)+reward/qty)/(1-rate) if side=='LONG' else (entry*(1-rate)-reward/qty)/(1+rate)
     if target<=0: raise ValueError('Non-positive target')
     return qty,target,rate
-def replay(df):
+def resolve_execution_interval(side, execution_df, start_ms, interval_ms, stop, target):
+    if interval_ms < 1000 or interval_ms % 1000: raise ValueError('Base interval cannot be resolved with 1-second data')
+    times=execution_df.open_time.to_numpy(dtype=np.int64)
+    first=int(np.searchsorted(times,start_ms,side='left')); end_ms=start_ms+interval_ms
+    last=int(np.searchsorted(times,end_ms,side='left')); expected=interval_ms//1000
+    bars=execution_df.iloc[first:last]
+    if len(bars)!=expected or int(bars.open_time.iloc[0])!=start_ms or int(bars.open_time.iloc[-1])!=end_ms-1000:
+        raise ValueError('Missing/incomplete 1-second execution data')
+    for bar in bars.itertuples(index=False):
+        op=float(bar.open); hi=float(bar.high); lo=float(bar.low)
+        if side=='LONG':
+            if op<=stop: return 'SL',op,int(bar.open_time)
+            if op>=target: return 'TP',target,int(bar.open_time)
+            sl=lo<=stop; tp=hi>=target
+        else:
+            if op>=stop: return 'SL',op,int(bar.open_time)
+            if op<=target: return 'TP',target,int(bar.open_time)
+            sl=hi>=stop; tp=lo<=target
+        if sl and tp: raise ValueError('Unresolved same-second SL/TP ambiguity; tick-level data required')
+        if sl: return 'SL',stop,int(bar.open_time)
+        if tp: return 'TP',target,int(bar.open_time)
+    return None
+
+
+def replay(df, execution_df=None):
     df=df.copy().reset_index(drop=True); validate(df)
     if len(df)>1:
         diffs=df.open_time.diff().dropna()
@@ -302,6 +326,13 @@ def replay(df):
         if interval is not None and (diffs != interval).any():
             raise ValueError('Timestamp gaps detected; replay requires contiguous candles')
     data_hash=digest(df.to_csv(index=False,float_format='%.12g').encode())
+    execution_hash=None
+    base_interval=int(df.open_time.diff().dropna().mode().iloc[0]) if len(df)>1 else None
+    if execution_df is not None:
+        execution_df=execution_df.copy().reset_index(drop=True); validate(execution_df)
+        # Missing seconds are resolved per held-trade interval as conservative losses.
+        if base_interval is None or base_interval%1000: raise ValueError('Base interval cannot be resolved with 1-second data')
+        execution_hash=digest(execution_df.to_csv(index=False,float_format='%.12g').encode())
     s=SPEC
     spec_obj=StrategySpec(**s)
     spec_obj.validate()
@@ -318,35 +349,45 @@ def replay(df):
         if risk<=0 or (CFG['risk_mode']=='percent_equity' and risk>=balance): i+=1; continue
         try: qty,target,rate=size_target(entry,stop,side,risk)
         except ValueError: i+=1; continue
-        exit_i=exit_price=reason=None
+        exit_i=exit_price=reason=exit_time=None; resolution_status='resolved_base_ohlc'
         for j in range(entry_i,len(x)):
             bar=x.iloc[j]; bar_open=float(bar.open)
+            if execution_df is not None:
+                try:
+                    resolution=resolve_execution_interval(side,execution_df,int(bar.open_time),base_interval,stop,target)
+                except ValueError:
+                    reason,exit_price,exit_time='SL_UNRESOLVED',stop,int(bar.open_time)
+                    exit_i=j; resolution_status='unresolved_as_loss'; break
+                if resolution is not None:
+                    reason,exit_price,exit_time=resolution; exit_i=j; resolution_status='resolved_1s_ohlc'; break
+                continue
             if side=='LONG':
-                if bar_open<=stop: exit_i=j; exit_price=bar_open; reason='SL'; break
-                if bar_open>=target: exit_i=j; exit_price=target; reason='TP'; break
+                if bar_open<=stop: exit_i=j; exit_price=bar_open; exit_time=int(bar.open_time); reason='SL'; break
+                if bar_open>=target: exit_i=j; exit_price=target; exit_time=int(bar.open_time); reason='TP'; break
                 sl=float(bar.low)<=stop; tp=float(bar.high)>=target
             else:
-                if bar_open>=stop: exit_i=j; exit_price=bar_open; reason='SL'; break
-                if bar_open<=target: exit_i=j; exit_price=target; reason='TP'; break
+                if bar_open>=stop: exit_i=j; exit_price=bar_open; exit_time=int(bar.open_time); reason='SL'; break
+                if bar_open<=target: exit_i=j; exit_price=target; exit_time=int(bar.open_time); reason='TP'; break
                 sl=float(bar.high)>=stop; tp=float(bar.low)<=target
-            if sl and tp: raise ValueError('Unresolved same-candle SL/TP ambiguity at row '+str(j))
-            if sl: exit_i=j; exit_price=stop; reason='SL'; break
-            if tp: exit_i=j; exit_price=target; reason='TP'; break
+            if sl and tp:
+                reason='SL_UNRESOLVED'; exit_i=j; exit_price=stop; exit_time=int(bar.open_time); resolution_status='unresolved_as_loss'; break
+            if sl: exit_i=j; exit_price=stop; exit_time=int(bar.open_time); reason='SL'; resolution_status='resolved_base_ohlc'; break
+            if tp: exit_i=j; exit_price=target; exit_time=int(bar.open_time); reason='TP'; resolution_status='resolved_base_ohlc'; break
         if exit_i is None: break
         gross=(exit_price-entry)*qty*(1 if side=='LONG' else -1); entry_cost=entry*qty*rate; exit_cost=exit_price*qty*rate; net=gross-entry_cost-exit_cost; balance+=net
         if reason=='TP': streak=0
         else: streak+=1; max_streak=max(max_streak,streak)
-        ledger.append({'trade_id':len(ledger)+1,'signal_time':int(row.open_time),'entry_time':int(x.iloc[entry_i].open_time),'exit_time':int(x.iloc[exit_i].open_time),'direction':side,'signal_price':float(row.close),'entry_price':entry,'stop_loss':stop,'take_profit':target,'exit_price':float(exit_price),'exit_reason':reason,'quantity':qty,'risk_budget':risk,'gross_pnl':gross,'entry_cost':entry_cost,'exit_cost':exit_cost,'fees_slippage':entry_cost+exit_cost,'net_pnl':net,'balance_after':balance,'loss_streak_after':streak})
+        ledger.append({'trade_id':len(ledger)+1,'signal_time':int(row.open_time),'entry_time':int(x.iloc[entry_i].open_time),'exit_time':int(exit_time),'direction':side,'signal_price':float(row.close),'entry_price':entry,'stop_loss':stop,'take_profit':target,'exit_price':float(exit_price),'exit_reason':reason,'quantity':qty,'risk_budget':risk,'gross_pnl':gross,'entry_cost':entry_cost,'exit_cost':exit_cost,'fees_slippage':entry_cost+exit_cost,'net_pnl':net,'balance_after':balance,'loss_streak_after':streak,'resolution_status':resolution_status,'execution_ambiguity':resolution_status=='unresolved_as_loss'})
         i=exit_i+1
     wins=[t for t in ledger if t['exit_reason']=='TP' and t['net_pnl']>0]; gp=sum(max(0,t['net_pnl']) for t in ledger); gl=abs(sum(min(0,t['net_pnl']) for t in ledger))
     span=max((int(df.open_time.iloc[-1])-int(df.open_time.iloc[0]))/86400000,1/1440)
     wr=100*len(wins)/len(ledger) if ledger else 0.0; pf=gp/gl if gl else (math.inf if gp else 0.0); tpday=len(wins)/span
-    metrics={'trades':len(ledger),'wins':len(wins),'losses':sum(t['net_pnl']<=0 for t in ledger),'win_rate_pct':wr,'profit_factor':pf if math.isfinite(pf) else None,'avg_net_tp_per_day':tpday,'max_consecutive_losses':max_streak,'net_pnl':sum(t['net_pnl'] for t in ledger),'final_balance':balance,'total_costs':sum(t['fees_slippage'] for t in ledger),'data_hash_sha256':data_hash,'rows':len(df),'span_days':span,'passes_all_targets':bool((not CFG.get('use_min_win_rate',True) or wr>CFG['min_win_rate_pct']) and (not CFG.get('use_min_profit_factor',True) or pf>CFG['min_profit_factor']) and (not CFG.get('use_min_tp_per_day',True) or tpday>=CFG['min_tp_per_day']) and (not CFG.get('use_max_consecutive_losses',True) or max_streak<=CFG['max_consecutive_losses']))}
-    run_hash=digest(json.dumps({'spec':s,'contract':CFG,'data_hash':data_hash},sort_keys=True).encode())
+    metrics={'trades':len(ledger),'wins':len(wins),'losses':sum(t['net_pnl']<=0 for t in ledger),'win_rate_pct':wr,'profit_factor':pf if math.isfinite(pf) else None,'avg_net_tp_per_day':tpday,'max_consecutive_losses':max_streak,'net_pnl':sum(t['net_pnl'] for t in ledger),'final_balance':balance,'total_costs':sum(t['fees_slippage'] for t in ledger),'data_hash_sha256':data_hash,'execution_data_hash_sha256':execution_hash,'execution_resolution':'1s_ohlc' if execution_df is not None else 'base_ohlc_only','unresolved_as_loss_count':sum(t.get('execution_ambiguity',False) for t in ledger),'rows':len(df),'span_days':span,'passes_all_targets':bool((not CFG.get('use_min_win_rate',True) or wr>CFG['min_win_rate_pct']) and (not CFG.get('use_min_profit_factor',True) or pf>CFG['min_profit_factor']) and (not CFG.get('use_min_tp_per_day',True) or tpday>=CFG['min_tp_per_day']) and (not CFG.get('use_max_consecutive_losses',True) or max_streak<=CFG['max_consecutive_losses']))}
+    run_hash=digest(json.dumps({'spec':s,'contract':CFG,'data_hash':data_hash,'execution_data_hash':execution_hash,'execution_resolution':'1s_ohlc' if execution_df is not None else 'base_ohlc_only'},sort_keys=True).encode())
     return {'metrics':metrics,'ledger':ledger,'run_hash_sha256':run_hash}
 if __name__=='__main__':
-    if len(sys.argv)!=2: raise SystemExit('Usage: python replay.py EXACT_SOURCE.csv')
-    result=replay(pd.read_csv(sys.argv[1]))
+    if len(sys.argv) not in (2,3): raise SystemExit('Usage: python replay.py EXACT_SOURCE.csv [EXACT_1S_EXECUTION.csv]')
+    result=replay(pd.read_csv(sys.argv[1]),pd.read_csv(sys.argv[2]) if len(sys.argv)==3 else None)
     if result['metrics']['data_hash_sha256']!=EXPECTED_DATA_SHA256: raise SystemExit('DATA HASH MISMATCH')
     if result['run_hash_sha256']!=EXPECTED_RUN_SHA256: raise SystemExit('RUN HASH MISMATCH')
     print(json.dumps(result,indent=2,ensure_ascii=False))

@@ -385,7 +385,31 @@ def _resolve_bar_exit(side: str, bar_open: float, bar_high: float, bar_low: floa
     return None
 
 
-def backtest(frame, spec=None, contract=None):
+def _resolve_execution_interval(side: str, execution_frame: pd.DataFrame, start_ms: int, interval_ms: int, stop: float, target: float):
+    """Resolve a base candle using every 1-second USD-M execution candle in time order.
+
+    Missing seconds and unresolved same-second SL/TP hits fail closed. This deliberately
+    does not infer the path from the enclosing minute OHLC.
+    """
+    if interval_ms < 1000 or interval_ms % 1000:
+        raise DataIntegrityError("Execution resolution requires a base interval divisible by one second")
+    times = execution_frame["open_time"].to_numpy(dtype=np.int64)
+    first = int(np.searchsorted(times, start_ms, side="left"))
+    end_ms = start_ms + interval_ms
+    last = int(np.searchsorted(times, end_ms, side="left"))
+    expected = interval_ms // 1000
+    bars = execution_frame.iloc[first:last]
+    if len(bars) != expected or int(bars.open_time.iloc[0]) != start_ms or int(bars.open_time.iloc[-1]) != end_ms - 1000:
+        raise DataIntegrityError(f"Missing/incomplete 1-second execution data for interval starting {start_ms}; expected {expected} consecutive candles")
+    for bar in bars.itertuples(index=False):
+        resolution = _resolve_bar_exit(side, float(bar.open), float(bar.high), float(bar.low), stop, target)
+        if resolution is not None:
+            reason, price = resolution
+            return reason, price, int(bar.open_time)
+    return None
+
+
+def backtest(frame, spec=None, contract=None, execution_frame=None):
     spec=StrategySpec(**spec) if isinstance(spec,dict) else (spec or StrategySpec()); spec.validate()
     cfg=normalize_contract(contract)
     df=frame.copy().reset_index(drop=True)
@@ -395,6 +419,16 @@ def backtest(frame, spec=None, contract=None):
     else: report=validate_ohlcv(df,None)
     if len(df)<max(spec.slow,spec.atr_period)+3: raise DataIntegrityError("Not enough candles for warmup")
     data_hash=sha256_bytes(df.to_csv(index=False,float_format="%.12g").encode())
+    execution_hash=None
+    exec_df=None
+    if execution_frame is not None:
+        exec_df=execution_frame.copy().reset_index(drop=True)
+        validate_ohlcv(exec_df,1000,strict_gaps=False)
+        execution_hash=sha256_bytes(exec_df.to_csv(index=False,float_format="%.12g").encode())
+        if len(df)>1:
+            base_interval=int(df.open_time.diff().dropna().mode().iloc[0])
+            if base_interval % 1000:
+                raise DataIntegrityError("Base candle interval cannot be resolved with 1-second candles")
     x=indicators(df,spec); balance=float(cfg["initial_balance"]); ledger=[]; streak=0; max_streak=0
     # Visit only actual signal candles instead of scanning every row in Python.
     # Indicator calculations remain full-resolution and causal; this is a
@@ -421,26 +455,48 @@ def backtest(frame, spec=None, contract=None):
         try: qty,target,entry_rate,exit_rate=_size_and_target(entry,stop,side,risk_budget,cfg)
         except ValueError: i+=1; continue
         if qty<=0: i+=1; continue
-        exit_i=exit_price=None; reason=None
+        exit_i=exit_price=exit_time=None; reason=None; resolution_status="resolved_base_ohlc"
         for j in range(entry_i,len(x)):
-            resolution=_resolve_bar_exit(side,float(open_values[j]),float(high_values[j]),float(low_values[j]),stop,target)
-            if resolution is not None:
-                reason,exit_price=resolution; exit_i=j; break
+            if exec_df is not None:
+                try:
+                    resolution=_resolve_execution_interval(side,exec_df,int(open_times[j]),base_interval,stop,target)
+                except DataIntegrityError:
+                    # Never guess the path: book the modeled stop outcome and flag the trade.
+                    reason,exit_price,exit_time="SL_UNRESOLVED",stop,int(open_times[j])
+                    exit_i=j
+                    resolution_status="unresolved_as_loss"
+                    break
+                if resolution is not None:
+                    reason,exit_price,exit_time=resolution; exit_i=j
+                    resolution_status="resolved_1s_ohlc"
+                    break
+            else:
+                try:
+                    resolution=_resolve_bar_exit(side,float(open_values[j]),float(high_values[j]),float(low_values[j]),stop,target)
+                except DataIntegrityError:
+                    reason,exit_price,exit_time="SL_UNRESOLVED",stop,int(open_times[j])
+                    exit_i=j
+                    resolution_status="unresolved_as_loss"
+                    break
+                if resolution is not None:
+                    reason,exit_price=resolution; exit_i=j; exit_time=int(open_times[j])
+                    resolution_status="resolved_base_ohlc"
+                    break
         if exit_i is None: break
         gross=(exit_price-entry)*qty*(1 if side=="LONG" else -1)
         entry_cost=entry*qty*entry_rate; exit_cost=exit_price*qty*exit_rate
         net=gross-entry_cost-exit_cost; balance+=net
         if reason=="TP": streak=0
         else: streak+=1; max_streak=max(max_streak,streak)
-        ledger.append({"trade_id":len(ledger)+1,"signal_time":int(open_times[i]),"entry_time":int(open_times[entry_i]),"exit_time":int(open_times[exit_i]),"direction":side,"signal_price":float(row.close),"entry_price":entry,"stop_loss":stop,"take_profit":target,"exit_price":float(exit_price),"exit_reason":reason,"quantity":qty,"risk_budget":risk_budget,"gross_pnl":gross,"entry_cost":entry_cost,"exit_cost":exit_cost,"fees_slippage":entry_cost+exit_cost,"net_pnl":net,"balance_after":balance,"loss_streak_after":streak})
+        ledger.append({"trade_id":len(ledger)+1,"signal_time":int(open_times[i]),"entry_time":int(open_times[entry_i]),"exit_time":int(exit_time),"direction":side,"signal_price":float(row.close),"entry_price":entry,"stop_loss":stop,"take_profit":target,"exit_price":float(exit_price),"exit_reason":reason,"quantity":qty,"risk_budget":risk_budget,"gross_pnl":gross,"entry_cost":entry_cost,"exit_cost":exit_cost,"fees_slippage":entry_cost+exit_cost,"net_pnl":net,"balance_after":balance,"loss_streak_after":streak,"resolution_status":resolution_status,"execution_ambiguity":resolution_status=="unresolved_as_loss"})
         signal_cursor=int(np.searchsorted(signal_positions,exit_i+1,side="left"))
     wins=[t for t in ledger if t["exit_reason"]=="TP" and t["net_pnl"]>0]
     gp=sum(max(0,t["net_pnl"]) for t in ledger); gl=abs(sum(min(0,t["net_pnl"]) for t in ledger))
     span_days=max((int(df.open_time.iloc[-1])-int(df.open_time.iloc[0]))/86400000,1/1440)
     wr=100*len(wins)/len(ledger) if ledger else 0.0; pf=gp/gl if gl else (math.inf if gp else 0.0); tp_day=len(wins)/span_days
     passes=(not cfg["use_min_win_rate"] or wr>cfg["min_win_rate_pct"]) and (not cfg["use_min_profit_factor"] or pf>cfg["min_profit_factor"]) and (not cfg["use_min_tp_per_day"] or tp_day>=cfg["min_tp_per_day"]) and (not cfg["use_max_consecutive_losses"] or max_streak<=cfg["max_consecutive_losses"])
-    metrics={"trades":len(ledger),"wins":len(wins),"losses":sum(t["net_pnl"]<=0 for t in ledger),"win_rate_pct":wr,"profit_factor":pf if math.isfinite(pf) else None,"avg_net_tp_per_day":tp_day,"max_consecutive_losses":max_streak,"net_pnl":sum(t["net_pnl"] for t in ledger),"final_balance":balance,"total_costs":sum(t["fees_slippage"] for t in ledger),"data_hash_sha256":data_hash,"rows":len(df),"span_days":span_days,"passes_all_targets":bool(passes)}
-    run_hash=sha256_bytes(json.dumps({"spec":asdict(spec),"contract":cfg,"data_hash":data_hash},sort_keys=True).encode())
+    metrics={"trades":len(ledger),"wins":len(wins),"losses":sum(t["net_pnl"]<=0 for t in ledger),"win_rate_pct":wr,"profit_factor":pf if math.isfinite(pf) else None,"avg_net_tp_per_day":tp_day,"max_consecutive_losses":max_streak,"net_pnl":sum(t["net_pnl"] for t in ledger),"final_balance":balance,"total_costs":sum(t["fees_slippage"] for t in ledger),"data_hash_sha256":data_hash,"execution_data_hash_sha256":execution_hash,"execution_resolution":"1s_ohlc" if exec_df is not None else "base_ohlc_only","unresolved_as_loss_count":sum(t.get("execution_ambiguity",False) for t in ledger),"rows":len(df),"span_days":span_days,"passes_all_targets":bool(passes)}
+    run_hash=sha256_bytes(json.dumps({"spec":asdict(spec),"contract":cfg,"data_hash":data_hash,"execution_data_hash":execution_hash,"execution_resolution":"1s_ohlc" if exec_df is not None else "base_ohlc_only"},sort_keys=True).encode())
     return {"strategy":asdict(spec),"contract":cfg,"metrics":metrics,"ledger":ledger,"data_report":report,"run_hash_sha256":run_hash}
 
 def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[float, list[str], dict[str, float]]:
