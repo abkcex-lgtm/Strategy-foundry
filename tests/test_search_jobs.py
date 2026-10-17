@@ -1,0 +1,66 @@
+import time
+
+import pandas as pd
+from fastapi.testclient import TestClient
+
+import app.main as main
+
+
+def test_search_job_is_tracked_and_uses_train_only(monkeypatch):
+    dataset_id = "search-job-test"
+    start = int(pd.Timestamp("2026-04-01T00:00:00Z").timestamp() * 1000)
+    frame = pd.DataFrame({
+        "open_time": [start + i * 60_000 for i in range(120)],
+        "open": [100.0] * 120,
+        "high": [101.0] * 120,
+        "low": [99.0] * 120,
+        "close": [100.5] * 120,
+        "volume": [1.0] * 120,
+    })
+    monkeypatch.setitem(main.DATASETS, dataset_id, frame)
+
+    def fake_search(train, candidates, seed, contract):
+        assert len(train) == 120
+        return {
+            "requested_candidates": candidates,
+            "evaluated_candidates": candidates,
+            "failed_candidates": 0,
+            "seed": seed,
+            "contract": contract or {},
+            "all_passing": False,
+            "results": [],
+            "warning": "test-only stub",
+        }
+
+    monkeypatch.setattr(main, "search_candidates", fake_search)
+    client = TestClient(main.app)
+    response = client.post(
+        f"/api/search-jobs/{dataset_id}",
+        json={"candidates": 7, "seed": 42, "contract": {}},
+    )
+    assert response.status_code == 200
+    job_id = response.json()["job_id"]
+
+    state = None
+    for _ in range(100):
+        poll = client.get(f"/api/jobs/{job_id}")
+        assert poll.status_code == 200
+        state = poll.json()
+        if state["status"] in {"completed", "failed"}:
+            break
+        time.sleep(0.01)
+
+    assert state is not None
+    assert state["status"] == "completed", state
+    assert state["result"]["evaluated_candidates"] == 7
+    assert "OOS is not read for candidate selection" in state["result"]["selection_policy"]
+    monkeypatch.delitem(main.DATASETS, dataset_id, raising=False)
+
+
+def test_search_job_requires_existing_dataset():
+    client = TestClient(main.app)
+    response = client.post(
+        "/api/search-jobs/does-not-exist",
+        json={"candidates": 5, "seed": 42, "contract": {}},
+    )
+    assert response.status_code == 404
