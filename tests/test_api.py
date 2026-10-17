@@ -9,6 +9,8 @@ def test_health_endpoint():
     assert r.json()['live_trading'] is False
     assert r.json()['features']['tracked_binance_download_jobs'] is True
     assert r.json()['features']['tracked_search_jobs'] is True
+    assert r.json()['features']['persistent_search_history'] is True
+    assert r.json()['features']['search_history_endpoint']=='/api/search-history'
     assert r.json()['features']['search_job_endpoint']=='/api/search-jobs/{dataset_id}'
     assert r.json()['version']=='0.3.0'
 
