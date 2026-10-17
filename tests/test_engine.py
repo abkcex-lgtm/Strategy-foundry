@@ -207,3 +207,17 @@ def test_surrogate_genetic_search_fits_ml_model(monkeypatch):
     assert result["surrogate_model_fits"] >= 1
     assert result["evaluated_candidates"] == 80
     assert "ExtraTrees" in result["warning"]
+
+
+def test_global_genome_fingerprints_exclude_candidates_across_batches():
+    from app.engine import search_candidates
+    df = candles(450)
+    first = search_candidates(df, 12, seed=101, algorithm="stratified_random",
+                              contract={"use_min_tp_per_day": False})
+    first_hashes = set(first["evaluated_genome_hashes"])
+    assert len(first_hashes) == first["evaluated_candidates"]
+    second = search_candidates(df, 12, seed=202, algorithm="stratified_random",
+                               contract={"use_min_tp_per_day": False},
+                               excluded_genome_hashes=first_hashes)
+    assert first_hashes.isdisjoint(set(second["evaluated_genome_hashes"]))
+    assert len(set(second["evaluated_genome_hashes"])) == second["evaluated_candidates"]
