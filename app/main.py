@@ -183,8 +183,9 @@ def _perform_search(dataset_id:str,req:SearchRequest):
     result=search_candidates(train,req.candidates,req.seed,req.contract)
     manifest={'dataset_id':dataset_id,'train_data_hash_sha256':hashlib.sha256(train.to_csv(index=False,float_format='%.12g').encode()).hexdigest(),
               'candidates':req.candidates,'seed':req.seed,'contract':result.get('contract',{})}
-    search_id=hashlib.sha256(json.dumps(manifest,sort_keys=True,allow_nan=False).encode()).hexdigest()[:16]
-    result.update({'dataset_id':dataset_id,'search_id':search_id,'search_manifest':manifest,
+    manifest_hash=hashlib.sha256(json.dumps(manifest,sort_keys=True,allow_nan=False).encode()).hexdigest()
+    search_id=uuid.uuid4().hex[:16]
+    result.update({'dataset_id':dataset_id,'search_id':search_id,'search_manifest':manifest,'search_manifest_sha256':manifest_hash,
       'search_period':'2026-04-01 to 2026-07-01 UTC (TRAIN only)',
       'development_period':'2026-07-01 to 2026-08-01 UTC (not used in search)',
       'oos_period':'2026-08-01 to 2026-10-01 UTC (not used in search)',
