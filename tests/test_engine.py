@@ -245,3 +245,14 @@ def test_global_genome_fingerprints_exclude_candidates_across_batches():
                                excluded_genome_hashes=first_hashes)
     assert first_hashes.isdisjoint(set(second["evaluated_genome_hashes"]))
     assert len(set(second["evaluated_genome_hashes"])) == second["evaluated_candidates"]
+
+
+def test_non_reference_dataset_gets_chronological_train_dev_oos_splits():
+    from app.data import split_reference_period
+    df = candles(100)
+    splits = split_reference_period(df)
+    assert len(splits["train"]) == 60
+    assert len(splits["development"]) == 20
+    assert len(splits["oos"]) == 20
+    assert splits["train"].open_time.max() < splits["development"].open_time.min()
+    assert splits["development"].open_time.max() < splits["oos"].open_time.min()
