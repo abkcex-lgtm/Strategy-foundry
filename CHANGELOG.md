@@ -1,5 +1,12 @@
 # Changelog
 
+## V0.6.0 — 2026-10-17
+
+- Expanded the executable strategy catalogue from 18 to 30 with 12 price-action/regime-based families, implemented separately in the primary engine and independent audit engine.
+- Added Persian family labels and enabled the new families in both manual strategy selection and search-family selection.
+- Added family signal-generation test coverage. This release does not claim the 500k search target; search remains capped at 10,000 until resumable batch/checkpoint infrastructure is complete.
+
+
 ## V0.5.1 — 2026-10-17
 
 - Persisted asynchronous search and Binance-download job state/progress to SQLite.
