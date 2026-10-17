@@ -83,6 +83,30 @@ def replay(df):
         upper=x.high.rolling(s['slow'],min_periods=s['slow']).max().shift(1); lower=x.low.rolling(s['slow'],min_periods=s['slow']).min().shift(1)
         long=(c>c.shift(s['fast']))&(c>upper)&(c.shift(1)<=upper.shift(1))
         short=(c<c.shift(s['fast']))&(c<lower)&(c.shift(1)>=lower.shift(1))
+    elif family=='ema_pullback':
+        up=x.ema_fast>x.ema_slow; down=x.ema_fast<x.ema_slow
+        long=up&(c>x.ema_fast)&(c.shift(1)<=x.ema_fast.shift(1))
+        short=down&(c<x.ema_fast)&(c.shift(1)>=x.ema_fast.shift(1))
+    elif family=='macd_crossover':
+        macd=c.ewm(span=s['fast'],adjust=False,min_periods=s['fast']).mean()-c.ewm(span=s['slow'],adjust=False,min_periods=s['slow']).mean()
+        sig=macd.ewm(span=max(2,s['fast']//2),adjust=False,min_periods=max(2,s['fast']//2)).mean()
+        long=(macd>sig)&(macd.shift(1)<=sig.shift(1)); short=(macd<sig)&(macd.shift(1)>=sig.shift(1))
+    elif family=='bollinger_reversion':
+        mid=c.rolling(s['slow'],min_periods=s['slow']).mean(); dev=c.rolling(s['slow'],min_periods=s['slow']).std(ddof=0)
+        upper=mid+2*dev; lower=mid-2*dev
+        long=(c>lower)&(c.shift(1)<=lower.shift(1)); short=(c<upper)&(c.shift(1)>=upper.shift(1))
+    elif family=='inside_bar_breakout':
+        inside=(x.high.shift(1)<x.high.shift(2))&(x.low.shift(1)>x.low.shift(2))
+        long=inside&(c>x.high.shift(1))&(c.shift(1)<=x.high.shift(1))
+        short=inside&(c<x.low.shift(1))&(c.shift(1)>=x.low.shift(1))
+    elif family=='engulfing_reversal':
+        po=x.open.shift(1); pc=c.shift(1)
+        long=(c>x.open)&(pc<po)&(x.open<=pc)&(c>=po)
+        short=(c<x.open)&(pc>po)&(x.open>=pc)&(c<=po)
+    elif family=='momentum_breakout':
+        upper=x.high.rolling(s['slow'],min_periods=s['slow']).max().shift(1); lower=x.low.rolling(s['slow'],min_periods=s['slow']).min().shift(1)
+        long=(c>c.shift(s['fast']))&(c>upper)&(c.shift(1)<=upper.shift(1))
+        short=(c<c.shift(s['fast']))&(c<lower)&(c.shift(1)>=lower.shift(1))
     x['long_signal']=long.fillna(False)
     x['short_signal']=short.fillna(False)
     balance=float(CFG['initial_balance']); ledger=[]; streak=0; max_streak=0; i=max(s['slow'],s['atr_period'])
