@@ -27,6 +27,7 @@ A checked box means implementation exists; it does not establish profitability o
 - [x] SQLite persistence and UI/API reopening for full strategy-search results and reproducibility manifests
 - [x] OHLC candlestick chart with trade SL/TP/entry/exit overlays, candle-window paging, zoom presets, latest-candle jump, and trades spanning the visible window\n- [ ] Smooth pan/zoom, replay controls, indicator and drawing tools, all setup annotations for candidate-library strategies
 - [x] Tracked asynchronous strategy-search jobs with status polling; search and ranking explicitly use TRAIN only
+- [x] SQLite-persisted search/download job status and progress; interrupted jobs are labeled after restart (execution resume/checkpoints remain open)
 - [x] Four causal strategy families: EMA crossover, price-channel breakout, RSI reversion, and volume-confirmed breakout; independent replay updated for all four
 - [x] Future-candle mutation regression test confirms past signals remain unchanged across all four current families
 - [x] Candidate results include each failed active filter, per-filter distance, and transparent near-miss shortfall
