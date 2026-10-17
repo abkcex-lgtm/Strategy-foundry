@@ -151,7 +151,7 @@ for _job_id, _job in load_jobs().items():
 @app.get('/api/jobs/{job_id}')
 def get_job(job_id:str):
     job=DOWNLOAD_JOBS.get(job_id) or SEARCH_JOBS.get(job_id)
-    if job is None: raise HTTPException(404,'شناسهٔ عملیات پیدا نشد؛ ممکن است سرور پس از شروع مجدد حافظهٔ عملیات را پاک کرده باشد.')
+    if job is None: raise HTTPException(404,'شناسهٔ عملیات پیدا نشد؛ ممکن است تاریخچهٔ قدیمی پاک شده باشد یا میزبان ذخیره‌سازی پایدار نداشته باشد.')
     return job
 
 
