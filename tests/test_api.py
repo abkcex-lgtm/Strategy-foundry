@@ -12,7 +12,7 @@ def test_health_endpoint():
     assert r.json()['features']['persistent_search_history'] is True
     assert r.json()['features']['search_history_endpoint']=='/api/search-history'
     assert r.json()['features']['search_job_endpoint']=='/api/search-jobs/{dataset_id}'
-    assert r.json()['version']=='0.3.0'
+    assert r.json()['version']=='0.4.0'
 
 def test_home_page_serves_persian_ui():
     r=client.get('/')
