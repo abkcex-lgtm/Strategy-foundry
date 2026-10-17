@@ -208,6 +208,7 @@ def save_job(job_id: str, kind: str, payload: dict[str, Any]):
         c.execute("DELETE FROM jobs WHERE status NOT IN ('queued','running') AND job_id NOT IN ("
                   "SELECT job_id FROM jobs WHERE status NOT IN ('queued','running') "
                   "ORDER BY updated_at DESC LIMIT 100)")
+        c.execute("DELETE FROM job_genomes WHERE job_id NOT IN (SELECT job_id FROM jobs)")
         c.commit()
     finally:
         c.close()
