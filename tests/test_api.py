@@ -15,7 +15,7 @@ def test_health_endpoint():
     assert r.json()['features']['persistent_job_status'] is True
     assert r.json()['features']['search_history_endpoint']=='/api/search-history'
     assert r.json()['features']['search_job_endpoint']=='/api/search-jobs/{dataset_id}'
-    assert r.json()['version']=='0.9.3'
+    assert r.json()['version']=='0.9.4'
     assert main.app.version == r.json()['version']
     assert r.json()['storage']['engine'] == 'sqlite'
     assert r.json()['storage']['database_ready'] is True
@@ -33,6 +33,9 @@ def test_home_page_serves_persian_ui():
     assert 'value="tp"' in r.text
     assert 'id="searchHistoryList"' in r.text
     assert 'class="quick-nav"' in r.text
+    assert 'class="access-launchpad"' in r.text
+    assert 'class="access-grid"' in r.text
+    assert 'از اینجا مستقیم وارد هر بخش شو' in r.text
     assert 'id="riskSettings"' in r.text
     assert 'id="searchSettings"' in r.text
     assert 'id="chartSection"' in r.text
