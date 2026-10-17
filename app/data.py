@@ -62,5 +62,34 @@ async def download_binance_month(symbol: str, interval: str, year: int, month: i
     return df, sha256_bytes(raw), url
 
 def split_reference_period(df: pd.DataFrame):
-    ts=pd.to_datetime(df.open_time, unit='ms', utc=True)
-    return {'train':df[(ts >= '2026-04-01') & (ts < '2026-07-01')].copy(), 'development':df[(ts >= '2026-07-01') & (ts < '2026-08-01')].copy(), 'oos':df[(ts >= '2026-08-01') & (ts < '2026-10-01')].copy()}
+    """Return chronological train/dev/OOS splits without ever shuffling candles.
+
+    Preserve the agreed Apr-Sep 2026 reference windows when the dataset fully
+    covers that period. For other date ranges, use a deterministic 60/20/20
+    chronological fallback so unrelated symbols, intervals, and historical
+    windows are still searchable rather than silently producing empty splits.
+    """
+    if df.empty:
+        return {'train': df.copy(), 'development': df.copy(), 'oos': df.copy()}
+    ts = pd.to_datetime(df.open_time, unit='ms', utc=True)
+    start = ts.iloc[0]
+    end = ts.iloc[-1]
+    reference_start = pd.Timestamp('2026-04-01', tz='UTC')
+    reference_end = pd.Timestamp('2026-10-01', tz='UTC')
+    if start <= reference_start and end >= pd.Timestamp('2026-09-30 23:59:00', tz='UTC'):
+        return {
+            'train': df[(ts >= '2026-04-01') & (ts < '2026-07-01')].copy(),
+            'development': df[(ts >= '2026-07-01') & (ts < '2026-08-01')].copy(),
+            'oos': df[(ts >= '2026-08-01') & (ts < '2026-10-01')].copy(),
+        }
+    # Use row boundaries instead of randomized splits: future candles never
+    # appear in training when the dataset does not match the reference window.
+    n = len(df)
+    train_end = max(1, int(n * 0.60))
+    dev_end = max(train_end + 1, int(n * 0.80)) if n >= 3 else n
+    dev_end = min(n, dev_end)
+    return {
+        'train': df.iloc[:train_end].copy(),
+        'development': df.iloc[train_end:dev_end].copy(),
+        'oos': df.iloc[dev_end:].copy(),
+    }
