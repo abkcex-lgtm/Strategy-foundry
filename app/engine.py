@@ -437,9 +437,9 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
 def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="surrogate_genetic", search_space=None, progress_callback=None, excluded_genome_hashes=None):
     """Deterministic bounded evolutionary search on TRAIN only.
 
-    max_candidates counts distinct parameter genomes actually evaluated. This is
-    deliberately capped by the API until resumable, resource-bounded batch jobs
-    are available; this function does not claim to support 500k candidates yet.
+    Each invocation is bounded to 10,000 genomes. The background API orchestrates
+    multiple invocations with globally persisted genome fingerprints and atomic
+    batch checkpoints for requests up to 500,000 candidates.
     """
     if not 1<=max_candidates<=10000: raise ValueError("max_candidates must be 1..10000 until resumable batch execution is enabled")
     if algorithm not in {"hybrid_genetic","surrogate_genetic","stratified_random"}:
@@ -735,4 +735,4 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             "returned_near_misses":0 if all_passing else len(selected),"near_miss_shortfall":near_miss_shortfall,
             "warning":("Deterministic stratified random baseline; selected results independently replayed; OOS not certified." if algorithm=="stratified_random" else
                        ("Surrogate-assisted genetic search: ExtraTrees model ranks proposal pools; model fits and independent ledger replay are recorded. This is one 10,000-candidate batch inside the resource-managed background search; ranked on TRAIN only. Full 500k runtime has not been production-certified." if algorithm=="surrogate_genetic" else
-                        "Hybrid genetic search with stratified seeds, crossover, mutation, immigrant exploration and independent ledger replay of reported results. Bounded to 10,000 candidates pending resumable resource-managed batch jobs; ranked on TRAIN only. Not 500k-certified.")) }
+                        "Hybrid genetic search with stratified seeds, crossover, mutation, immigrant exploration and independent ledger replay of reported results. This invocation is one 10,000-candidate batch inside the background orchestrator; ranked on TRAIN only. Full 500k runtime is not production-certified.")) }
