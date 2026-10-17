@@ -21,6 +21,39 @@ def _resolve_db_path(env=None, data_dir: Path = Path("/data"), project_root: Pat
 
 DB_PATH = _resolve_db_path()
 
+
+def storage_status() -> dict[str, Any]:
+    """Report SQLite readiness and the configured storage class without exposing paths."""
+    if os.environ.get("FOUNDRY_DB_PATH"):
+        mode = "explicit_path"
+    elif os.environ.get("VERCEL"):
+        mode = "ephemeral_tmp"
+    elif DB_PATH.parent == Path("/data"):
+        mode = "mounted_volume"
+    else:
+        mode = "local_fallback"
+    connection = None
+    try:
+        connection = _connect()
+        check = connection.execute("PRAGMA quick_check").fetchone()
+        integrity = str(check[0]) if check else "unknown"
+        return {
+            "engine": "sqlite",
+            "storage_mode": mode,
+            "database_ready": integrity == "ok",
+            "integrity_check": integrity,
+        }
+    except Exception:
+        return {
+            "engine": "sqlite",
+            "storage_mode": mode,
+            "database_ready": False,
+            "integrity_check": "failed",
+        }
+    finally:
+        if connection is not None:
+            connection.close()
+
 def _connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     c = sqlite3.connect(DB_PATH, timeout=30)
