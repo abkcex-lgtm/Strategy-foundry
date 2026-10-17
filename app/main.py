@@ -44,7 +44,7 @@ class AIChatRequest(BaseModel):
 @app.get('/',response_class=HTMLResponse)
 def home(): return (ROOT/'static'/'index.html').read_text(encoding='utf-8')
 @app.get('/api/health')
-def health(): return {'status':'ok','service':'strategy-foundry','version':'0.3.0','execution':'server-side','live_trading':False,'persistent_store':'sqlite','loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'download_progress_endpoint':'/api/jobs/{job_id}','question_first_assistant_routing':True}}
+def health(): return {'status':'ok','service':'strategy-foundry','version':'0.3.0','execution':'server-side','live_trading':False,'persistent_store':'sqlite','loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','question_first_assistant_routing':True}}
 @app.get('/api/contract')
 def contract():
     from .engine import normalize_contract
@@ -130,9 +130,11 @@ async def download_data(req:DownloadRequest):
     asyncio.create_task(_run_download_job(job_id,req))
     return {'job_id':job_id,'status':'queued','message':'درخواست دریافت در سرور ثبت شد؛ وضعیت را از مسیر پیگیری بررسی کنید.'}
 
+SEARCH_JOBS:dict[str,dict[str,Any]]={}
+
 @app.get('/api/jobs/{job_id}')
 def get_job(job_id:str):
-    job=DOWNLOAD_JOBS.get(job_id)
+    job=DOWNLOAD_JOBS.get(job_id) or SEARCH_JOBS.get(job_id)
     if job is None: raise HTTPException(404,'شناسهٔ عملیات پیدا نشد؛ ممکن است سرور پس از شروع مجدد حافظهٔ عملیات را پاک کرده باشد.')
     return job
 
@@ -169,20 +171,44 @@ def run_backtest(dataset_id:str,req:BacktestRequest):
         return {'run_id':run_id,**result}
     except Exception as exc: raise HTTPException(422,f'اجرای بک‌تست رد شد: {exc}') from exc
 
+def _perform_search(dataset_id:str,req:SearchRequest):
+    df=DATASETS.get(dataset_id)
+    if df is None: raise ValueError('ابتدا داده را دریافت کنید.')
+    splits=split_reference_period(df); train=splits['train']
+    if len(train)<100: raise ValueError('دادهٔ Train برای بازهٔ Apr-Jun 2026 کافی نیست؛ جست‌وجو آغاز نشد.')
+    result=search_candidates(train,req.candidates,req.seed,req.contract)
+    result.update({'dataset_id':dataset_id,'search_period':'2026-04-01 to 2026-07-01 UTC (TRAIN only)',
+      'development_period':'2026-07-01 to 2026-08-01 UTC (not used in search)',
+      'oos_period':'2026-08-01 to 2026-10-01 UTC (not used in search)',
+      'selection_policy':'Candidates are searched and ranked on TRAIN only. OOS is not read for candidate selection.'})
+    return result
+
 @app.post('/api/search/{dataset_id}')
 def search(dataset_id:str,req:SearchRequest):
-    df=DATASETS.get(dataset_id)
-    if df is None: raise HTTPException(404,'ابتدا داده را دریافت کنید.')
+    try: return _perform_search(dataset_id,req)
+    except ValueError as exc:
+        if 'ابتدا داده' in str(exc) or 'Train برای بازه' in str(exc): raise HTTPException(422,str(exc)) from exc
+        raise HTTPException(422,str(exc)) from exc
+
+async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
+    job=SEARCH_JOBS[job_id]
+    job.update({'status':'running','message':'جست‌وجوی محدود روی بخش TRAIN؛ توسعه و OOS وارد انتخاب نمی‌شوند.'})
     try:
-        splits=split_reference_period(df); train=splits['train']
-        if len(train)<100: raise HTTPException(422,'دادهٔ Train برای بازهٔ Apr-Jun 2026 کافی نیست؛ جست‌وجو آغاز نشد.')
-        result=search_candidates(train,req.candidates,req.seed,req.contract)
-        result.update({'dataset_id':dataset_id,'search_period':'2026-04-01 to 2026-07-01 UTC (TRAIN only)',
-          'development_period':'2026-07-01 to 2026-08-01 UTC (not used in search)',
-          'oos_period':'2026-08-01 to 2026-10-01 UTC (not used in search)'})
-        return result
-    except HTTPException: raise
-    except Exception as exc: raise HTTPException(422,str(exc)) from exc
+        result=await asyncio.to_thread(_perform_search,dataset_id,req)
+        job.update({'status':'completed','message':'جست‌وجو پایان یافت','result':result,
+                    'evaluated_candidates':result.get('evaluated_candidates',0),
+                    'requested_candidates':result.get('requested_candidates',req.candidates)})
+    except Exception as exc:
+        job.update({'status':'failed','message':f'جست‌وجو کامل نشد: {exc}','error':str(exc)})
+
+@app.post('/api/search-jobs/{dataset_id}')
+async def start_search_job(dataset_id:str,req:SearchRequest):
+    if dataset_id not in DATASETS: raise HTTPException(404,'ابتدا داده را دریافت کنید.')
+    job_id=uuid.uuid4().hex
+    SEARCH_JOBS[job_id]={'job_id':job_id,'kind':'strategy_search','status':'queued',
+        'message':'جست‌وجو در صف سرور قرار گرفت','requested_candidates':req.candidates,'evaluated_candidates':0}
+    asyncio.create_task(_run_search_job(job_id,dataset_id,req))
+    return {'job_id':job_id,'status':'queued','message':'جست‌وجو در سرور ثبت شد؛ وضعیت را پیگیری کنید.'}
 
 @app.post('/api/evaluate/{dataset_id}')
 def evaluate_strategy(dataset_id:str,req:BacktestRequest):
