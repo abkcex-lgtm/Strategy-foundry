@@ -19,7 +19,7 @@ def test_search_job_is_tracked_and_uses_train_only(monkeypatch):
     })
     monkeypatch.setitem(main.DATASETS, dataset_id, frame)
 
-    def fake_search(train, candidates, seed, contract, algorithm="hybrid_genetic"):
+    def fake_search(train, candidates, seed, contract, algorithm="hybrid_genetic", search_space=None):
         assert len(train) == 120
         return {
             "requested_candidates": candidates,
@@ -27,6 +27,7 @@ def test_search_job_is_tracked_and_uses_train_only(monkeypatch):
             "failed_candidates": 0,
             "seed": seed,
             "algorithm": algorithm,
+            "search_space": search_space or {},
             "contract": contract or {},
             "all_passing": False,
             "results": [],
@@ -38,7 +39,7 @@ def test_search_job_is_tracked_and_uses_train_only(monkeypatch):
         with TestClient(main.app) as client:
             response = client.post(
                 f"/api/search-jobs/{dataset_id}",
-                json={"candidates": 7, "seed": 42, "contract": {}},
+                json={"candidates": 7, "seed": 42, "contract": {}, "search_space": {"families": ["ema_crossover"]}},
             )
             assert response.status_code == 200
             job_id = response.json()["job_id"]
