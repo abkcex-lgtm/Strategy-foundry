@@ -201,8 +201,21 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None):
     rng=np.random.default_rng(seed); results=[]; errors=0
     families=("ema_crossover","channel_breakout","rsi_reversion","volume_breakout")
     for _ in range(max_candidates):
-        fast=int(rng.integers(4,40)); slow=int(rng.integers(max(fast+2,20),121)); period=int(rng.integers(7,31)); mult=float(rng.choice([0.8,1.0,1.2,1.5,2.0,2.5])); family=str(rng.choice(families))
-        spec=StrategySpec(f"{family} {fast}/{slow} ATR {period}x{mult:g}",fast,slow,period,mult,"both",seed,family)
+        family=str(rng.choice(families))
+        if family=="ema_crossover":
+            fast=int(rng.integers(4,40)); slow=int(rng.integers(max(fast+2,20),121))
+            name_prefix="EMA crossover"
+        elif family=="channel_breakout":
+            slow=int(rng.integers(20,121)); fast=min(9,slow-2)
+            name_prefix="Price channel breakout"
+        elif family=="rsi_reversion":
+            fast=int(rng.integers(4,40)); slow=fast+2
+            name_prefix="RSI reversion"
+        else:
+            fast=int(rng.integers(4,40)); slow=int(rng.integers(max(fast+2,20),121))
+            name_prefix="Volume-confirmed breakout"
+        period=int(rng.integers(7,31)); mult=float(rng.choice([0.8,1.0,1.2,1.5,2.0,2.5]))
+        spec=StrategySpec(f"{name_prefix} {fast}/{slow} ATR {period}x{mult:g}",fast,slow,period,mult,"both",seed,family)
         try:
             r=backtest(frame,spec,cfg); m=r["metrics"]
             dist=(max(0,cfg["min_win_rate_pct"]+0.0001-m["win_rate_pct"])/max(cfg["min_win_rate_pct"],1) if cfg["use_min_win_rate"] else 0)+(max(0,cfg["min_profit_factor"]+0.0001-(m["profit_factor"] or 0)) if cfg["use_min_profit_factor"] else 0)+(max(0,cfg["min_tp_per_day"]-m["avg_net_tp_per_day"])/max(cfg["min_tp_per_day"],1) if cfg["use_min_tp_per_day"] else 0)+(max(0,m["max_consecutive_losses"]-cfg["max_consecutive_losses"])/max(cfg["max_consecutive_losses"],1) if cfg["use_max_consecutive_losses"] else 0)
