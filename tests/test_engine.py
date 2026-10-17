@@ -2,7 +2,7 @@ import math
 import pandas as pd
 import pytest
 from app.data import validate_ohlcv, DataIntegrityError
-from app.engine import backtest, indicators, StrategySpec, CONTRACT, normalize_contract, _size_and_target
+from app.engine import backtest, indicators, StrategySpec, CONTRACT, normalize_contract, _size_and_target, _resolve_bar_exit
 from app.audit import independent_replay
 
 def candles(n=300):
@@ -256,3 +256,20 @@ def test_non_reference_dataset_gets_chronological_train_dev_oos_splits():
     assert len(splits["oos"]) == 20
     assert splits["train"].open_time.max() < splits["development"].open_time.min()
     assert splits["development"].open_time.max() < splits["oos"].open_time.min()
+
+
+@pytest.mark.parametrize("side,bar_open,bar_high,bar_low,stop,target,expected", [
+    ("LONG", 95.0, 105.0, 94.0, 98.0, 104.0, ("SL", 95.0)),
+    ("SHORT", 105.0, 106.0, 95.0, 102.0, 96.0, ("SL", 105.0)),
+    ("LONG", 106.0, 108.0, 99.0, 98.0, 104.0, ("TP", 104.0)),
+    ("SHORT", 94.0, 101.0, 92.0, 102.0, 96.0, ("TP", 96.0)),
+    ("LONG", 100.0, 105.0, 97.0, 98.0, 104.0, ("SL", 98.0)),
+    ("SHORT", 100.0, 103.0, 95.0, 102.0, 96.0, ("SL", 102.0)),
+])
+def test_exit_fill_resolves_gaps_before_intrabar_ambiguity(side, bar_open, bar_high, bar_low, stop, target, expected):
+    assert _resolve_bar_exit(side, bar_open, bar_high, bar_low, stop, target) == expected
+
+
+def test_exit_fill_rejects_unresolved_intrabar_sl_tp_ambiguity():
+    with pytest.raises(DataIntegrityError, match="same-candle SL/TP ambiguity"):
+        _resolve_bar_exit("LONG", 100.0, 105.0, 97.0, 98.0, 104.0)
