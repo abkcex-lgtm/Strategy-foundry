@@ -17,7 +17,8 @@ A checked box means implementation exists; it does not establish profitability o
 - [x] Unit tests for editable contract, exact net risk/reward sizing, API smoke paths
 - [x] GitHub Actions passed for the configurable-settings/test commit (cfda2eb3)
 - [x] Independent second replay engine and trade-by-trade audit endpoint (synthetic-data test only; real-market certification pending)
-- [ ] Resolve ambiguous 1m bars using 1s Binance data, failing if unavailable
+- [ ] End-to-end execution resolution: acquire and pair official USD-M Futures 1s data for the full holding path of every evaluated trade (not only same-minute SL/TP collisions), fail closed on gaps, and wire this through API, candidate search, split evaluation, audit, and export
+- [x] Core primary/independent/standalone resolvers can replay 1-second OHLC in chronological order; they reject missing seconds and unresolved same-second SL/TP collisions (API/data acquisition/search integration and real-market certification remain open)
 - [ ] Slippage model with direction/volatility/order-type sensitivity; current setting is a configurable percentage approximation
 - [ ] Search 500,000+ candidates under measured resource budget
 - [x] Backtest execution skips non-signal rows in the Python loop while preserving full-resolution candles; independent-ledger CI passes (production throughput and memory benchmark remains open)
