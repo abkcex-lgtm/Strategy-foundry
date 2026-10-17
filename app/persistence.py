@@ -4,9 +4,22 @@ from pathlib import Path
 from typing import Any
 import pandas as pd
 
-# Vercel's function filesystem is read-only except for /tmp; its storage is ephemeral.
-_DEFAULT_DB = Path("/tmp/strategy_foundry.sqlite3") if os.environ.get("VERCEL") else (Path(__file__).resolve().parent.parent / "data" / "foundry.sqlite3")
-DB_PATH = Path(os.environ.get("FOUNDRY_DB_PATH", str(_DEFAULT_DB)))
+# Explicit configuration always wins. On hosts such as NetRun, prefer the
+# mounted persistent volume (/data) over the repository directory, which may be
+# recreated during deployments. Vercel's writable /tmp is ephemeral by design.
+def _resolve_db_path(env=None, data_dir: Path = Path("/data"), project_root: Path | None = None) -> Path:
+    env = os.environ if env is None else env
+    configured = env.get("FOUNDRY_DB_PATH")
+    if configured:
+        return Path(configured)
+    if env.get("VERCEL"):
+        return Path("/tmp/strategy_foundry.sqlite3")
+    if data_dir.is_dir():
+        return data_dir / "strategy_foundry.sqlite3"
+    root = project_root if project_root is not None else Path(__file__).resolve().parent.parent
+    return root / "data" / "foundry.sqlite3"
+
+DB_PATH = _resolve_db_path()
 
 def _connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
