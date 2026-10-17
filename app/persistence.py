@@ -23,6 +23,10 @@ def _connect():
     CREATE TABLE IF NOT EXISTS profiles (
       profile_name TEXT PRIMARY KEY, config_json TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS searches (
+      search_id TEXT PRIMARY KEY, dataset_id TEXT NOT NULL, request_json TEXT NOT NULL,
+      result_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
     """)
     return c
 
@@ -112,3 +116,65 @@ def list_profiles():
         return [{"profile_name":n,"config":json.loads(cfg),"updated_at":t}
                 for n,cfg,t in c.execute("SELECT profile_name,config_json,updated_at FROM profiles ORDER BY profile_name")]
     finally: c.close()
+
+def save_search(search_id: str, dataset_id: str, request: dict[str, Any], result: dict[str, Any]):
+    c = _connect()
+    try:
+        c.execute(
+            "INSERT OR REPLACE INTO searches(search_id,dataset_id,request_json,result_json) VALUES(?,?,?,?)",
+            (
+                search_id,
+                dataset_id,
+                json.dumps(request, ensure_ascii=False, sort_keys=True, allow_nan=False),
+                json.dumps(result, ensure_ascii=False, sort_keys=True, default=_json_default, allow_nan=False),
+            ),
+        )
+        c.commit()
+    finally:
+        c.close()
+
+
+def list_search_history(limit: int = 30):
+    c = _connect()
+    try:
+        rows = c.execute(
+            "SELECT search_id,dataset_id,created_at,request_json,result_json FROM searches ORDER BY created_at DESC LIMIT ?",
+            (max(1, min(int(limit), 200)),),
+        ).fetchall()
+        out = []
+        for search_id, dataset_id, created_at, request_json, result_json in rows:
+            try:
+                request = json.loads(request_json)
+                result = json.loads(result_json)
+            except (ValueError, TypeError):
+                request, result = {}, {}
+            out.append({
+                "search_id": search_id,
+                "dataset_id": dataset_id,
+                "created_at": created_at,
+                "requested_candidates": result.get("requested_candidates", request.get("candidates")),
+                "evaluated_candidates": result.get("evaluated_candidates", 0),
+                "failed_candidates": result.get("failed_candidates", 0),
+                "seed": result.get("seed", request.get("seed")),
+                "all_passing": bool(result.get("all_passing", False)),
+                "result_count": len(result.get("results", [])),
+                "search_period": result.get("search_period"),
+            })
+        return out
+    finally:
+        c.close()
+
+
+def load_search_result(search_id: str):
+    c = _connect()
+    try:
+        row = c.execute("SELECT result_json FROM searches WHERE search_id=?", (search_id,)).fetchone()
+        if not row:
+            return None
+        try:
+            return json.loads(row[0])
+        except (ValueError, TypeError):
+            return None
+    finally:
+        c.close()
+
