@@ -311,7 +311,9 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
         mode=cfg["risk_mode"]
         base=(balance if mode=="percent_equity" or cfg.get("compound") else float(cfg["initial_balance"]))
         risk=float(cfg["risk_usd"]) if mode=="fixed_usd" else base*float(cfg["risk_pct"])/100
-        if risk<=0 or (mode=="percent_equity" and risk>=balance): i+=1; continue
+        if risk<=0: i+=1; continue
+        # Match the primary engine: never open a trade that risks all remaining equity.
+        if balance<=risk+1e-9: break
         dist=entry-stop if side=="LONG" else stop-entry
         qty=risk/(dist+entry*rate+stop*rate)
         if cfg["target_mode"]=="gross_rr":
