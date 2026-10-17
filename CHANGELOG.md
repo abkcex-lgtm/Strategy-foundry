@@ -1,5 +1,13 @@
 # Changelog
 
+## V0.7.3 — 2026-10-17
+
+- Fixed a recovery bug where the UI created a fresh search instead of polling the selected interrupted/running job after requesting resume.
+- Handle `completed_with_shortfall` as a terminal state so incomplete candidate runs show their warning instead of polling until timeout.
+- Corrected restart-recovery wording: only fully committed batches are recoverable; an in-flight batch is retried from its last durable checkpoint.
+- Added a regression test for the frontend resume and shortfall handling. Runtime CI result still needs confirmation.
+
+
 ## V0.7.2 — 2026-10-17
 
 - Filter globally seen genomes from surrogate proposal pools and genetic mutation retries before evaluation to reduce repeated-work overhead in long batch searches.
