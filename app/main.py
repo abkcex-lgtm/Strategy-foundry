@@ -219,20 +219,109 @@ def search(dataset_id:str,req:SearchRequest):
 
 async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
     job=SEARCH_JOBS[job_id]
-    job.update({'status':'running','kind':'strategy_search','message':'جست‌وجوی محدود روی بخش TRAIN؛ توسعه و OOS وارد انتخاب نمی‌شوند.'}); save_job(job_id, 'strategy_search', job)
+    job.update({'status':'running','kind':'strategy_search','dataset_id':dataset_id,
+                'requested_candidates':req.candidates,
+                'message':'جست‌وجوی دسته‌ای؛ فقط TRAIN برای انتخاب استفاده می‌شود.'})
+    save_job(job_id, 'strategy_search', job)
     try:
-        def on_progress(progress):
-            job.update(progress)
-            job.update({'status':'running','message':'در حال ارزیابی نامزدها؛ انتخاب فقط از TRAIN انجام می‌شود.'})
-            save_job(job_id, 'strategy_search', job)
-        result=await asyncio.to_thread(_perform_search,dataset_id,req,on_progress)
-        job.update({'status':'completed','message':'جست‌وجو پایان یافت','result':result,
-                    'evaluated_candidates':result.get('evaluated_candidates',0),
-                    'requested_candidates':result.get('requested_candidates',req.candidates)})
-        save_job(job_id, 'strategy_search', job)
+        # Checkpoints are committed only at batch boundaries. A process restart
+        # resumes from the last completed batch and deterministically reuses its seed.
+        seen=load_job_genome_hashes(job_id)
+        completed=int(job.get('completed_candidates',0))
+        batch_index=int(job.get('completed_batches',0))
+        passing=list(job.get('checkpoint_passing_results',[]))
+        near=list(job.get('checkpoint_near_misses',[]))
+        max_attempts=max(5,math.ceil(req.candidates/10000)*5)
+        while completed<req.candidates and batch_index<max_attempts:
+            batch_size=min(10000,req.candidates-completed)
+            batch_seed=int(req.seed+batch_index*1000003)
+            batch_req=req.copy(update={'candidates':batch_size,'seed':batch_seed})
+            batch_base=completed
+            def on_progress(progress):
+                job.update(progress)
+                job.update({'status':'running','requested_candidates':req.candidates,
+                            'evaluated_candidates':batch_base+int(progress.get('evaluated_candidates',0)),
+                            'completed_candidates':batch_base,
+                            'completed_batches':batch_index,
+                            'current_batch':batch_index+1,
+                            'message':f'دستهٔ {batch_index+1}؛ ارزیابی نامزدهای یکتا؛ انتخاب فقط از TRAIN'})
+                save_job(job_id,'strategy_search',job)
+            chunk=await asyncio.to_thread(_perform_search,dataset_id,batch_req,on_progress,seen,True,False)
+            hashes=chunk.pop('_internal_evaluated_genome_hashes',[])
+            save_job_genome_hashes(job_id,hashes)
+            seen.update(hashes)
+            actual=len(hashes)
+            completed+=actual
+            batch_index+=1
+            if chunk.get('all_passing'):
+                known={json.dumps(x.get('strategy',{}),sort_keys=True,separators=(',',':')) for x in passing}
+                for item in chunk.get('results',[]):
+                    key=json.dumps(item.get('strategy',{}),sort_keys=True,separators=(',',':'))
+                    if key not in known:
+                        passing.append(item); known.add(key)
+            else:
+                known={json.dumps(x.get('strategy',{}),sort_keys=True,separators=(',',':')) for x in near}
+                for item in chunk.get('results',[]):
+                    key=json.dumps(item.get('strategy',{}),sort_keys=True,separators=(',',':'))
+                    if key not in known:
+                        near.append(item); known.add(key)
+                def near_key(item):
+                    m=item.get('metrics',{})
+                    pf=m.get('profit_factor')
+                    return (float(item.get('distance',math.inf)),
+                            int(m.get('max_consecutive_losses',10**9)),
+                            -float(m.get('win_rate_pct',0)),
+                            -float(m.get('avg_net_tp_per_day',0)),
+                            -float(pf if pf is not None else 1e9))
+                near=sorted(near,key=near_key)[:5]
+            job.update({'status':'running','requested_candidates':req.candidates,
+                        'evaluated_candidates':completed,'completed_candidates':completed,
+                        'completed_batches':batch_index,'current_batch':batch_index+1,
+                        'unique_genomes_seen':len(seen),
+                        'checkpoint_passing_results':passing,
+                        'checkpoint_near_misses':near,
+                        'message':f'دستهٔ {batch_index} تکمیل شد؛ {completed:,} نامزد یکتا ارزیابی شد.'})
+            save_job(job_id,'strategy_search',job)
+            if actual==0 and batch_index>=max_attempts:
+                break
+        all_passing=bool(passing)
+        selected=passing if all_passing else near[:5]
+        train=split_reference_period(DATASETS[dataset_id])['train']
+        manifest={'dataset_id':dataset_id,
+                  'train_data_hash_sha256':hashlib.sha256(train.to_csv(index=False,float_format='%.12g').encode()).hexdigest(),
+                  'requested_candidates':req.candidates,'evaluated_unique_candidates':completed,
+                  'completed_batches':batch_index,'seed':req.seed,'algorithm':req.algorithm,
+                  'contract':selected[0].get('contract',{}) if selected else req.contract,
+                  'globally_deduplicated':True}
+        manifest_hash=hashlib.sha256(json.dumps(manifest,sort_keys=True,allow_nan=False).encode()).hexdigest()
+        search_id=uuid.uuid4().hex[:16]
+        final_result={'requested_candidates':req.candidates,'evaluated_candidates':completed,
+                      'unique_genomes_seen':len(seen),'completed_batches':batch_index,
+                      'failed_candidates':int(job.get('failed_candidates',0)),
+                      'seed':req.seed,'algorithm':req.algorithm,'contract':manifest['contract'],
+                      'all_passing':all_passing,'results':selected,
+                      'requested_near_misses':0 if all_passing else 5,
+                      'returned_near_misses':0 if all_passing else len(selected),
+                      'near_miss_shortfall':max(0,5-len(selected)) if not all_passing else 0,
+                      'search_id':search_id,'dataset_id':dataset_id,
+                      'search_manifest':manifest,'search_manifest_sha256':manifest_hash,
+                      'search_period':'2026-04-01 to 2026-07-01 UTC (TRAIN only)',
+                      'development_period':'2026-07-01 to 2026-08-01 UTC (not used in search)',
+                      'oos_period':'2026-08-01 to 2026-10-01 UTC (not used in search)',
+                      'selection_policy':'Candidates are globally deduplicated across batches and ranked on TRAIN only; OOS is not read for candidate selection.',
+                      'warning':('Completed all requested globally unique candidate evaluations; all reported passing candidates were independently replayed.' if completed>=req.candidates else
+                                 'INCOMPLETE SEARCH: candidate space/attempt limit prevented the requested unique evaluation count. Do not treat this as a completed 500k search.') }
+        save_search(search_id,dataset_id,manifest,final_result)
+        status='completed' if completed>=req.candidates else 'completed_with_shortfall'
+        job.update({'status':status,'message':'جست‌وجو پایان یافت.' if status=='completed' else 'جست‌وجو ناقص ماند؛ تعداد نامزد یکتای درخواستی تکمیل نشد.',
+                    'result':final_result,'evaluated_candidates':completed,'completed_candidates':completed,
+                    'requested_candidates':req.candidates,'unique_genomes_seen':len(seen),
+                    'checkpoint_passing_results':passing,'checkpoint_near_misses':near,
+                    'search_id':search_id})
+        save_job(job_id,'strategy_search',job)
     except Exception as exc:
         job.update({'status':'failed','message':f'جست‌وجو کامل نشد: {exc}','error':str(exc)})
-        save_job(job_id, 'strategy_search', job)
+        save_job(job_id,'strategy_search',job)
 
 @app.get('/api/search-history')
 def search_history(limit:int=Query(default=30,ge=1,le=200)):
