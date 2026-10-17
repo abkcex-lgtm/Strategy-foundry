@@ -34,6 +34,30 @@ def _backup_sqlite_database(source: Path, destination: Path) -> None:
         source_connection.close()
 
 
+def _database_has_records(path: Path) -> bool:
+    """Return True conservatively if a DB contains records or cannot be inspected."""
+    if not path.is_file():
+        return False
+    connection = None
+    try:
+        connection = sqlite3.connect(str(path), timeout=10)
+        tables = {row[0] for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()}
+        known = {"datasets", "runs", "profiles", "searches", "jobs", "job_genomes"}
+        if tables - known:
+            return True  # Unknown schema: never replace it automatically.
+        for table in tables:
+            if int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) > 0:
+                return True
+        return False
+    except Exception:
+        return True  # Fail closed: unreadable does not mean empty.
+    finally:
+        if connection is not None:
+            connection.close()
+
+
 def _choose_db_path(env=None, data_dir: Path = Path("/data"), project_root: Path | None = None):
     """Choose persistent storage and migrate the legacy local DB only when safe."""
     env = os.environ if env is None else env
@@ -47,6 +71,15 @@ def _choose_db_path(env=None, data_dir: Path = Path("/data"), project_root: Path
         destination = data_dir / "strategy_foundry.sqlite3"
         legacy = root / "data" / "foundry.sqlite3"
         if destination.exists():
+            if legacy.is_file() and not _database_has_records(destination) and _database_has_records(legacy):
+                try:
+                    # A prior deployment may have created an empty volume DB
+                    # before migration support existed. It is safe to replace
+                    # only when it has no user records and the legacy DB does.
+                    _backup_sqlite_database(legacy, destination)
+                    return destination, "migrated_legacy_into_empty_volume_database"
+                except Exception:
+                    return legacy, "migration_failed_using_legacy_fallback"
             return destination, "existing_volume_database"
         if legacy.is_file():
             try:
