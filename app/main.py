@@ -136,15 +136,15 @@ async def download_data(req:DownloadRequest):
     return {'job_id':job_id,'status':'queued','message':'درخواست دریافت در سرور ثبت شد؛ وضعیت را از مسیر پیگیری بررسی کنید.'}
 
 SEARCH_JOBS:dict[str,dict[str,Any]]={}
-# Restore visible job history after process restart. A running task cannot be resumed
-# yet; mark it interrupted rather than falsely reporting that it is still running.
+# Restore visible job history after process restart. In-flight batches are not resumed;
+# only atomically completed batches can be resumed from their persisted checkpoint.
 for _job_id, _job in load_jobs().items():
     if _job.get("kind") == "data_download":
         DOWNLOAD_JOBS[_job_id] = _job
     else:
         SEARCH_JOBS[_job_id] = _job
     if _job.get("status") in {"queued", "running"}:
-        _job.update({"status": "interrupted", "message": "سرور دوباره راه‌اندازی شد؛ وضعیت ذخیره شد اما این عملیات هنوز قابلیت ادامه از checkpoint ندارد."})
+        _job.update({"status": "interrupted", "message": "سرور دوباره راه‌اندازی شد؛ عملیات از آخرین دستهٔ کامل‌شده قابل ادامه است."})
         save_job(_job_id, _job.get("kind", "strategy_search"), _job)
 
 
