@@ -396,13 +396,25 @@ def backtest(frame, spec=None, contract=None):
     if len(df)<max(spec.slow,spec.atr_period)+3: raise DataIntegrityError("Not enough candles for warmup")
     data_hash=sha256_bytes(df.to_csv(index=False,float_format="%.12g").encode())
     x=indicators(df,spec); balance=float(cfg["initial_balance"]); ledger=[]; streak=0; max_streak=0
-    i=max(spec.slow,spec.atr_period)
-    while i < len(x)-1:
+    # Visit only actual signal candles instead of scanning every row in Python.
+    # Indicator calculations remain full-resolution and causal; this is a
+    # semantics-preserving execution optimization, not candle subsampling.
+    open_times=x["open_time"].to_numpy(dtype=np.int64)
+    open_values=x["open"].to_numpy(dtype=float)
+    high_values=x["high"].to_numpy(dtype=float)
+    low_values=x["low"].to_numpy(dtype=float)
+    signal_mask=x["long_signal"].to_numpy(dtype=bool) | x["short_signal"].to_numpy(dtype=bool)
+    signal_positions=np.flatnonzero(signal_mask)
+    warmup=max(spec.slow,spec.atr_period)
+    signal_positions=signal_positions[(signal_positions>=warmup)&(signal_positions<len(x)-1)]
+    signal_cursor=0
+    while signal_cursor < len(signal_positions):
+        i=int(signal_positions[signal_cursor]); signal_cursor+=1
         row=x.iloc[i]
-        if not np.isfinite(row.atr) or row.atr<=0: i+=1; continue
+        if not np.isfinite(row.atr) or row.atr<=0: continue
         side="LONG" if bool(row.long_signal) else ("SHORT" if bool(row.short_signal) else None)
-        if side is None or (spec.direction=="long" and side=="SHORT") or (spec.direction=="short" and side=="LONG"): i+=1; continue
-        entry_i=i+1; entry=float(x.iloc[entry_i].open); dist=float(row.atr*spec.stop_atr)
+        if side is None or (spec.direction=="long" and side=="SHORT") or (spec.direction=="short" and side=="LONG"): continue
+        entry_i=i+1; entry=float(open_values[entry_i]); dist=float(row.atr*spec.stop_atr)
         stop=entry-dist if side=="LONG" else entry+dist
         risk_budget=_risk_budget(cfg,balance if cfg["compound"] or cfg["risk_mode"]=="percent_equity" else cfg["initial_balance"])
         if risk_budget<=0 or risk_budget>=balance and cfg["risk_mode"]=="percent_equity": i+=1; continue
@@ -411,8 +423,7 @@ def backtest(frame, spec=None, contract=None):
         if qty<=0: i+=1; continue
         exit_i=exit_price=None; reason=None
         for j in range(entry_i,len(x)):
-            c=x.iloc[j]
-            resolution=_resolve_bar_exit(side,float(c.open),float(c.high),float(c.low),stop,target)
+            resolution=_resolve_bar_exit(side,float(open_values[j]),float(high_values[j]),float(low_values[j]),stop,target)
             if resolution is not None:
                 reason,exit_price=resolution; exit_i=j; break
         if exit_i is None: break
@@ -421,8 +432,8 @@ def backtest(frame, spec=None, contract=None):
         net=gross-entry_cost-exit_cost; balance+=net
         if reason=="TP": streak=0
         else: streak+=1; max_streak=max(max_streak,streak)
-        ledger.append({"trade_id":len(ledger)+1,"signal_time":int(row.open_time),"entry_time":int(x.iloc[entry_i].open_time),"exit_time":int(x.iloc[exit_i].open_time),"direction":side,"signal_price":float(row.close),"entry_price":entry,"stop_loss":stop,"take_profit":target,"exit_price":float(exit_price),"exit_reason":reason,"quantity":qty,"risk_budget":risk_budget,"gross_pnl":gross,"entry_cost":entry_cost,"exit_cost":exit_cost,"fees_slippage":entry_cost+exit_cost,"net_pnl":net,"balance_after":balance,"loss_streak_after":streak})
-        i=exit_i+1
+        ledger.append({"trade_id":len(ledger)+1,"signal_time":int(open_times[i]),"entry_time":int(open_times[entry_i]),"exit_time":int(open_times[exit_i]),"direction":side,"signal_price":float(row.close),"entry_price":entry,"stop_loss":stop,"take_profit":target,"exit_price":float(exit_price),"exit_reason":reason,"quantity":qty,"risk_budget":risk_budget,"gross_pnl":gross,"entry_cost":entry_cost,"exit_cost":exit_cost,"fees_slippage":entry_cost+exit_cost,"net_pnl":net,"balance_after":balance,"loss_streak_after":streak})
+        signal_cursor=int(np.searchsorted(signal_positions,exit_i+1,side="left"))
     wins=[t for t in ledger if t["exit_reason"]=="TP" and t["net_pnl"]>0]
     gp=sum(max(0,t["net_pnl"]) for t in ledger); gl=abs(sum(min(0,t["net_pnl"]) for t in ledger))
     span_days=max((int(df.open_time.iloc[-1])-int(df.open_time.iloc[0]))/86400000,1/1440)
