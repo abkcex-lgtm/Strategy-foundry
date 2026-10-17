@@ -224,4 +224,9 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None):
     results.sort(key=lambda r:(not r["metrics"]["passes_all_targets"],r["distance"],r["metrics"]["max_consecutive_losses"],-r["metrics"]["win_rate_pct"],-r["metrics"]["avg_net_tp_per_day"],-(r["metrics"]["profit_factor"] or 0)))
     passing=[r for r in results if r["metrics"]["passes_all_targets"]]
     selected=passing if passing else results[:5]
-    return {"requested_candidates":max_candidates,"evaluated_candidates":len(results),"failed_candidates":errors,"seed":seed,"contract":cfg,"all_passing":bool(passing),"results":selected,"warning":"Bounded random search only; run on TRAIN data. No 500k+ or OOS certification."}
+    near_miss_shortfall=max(0,5-len(selected)) if not passing else 0
+    return {"requested_candidates":max_candidates,"evaluated_candidates":len(results),"failed_candidates":errors,
+            "seed":seed,"contract":cfg,"all_passing":bool(passing),"results":selected,
+            "requested_near_misses":0 if passing else 5,"returned_near_misses":0 if passing else len(selected),
+            "near_miss_shortfall":near_miss_shortfall,
+            "warning":"Bounded random search only; ranked on TRAIN to preserve untouched OOS. No 500k+ or OOS certification."}
