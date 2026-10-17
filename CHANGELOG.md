@@ -1,5 +1,12 @@
 # Changelog
 
+## V0.7.1 — 2026-10-17
+
+- Added a UI recovery panel for queued/running/interrupted/failed background jobs and a resume-from-checkpoint flow.
+- Enabled the 500,000-candidate input and longer polling window in the frontend; the server still executes bounded 10,000-candidate batches.
+- Runtime validation of a complete 500k search remains outstanding.
+
+
 ## V0.7.0 — 2026-10-17
 
 - Added composite strategy genomes that combine two distinct entry families with AND/OR/XOR logic; genetic crossover/mutation and the ExtraTrees active-learning feature vector now include structural composition.
