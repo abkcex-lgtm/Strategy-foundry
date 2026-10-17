@@ -83,9 +83,10 @@ def test_unsupported_addon_fails_closed():
     with pytest.raises(ValueError,match='not implemented'):
         normalize_contract({'trailing_stop_enabled':True})
 
-def test_independent_engine_matches_primary_ledger():
-    df=candles()
-    spec=StrategySpec(fast=5,slow=18,atr_period=7,stop_atr=1.5)
+@pytest.mark.parametrize("family", ["ema_crossover", "channel_breakout", "rsi_reversion", "volume_breakout"])
+def test_independent_engine_matches_primary_ledger(family):
+    df=candles(800)
+    spec=StrategySpec(fast=5,slow=18,atr_period=7,stop_atr=1.5,family=family)
     cfg=normalize_contract({'risk_usd':10,'reward_risk':2.0})
     try:
         primary=backtest(df,spec,cfg)
