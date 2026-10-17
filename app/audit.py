@@ -8,7 +8,7 @@ import pandas as pd
 FIELDS = ("trade_id","signal_time","entry_time","exit_time","direction","signal_price",
           "entry_price","stop_loss","take_profit","exit_price","exit_reason","quantity",
           "risk_budget","gross_pnl","entry_cost","exit_cost","fees_slippage","net_pnl",
-          "balance_after","loss_streak_after")
+          "balance_after","loss_streak_after","resolution_status","execution_ambiguity")
 
 def _independent_signals(d: pd.DataFrame, spec: dict[str, Any]):
     close=d["close"].astype(float); prev=close.shift(1)
@@ -280,8 +280,8 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
         for c in required: exec_df[c]=pd.to_numeric(exec_df[c],errors="coerce")
         if exec_df[required].isna().any().any() or exec_df.open_time.duplicated().any() or not exec_df.open_time.is_monotonic_increasing:
             raise ValueError("Invalid execution data")
-        if len(exec_df)>1 and not (exec_df.open_time.diff().dropna()==1000).all():
-            raise ValueError("Gaps in 1-second execution data")
+        # Gaps are evaluated per held-trade interval so they can be conservatively
+        # recorded as losses instead of aborting the entire replay.
         if base_interval is None or base_interval % 1000:
             raise ValueError("Base interval cannot be resolved with 1-second data")
     close=d["close"].astype(float)
@@ -308,17 +308,25 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
             reward=risk*float(cfg["reward_risk"])
             target=(entry*(1+rate)+reward/qty)/(1-rate) if side=="LONG" else (entry*(1-rate)-reward/qty)/(1+rate)
         if target<=0: i+=1; continue
-        ex=None; px=None; reason=None; exit_time=None
+        ex=None; px=None; reason=None; exit_time=None; resolution_status="resolved_base_ohlc"
         for j in range(ei,len(d)):
             if exec_df is not None:
-                resolution=_resolve_execution_interval_independent(side,exec_df,int(d.open_time.iloc[j]),base_interval,stop,target)
+                try:
+                    resolution=_resolve_execution_interval_independent(side,exec_df,int(d.open_time.iloc[j]),base_interval,stop,target)
+                except ValueError:
+                    reason,px,exit_time="SL_UNRESOLVED",stop,int(d.open_time.iloc[j])
+                    ex=j; resolution_status="unresolved_as_loss"; break
                 if resolution is not None:
-                    reason,px,exit_time=resolution; ex=j; break
+                    reason,px,exit_time=resolution; ex=j; resolution_status="resolved_1s_ohlc"; break
             else:
                 bar=d.iloc[j]
-                resolution=_resolve_bar_exit_independent(side,float(bar.open),float(bar.high),float(bar.low),stop,target)
+                try:
+                    resolution=_resolve_bar_exit_independent(side,float(bar.open),float(bar.high),float(bar.low),stop,target)
+                except ValueError:
+                    reason,px,exit_time="SL_UNRESOLVED",stop,int(d.open_time.iloc[j])
+                    ex=j; resolution_status="unresolved_as_loss"; break
                 if resolution is not None:
-                    reason,px=resolution; ex=j; exit_time=int(d.open_time.iloc[j]); break
+                    reason,px=resolution; ex=j; exit_time=int(d.open_time.iloc[j]); resolution_status="resolved_base_ohlc"; break
         if ex is None: break
         gross=(px-entry)*qty*(1 if side=="LONG" else -1)
         ec=entry*qty*rate; xc=px*qty*rate; net=gross-ec-xc; balance+=net
@@ -328,6 +336,6 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
           "exit_time":int(exit_time),"direction":side,"signal_price":float(close.iloc[i]),"entry_price":entry,
           "stop_loss":stop,"take_profit":target,"exit_price":float(px),"exit_reason":reason,"quantity":qty,"risk_budget":risk,
           "gross_pnl":gross,"entry_cost":ec,"exit_cost":xc,"fees_slippage":ec+xc,"net_pnl":net,
-          "balance_after":balance,"loss_streak_after":streak})
+          "balance_after":balance,"loss_streak_after":streak,"resolution_status":resolution_status,"execution_ambiguity":resolution_status=="unresolved_as_loss"})
         i=ex+1
     return {"ledger":ledger,"max_consecutive_losses":max_streak}
