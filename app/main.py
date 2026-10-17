@@ -283,9 +283,11 @@ def run_chart(run_id:str,offset:int=Query(default=0,ge=0),limit:int=Query(defaul
     if df is None: raise HTTPException(409,'دادهٔ اصلی در دسترس نیست.')
     part=df.iloc[offset:offset+limit]
     candles=part[['open_time','open','high','low','close','volume']].to_dict(orient='records')
-    times={int(c['open_time']) for c in candles}
-    markers=[{k:t.get(k) for k in ('trade_id','signal_time','entry_time','exit_time','direction','entry_price','stop_loss','take_profit','exit_price','exit_reason','net_pnl')}
-             for t in r['ledger'] if int(t['entry_time']) in times or int(t['exit_time']) in times]
+    if candles:
+        window_start=int(candles[0]['open_time']); window_end=int(candles[-1]['open_time'])
+        markers=[{k:t.get(k) for k in ('trade_id','signal_time','entry_time','exit_time','direction','entry_price','stop_loss','take_profit','exit_price','exit_reason','net_pnl')}
+                 for t in r['ledger'] if int(t['entry_time'])<=window_end and int(t['exit_time'])>=window_start]
+    else: markers=[]
     return {'run_id':run_id,'offset':offset,'total_rows':len(df),'candles':candles,'trades':markers}
 
 @app.get('/api/runs/{run_id}/ledger.csv')
