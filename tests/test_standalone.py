@@ -40,7 +40,7 @@ def test_standalone_replay_matches_factory_for_each_family(family):
     source = source.replace("__CONTRACT__", repr(expected["contract"]))
     source = source.replace("__DATA_HASH__", expected["metrics"]["data_hash_sha256"])
     source = source.replace("__RUN_HASH__", expected["run_hash_sha256"])
-    namespace = {}
+    namespace = {"__name__": "standalone_replay"}
     exec(compile(source, "standalone_replay.py", "exec"), namespace)
     actual = namespace["replay"](frame)
 
