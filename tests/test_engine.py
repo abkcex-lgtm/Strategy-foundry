@@ -310,3 +310,58 @@ def test_search_returns_exactly_five_audited_near_misses_when_no_candidate_passe
     assert len(result["results"]) == 5
     assert result["near_miss_shortfall"] == 0
     assert all(item.get("independent_audit", {}).get("status") == "MATCH" for item in result["results"])
+
+
+def test_fixed_risk_backtest_stops_before_equity_falls_below_risk_budget(monkeypatch):
+    import app.engine as engine
+
+    df = candles(300)
+    spec = StrategySpec(fast=2, slow=3, atr_period=2, stop_atr=1.0)
+
+    def always_long(frame, _spec):
+        x = frame.copy()
+        x["atr"] = 1.0
+        x["long_signal"] = True
+        x["short_signal"] = False
+        return x
+
+    monkeypatch.setattr(engine, "indicators", always_long)
+    monkeypatch.setattr(engine, "_resolve_bar_exit",
+                        lambda side, bar_open, bar_high, bar_low, stop, target: ("SL", stop))
+    cfg = normalize_contract({
+        "initial_balance": 1000.0, "risk_mode": "fixed_usd", "risk_usd": 10.0,
+        "commission_pct_per_side": 0.0, "slippage_pct_per_side": 0.0,
+    })
+    result = backtest(df, spec, cfg)
+
+    assert len(result["ledger"]) == 99
+    assert result["metrics"]["final_balance"] == pytest.approx(10.0)
+    assert result["metrics"]["net_pnl"] == pytest.approx(-990.0)
+    assert result["metrics"]["final_balance"] >= 0.0
+
+
+def test_independent_replay_stops_before_equity_falls_below_risk_budget(monkeypatch):
+    import app.audit as audit
+
+    df = candles(300)
+    spec = StrategySpec(fast=2, slow=3, atr_period=2, stop_atr=1.0)
+    monkeypatch.setattr(
+        audit, "_independent_signals",
+        lambda d, s: (
+            pd.Series(True, index=d.index), pd.Series(False, index=d.index),
+            pd.Series(1.0, index=d.index), int(s["fast"]), int(s["slow"]), int(s["atr_period"])
+        ),
+    )
+    monkeypatch.setattr(
+        audit, "_resolve_bar_exit_independent",
+        lambda side, bar_open, bar_high, bar_low, stop, target: ("SL", stop),
+    )
+    cfg = normalize_contract({
+        "initial_balance": 1000.0, "risk_mode": "fixed_usd", "risk_usd": 10.0,
+        "commission_pct_per_side": 0.0, "slippage_pct_per_side": 0.0,
+    })
+    result = independent_replay(df, spec.__dict__, cfg)
+
+    assert len(result["ledger"]) == 99
+    assert result["ledger"][-1]["balance_after"] == pytest.approx(10.0)
+    assert result["ledger"][-1]["balance_after"] >= 0.0
