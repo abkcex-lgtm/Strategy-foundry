@@ -88,7 +88,7 @@ class StrategySpec:
         if not (2 <= self.atr_period <= 200): raise ValueError("atr_period must be 2..200")
         if not (0.2 <= self.stop_atr <= 10): raise ValueError("stop_atr must be 0.2..10")
         if self.direction not in {"both","long","short"}: raise ValueError("Invalid direction")
-        if self.family not in {"ema_crossover","channel_breakout","rsi_reversion","volume_breakout"}:
+        if self.family not in {"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout"}:
             raise ValueError("Unsupported strategy family")
 
 def indicators(df, spec):
@@ -117,6 +117,35 @@ def indicators(df, spec):
         rsi=100-100/(1+rs)
         long_signal=(rsi.shift(1)<=30)&(rsi>30)
         short_signal=(rsi.shift(1)>=70)&(rsi<70)
+    elif spec.family=="ema_pullback":
+        trend_up=x.ema_fast>x.ema_slow; trend_down=x.ema_fast<x.ema_slow
+        long_signal=trend_up&(c> x.ema_fast)&(c.shift(1)<=x.ema_fast.shift(1))
+        short_signal=trend_down&(c< x.ema_fast)&(c.shift(1)>=x.ema_fast.shift(1))
+    elif spec.family=="macd_crossover":
+        macd=c.ewm(span=spec.fast,adjust=False,min_periods=spec.fast).mean()-c.ewm(span=spec.slow,adjust=False,min_periods=spec.slow).mean()
+        signal=macd.ewm(span=max(2,spec.fast//2),adjust=False,min_periods=max(2,spec.fast//2)).mean()
+        long_signal=(macd>signal)&(macd.shift(1)<=signal.shift(1))
+        short_signal=(macd<signal)&(macd.shift(1)>=signal.shift(1))
+    elif spec.family=="bollinger_reversion":
+        mid=c.rolling(spec.slow,min_periods=spec.slow).mean(); dev=c.rolling(spec.slow,min_periods=spec.slow).std(ddof=0)
+        upper=mid+2*dev; lower=mid-2*dev
+        long_signal=(c>lower)&(c.shift(1)<=lower.shift(1))
+        short_signal=(c<upper)&(c.shift(1)>=upper.shift(1))
+    elif spec.family=="inside_bar_breakout":
+        inside=(x.high.shift(1)<x.high.shift(2))&(x.low.shift(1)>x.low.shift(2))
+        long_signal=inside&(c>x.high.shift(1))&(c.shift(1)<=x.high.shift(1))
+        short_signal=inside&(c<x.low.shift(1))&(c.shift(1)>=x.low.shift(1))
+    elif spec.family=="engulfing_reversal":
+        prev_open=x.open.shift(1); prev_close=c.shift(1)
+        bullish=(c>x.open)&(prev_close<prev_open)&(x.open<=prev_close)&(c>=prev_open)
+        bearish=(c<x.open)&(prev_close>prev_open)&(x.open>=prev_close)&(c<=prev_open)
+        long_signal=bullish; short_signal=bearish
+    elif spec.family=="momentum_breakout":
+        momentum=c>c.shift(spec.fast); negative=c<c.shift(spec.fast)
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        long_signal=momentum&(c>upper)&(c.shift(1)<=upper.shift(1))
+        short_signal=negative&(c<lower)&(c.shift(1)>=lower.shift(1))
     x["long_signal"]=long_signal.fillna(False)
     x["short_signal"]=short_signal.fillna(False)
     return x
@@ -199,21 +228,17 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None):
     if not 1<=max_candidates<=10000: raise ValueError("max_candidates must be 1..10000 in this starter API")
     cfg=normalize_contract(contract)
     rng=np.random.default_rng(seed); results=[]; errors=0
-    families=("ema_crossover","channel_breakout","rsi_reversion","volume_breakout")
+    families=("ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout")
+    names={"ema_crossover":"EMA crossover","channel_breakout":"Price channel breakout","rsi_reversion":"RSI reversion","volume_breakout":"Volume-confirmed breakout","ema_pullback":"EMA trend pullback","macd_crossover":"MACD crossover","bollinger_reversion":"Bollinger mean reversion","inside_bar_breakout":"Inside-bar breakout","engulfing_reversal":"Engulfing candle reversal","momentum_breakout":"Momentum-confirmed breakout"}
     for _ in range(max_candidates):
         family=str(rng.choice(families))
-        if family=="ema_crossover":
-            fast=int(rng.integers(4,40)); slow=int(rng.integers(max(fast+2,20),121))
-            name_prefix="EMA crossover"
-        elif family=="channel_breakout":
-            slow=int(rng.integers(20,121)); fast=min(9,slow-2)
-            name_prefix="Price channel breakout"
-        elif family=="rsi_reversion":
-            fast=int(rng.integers(4,40)); slow=fast+2
-            name_prefix="RSI reversion"
-        else:
-            fast=int(rng.integers(4,40)); slow=int(rng.integers(max(fast+2,20),121))
-            name_prefix="Volume-confirmed breakout"
+        fast=int(rng.integers(4,40))
+        slow=int(rng.integers(max(fast+2,20),121))
+        if family=="channel_breakout": fast=min(9,slow-2)
+        elif family=="rsi_reversion": slow=fast+2
+        elif family=="inside_bar_breakout": fast=5; slow=max(20,slow)
+        elif family=="engulfing_reversal": fast=9; slow=max(20,slow)
+        name_prefix=names[family]
         period=int(rng.integers(7,31)); mult=float(rng.choice([0.8,1.0,1.2,1.5,2.0,2.5]))
         spec=StrategySpec(f"{name_prefix} {fast}/{slow} ATR {period}x{mult:g}",fast,slow,period,mult,"both",seed,family)
         try:
