@@ -209,6 +209,30 @@ def test_surrogate_genetic_search_fits_ml_model(monkeypatch):
     assert "ExtraTrees" in result["warning"]
 
 
+@pytest.mark.parametrize("operation", ["and", "or", "xor"])
+def test_composite_family_signals_match_independent_replay(operation):
+    df = candles(900)
+    spec = StrategySpec(fast=5, slow=18, atr_period=7, stop_atr=1.5,
+                        family="wick_rejection", secondary_family="channel_breakout",
+                        signal_composition=operation)
+    signals = indicators(df, spec)
+    assert signals["long_signal"].dtype == bool
+    assert signals["short_signal"].dtype == bool
+    try:
+        primary = backtest(df, spec, normalize_contract({"reward_risk": 2.0}))
+        independent = independent_replay(df, primary["strategy"], primary["contract"])
+    except DataIntegrityError as exc:
+        if "ambiguity" in str(exc).lower():
+            pytest.skip("Synthetic path triggered conservative ambiguity guard")
+        raise
+    assert len(primary["ledger"]) == len(independent["ledger"])
+    for a, b in zip(primary["ledger"], independent["ledger"]):
+        assert a["entry_time"] == b["entry_time"]
+        assert a["exit_time"] == b["exit_time"]
+        assert a["direction"] == b["direction"]
+        assert a["net_pnl"] == pytest.approx(b["net_pnl"], rel=1e-10, abs=1e-8)
+
+
 def test_global_genome_fingerprints_exclude_candidates_across_batches():
     from app.engine import search_candidates
     df = candles(450)
