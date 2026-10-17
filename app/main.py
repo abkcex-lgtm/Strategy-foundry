@@ -23,7 +23,7 @@ def _period_label(frame:pd.DataFrame, note:str='') -> str:
     suffix=f' ({note})' if note else ''
     return f'{first} to {last}{suffix}'
 
-app=FastAPI(title='Strategy Foundry API',version='0.9.0',description='Server-side strategy research and simulation only; never sends live orders.')
+app=FastAPI(title='Strategy Foundry API',version='0.9.1',description='Server-side strategy research and simulation only; never sends live orders.')
 app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')
 DATASETS:dict[str,pd.DataFrame]=load_datasets()
 DATASET_METADATA:dict[str,dict[str,Any]]=load_dataset_metadata()
@@ -57,7 +57,7 @@ class AIChatRequest(BaseModel):
 @app.get('/',response_class=HTMLResponse)
 def home(): return (ROOT/'static'/'index.html').read_text(encoding='utf-8')
 @app.get('/api/health')
-def health(): return {'status':'ok','service':'strategy-foundry','version':'0.9.0','execution':'server-side','live_trading':False,'persistent_store':'sqlite','storage':storage_status(),'loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'persistent_search_history':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','search_history_endpoint':'/api/search-history','persistent_job_status':True,'batch_search_max_candidates':500000,'global_genome_deduplication':True,'batch_checkpoint_resume':True,'question_first_assistant_routing':True,'conservative_unresolved_execution_loss':True}}
+def health(): return {'status':'ok','service':'strategy-foundry','version':'0.9.1','execution':'server-side','live_trading':False,'persistent_store':'sqlite','storage':storage_status(),'loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'persistent_search_history':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','search_history_endpoint':'/api/search-history','persistent_job_status':True,'batch_search_max_candidates':500000,'global_genome_deduplication':True,'batch_checkpoint_resume':True,'question_first_assistant_routing':True,'conservative_unresolved_execution_loss':True}}
 @app.get('/api/contract')
 def contract():
     from .engine import normalize_contract
