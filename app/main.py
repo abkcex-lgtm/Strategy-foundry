@@ -1,5 +1,5 @@
 from __future__ import annotations
-import io,csv,hashlib,math
+import asyncio,io,csv,hashlib,math,uuid
 from pathlib import Path
 from typing import Any
 import pandas as pd
@@ -90,24 +90,51 @@ async def upload_csv(file:UploadFile=File(...)):
         key=str(report['rows'])+'-'+str(int(df.open_time.iloc[0]))+'-'+hashlib.sha256(raw).hexdigest()[:8]
         DATASETS[key]=df; save_dataset(key,df,{'source':'user_csv','sha256_csv':hashlib.sha256(raw).hexdigest()})
         return {'dataset_id':key,'report':report,'sha256_csv':hashlib.sha256(raw).hexdigest()}
-    except Exception as exc: raise HTTPException(422,f'بررسی داده رد شد: {exc}') from exc
+    except Exception as exc: raise HTTPException(422,f'بررسی داده رد شد: {exc}DOWNLOAD_JOBS:dict[str,dict[str,Any]]={}
+
+async def _run_download_job(job_id:str,req:DownloadRequest):
+    job=DOWNLOAD_JOBS[job_id]
+    job.update({'status':'running','message':'در حال اتصال به آرشیو رسمی Binance','completed_months':0,'total_months':(req.end_year*12+req.end_month-1)-(req.start_year*12+req.start_month-1)+1,'rows_downloaded':0})
+    try:
+        start=req.start_year*12+req.start_month-1
+        end=req.end_year*12+req.end_month-1
+        chunks=[]; hashes=[]
+        for idx in range(start,end+1):
+            year,month=idx//12,idx%12+1
+            job.update({'message':f'دریافت و بررسی {year}-{month:02d}','current_month':f'{year}-{month:02d}'})
+            df,h,url=await download_binance_month(req.symbol,req.interval,year,month)
+            chunks.append(df); hashes.append({'sha256':h,'url':url})
+            job.update({'completed_months':len(chunks),'rows_downloaded':sum(len(part) for part in chunks)})
+        merged=pd.concat(chunks,ignore_index=True).sort_values('open_time').reset_index(drop=True)
+        job.update({'message':'اعتبارسنجی نهایی ترتیب زمانی، شکاف‌ها و OHLCV'})
+        report=validate_ohlcv(merged,60000 if req.interval=='1m' else None,strict_gaps=(req.interval=='1m'))
+        key=f'{req.symbol.upper()}-{req.interval}-{req.start_year}{req.start_month:02d}-{req.end_year}{req.end_month:02d}'
+        metadata={'source':'binance_vision','symbol':req.symbol.upper(),'interval':req.interval,'monthly_archive_hashes':hashes}
+        save_dataset(key,merged,metadata)
+        DATASETS[key]=merged
+        result={'dataset_id':key,'symbol':req.symbol.upper(),'interval':req.interval,'report':report,'monthly_archive_hashes':hashes,'rows':len(merged),'splits':{k:len(v) for k,v in split_reference_period(merged).items()}}
+        job.update({'status':'completed','message':'داده دریافت، اعتبارسنجی و ذخیره شد','result':result,'rows_downloaded':len(merged),'completed_months':job['total_months']})
+    except Exception as exc:
+        job.update({'status':'failed','message':f'دریافت/اعتبارسنجی کامل نشد؛ بک‌تست شروع نشد: {exc}','error':str(exc)})
 
 @app.post('/api/data/binance')
 async def download_data(req:DownloadRequest):
     if req.interval not in {'1m','3m','5m','15m','30m','1h','2h','4h','1d'}: raise HTTPException(400,'بازهٔ زمانی پشتیبانی‌نشده')
     if not req.symbol.isalnum() or not 1<=req.start_month<=12 or not 1<=req.end_month<=12: raise HTTPException(400,'نماد یا ماه نامعتبر است.')
     start=req.start_year*12+req.start_month-1; end=req.end_year*12+req.end_month-1
-    if end<start or end-start>24: raise HTTPException(400,'بازهٔ ماه‌ها نامعتبر است یا بیش از 25 ماه است.')
-    chunks=[]; hashes=[]
-    try:
-        for idx in range(start,end+1):
-            df,h,url=await download_binance_month(req.symbol,req.interval,idx//12,idx%12+1); chunks.append(df); hashes.append({'sha256':h,'url':url})
-        merged=pd.concat(chunks,ignore_index=True).sort_values('open_time').reset_index(drop=True)
-        report=validate_ohlcv(merged,60000 if req.interval=='1m' else None,strict_gaps=(req.interval=='1m'))
-        key=f'{req.symbol.upper()}-{req.interval}-{req.start_year}{req.start_month:02d}-{req.end_year}{req.end_month:02d}'
-        DATASETS[key]=merged; save_dataset(key,merged,{'source':'binance_vision','symbol':req.symbol.upper(),'interval':req.interval,'monthly_archive_hashes':hashes})
-        return {'dataset_id':key,'symbol':req.symbol.upper(),'interval':req.interval,'report':report,'monthly_archive_hashes':hashes,'rows':len(merged),'splits':{k:len(v) for k,v in split_reference_period(merged).items()}}
-    except Exception as exc: raise HTTPException(422,f'دریافت/اعتبارسنجی کامل نشد؛ بک‌تست شروع نشد: {exc}') from exc
+    if req.start_year<2017 or req.end_year<2017 or end<start or end-start>24: raise HTTPException(400,'بازهٔ ماه‌ها نامعتبر است یا بیش از 25 ماه است.')
+    job_id=uuid.uuid4().hex
+    DOWNLOAD_JOBS[job_id]={'job_id':job_id,'status':'queued','message':'درخواست در صف دریافت قرار گرفت','completed_months':0,'total_months':end-start+1,'rows_downloaded':0}
+    asyncio.create_task(_run_download_job(job_id,req))
+    return {'job_id':job_id,'status':'queued','message':'درخواست دریافت در سرور ثبت شد؛ وضعیت را از مسیر پیگیری بررسی کنید.'}
+
+@app.get('/api/jobs/{job_id}')
+def get_job(job_id:str):
+    job=DOWNLOAD_JOBS.get(job_id)
+    if job is None: raise HTTPException(404,'شناسهٔ عملیات پیدا نشد؛ ممکن است سرور پس از شروع مجدد حافظهٔ عملیات را پاک کرده باشد.')
+    return job
+
+') from exc
 
 @app.get('/api/datasets')
 def datasets():
