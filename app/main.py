@@ -10,7 +10,7 @@ from pydantic import BaseModel,Field
 from .engine import backtest,search_candidates
 from .audit import independent_replay, FIELDS
 from .data import download_binance_month,validate_ohlcv,split_reference_period
-from .persistence import load_datasets,load_dataset_metadata,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles
+from .persistence import load_datasets,load_dataset_metadata,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles,save_search,list_search_history,load_search_result
 
 ROOT=Path(__file__).resolve().parent
 app=FastAPI(title='Strategy Foundry API',version='0.3.0',description='Server-side strategy research and simulation only; never sends live orders.')
@@ -45,7 +45,7 @@ class AIChatRequest(BaseModel):
 @app.get('/',response_class=HTMLResponse)
 def home(): return (ROOT/'static'/'index.html').read_text(encoding='utf-8')
 @app.get('/api/health')
-def health(): return {'status':'ok','service':'strategy-foundry','version':'0.3.0','execution':'server-side','live_trading':False,'persistent_store':'sqlite','loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','question_first_assistant_routing':True}}
+def health(): return {'status':'ok','service':'strategy-foundry','version':'0.3.0','execution':'server-side','live_trading':False,'persistent_store':'sqlite','loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'persistent_search_history':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','search_history_endpoint':'/api/search-history','question_first_assistant_routing':True}}
 @app.get('/api/contract')
 def contract():
     from .engine import normalize_contract
@@ -181,10 +181,15 @@ def _perform_search(dataset_id:str,req:SearchRequest):
     splits=split_reference_period(df); train=splits['train']
     if len(train)<100: raise ValueError('دادهٔ Train برای بازهٔ Apr-Jun 2026 کافی نیست؛ جست‌وجو آغاز نشد.')
     result=search_candidates(train,req.candidates,req.seed,req.contract)
-    result.update({'dataset_id':dataset_id,'search_period':'2026-04-01 to 2026-07-01 UTC (TRAIN only)',
+    manifest={'dataset_id':dataset_id,'train_data_hash_sha256':hashlib.sha256(train.to_csv(index=False,float_format='%.12g').encode()).hexdigest(),
+              'candidates':req.candidates,'seed':req.seed,'contract':result.get('contract',{})}
+    search_id=hashlib.sha256(json.dumps(manifest,sort_keys=True,allow_nan=False).encode()).hexdigest()[:16]
+    result.update({'dataset_id':dataset_id,'search_id':search_id,'search_manifest':manifest,
+      'search_period':'2026-04-01 to 2026-07-01 UTC (TRAIN only)',
       'development_period':'2026-07-01 to 2026-08-01 UTC (not used in search)',
       'oos_period':'2026-08-01 to 2026-10-01 UTC (not used in search)',
       'selection_policy':'Candidates are searched and ranked on TRAIN only. OOS is not read for candidate selection.'})
+    save_search(search_id,dataset_id,manifest,result)
     return result
 
 @app.post('/api/search/{dataset_id}')
@@ -205,6 +210,16 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
                     'requested_candidates':result.get('requested_candidates',req.candidates)})
     except Exception as exc:
         job.update({'status':'failed','message':f'جست‌وجو کامل نشد: {exc}','error':str(exc)})
+
+@app.get('/api/search-history')
+def search_history(limit:int=Query(default=30,ge=1,le=200)):
+    return list_search_history(limit)
+
+@app.get('/api/search-history/{search_id}')
+def get_search_history_item(search_id:str):
+    result=load_search_result(search_id)
+    if result is None: raise HTTPException(404,'جست‌وجوی ذخیره‌شده پیدا نشد.')
+    return result
 
 @app.post('/api/search-jobs/{dataset_id}')
 async def start_search_job(dataset_id:str,req:SearchRequest):
