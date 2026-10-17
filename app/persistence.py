@@ -19,7 +19,86 @@ def _resolve_db_path(env=None, data_dir: Path = Path("/data"), project_root: Pat
     root = project_root if project_root is not None else Path(__file__).resolve().parent.parent
     return root / "data" / "foundry.sqlite3"
 
-DB_PATH = _resolve_db_path()
+def _backup_sqlite_database(source: Path, destination: Path) -> None:
+    """Use SQLite's backup API so committed data in WAL mode is copied safely."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    source_connection = sqlite3.connect(str(source), timeout=30)
+    destination_connection = sqlite3.connect(str(destination), timeout=30)
+    try:
+        source_connection.backup(destination_connection)
+        result = destination_connection.execute("PRAGMA quick_check").fetchone()
+        if not result or str(result[0]) != "ok":
+            raise sqlite3.DatabaseError("Migrated database failed SQLite quick_check")
+    finally:
+        destination_connection.close()
+        source_connection.close()
+
+
+def _database_has_records(path: Path) -> bool:
+    """Return True conservatively if a DB contains records or cannot be inspected."""
+    if not path.is_file():
+        return False
+    connection = None
+    try:
+        connection = sqlite3.connect(str(path), timeout=10)
+        tables = {row[0] for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()}
+        known = {"datasets", "runs", "profiles", "searches", "jobs", "job_genomes"}
+        if tables - known:
+            return True  # Unknown schema: never replace it automatically.
+        for table in tables:
+            if int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) > 0:
+                return True
+        return False
+    except Exception:
+        return True  # Fail closed: unreadable does not mean empty.
+    finally:
+        if connection is not None:
+            connection.close()
+
+
+def _choose_db_path(env=None, data_dir: Path = Path("/data"), project_root: Path | None = None):
+    """Choose persistent storage and migrate the legacy local DB only when safe."""
+    env = os.environ if env is None else env
+    configured = env.get("FOUNDRY_DB_PATH")
+    if configured:
+        return Path(configured), "explicit_path"
+    if env.get("VERCEL"):
+        return Path("/tmp/strategy_foundry.sqlite3"), "ephemeral_tmp"
+    root = project_root if project_root is not None else Path(__file__).resolve().parent.parent
+    if data_dir.is_dir():
+        destination = data_dir / "strategy_foundry.sqlite3"
+        legacy = root / "data" / "foundry.sqlite3"
+        if destination.exists():
+            if legacy.is_file() and not _database_has_records(destination) and _database_has_records(legacy):
+                try:
+                    # A prior deployment may have created an empty volume DB
+                    # before migration support existed. It is safe to replace
+                    # only when it has no user records and the legacy DB does.
+                    _backup_sqlite_database(legacy, destination)
+                    return destination, "migrated_legacy_into_empty_volume_database"
+                except Exception:
+                    return legacy, "migration_failed_using_legacy_fallback"
+            return destination, "existing_volume_database"
+        if legacy.is_file():
+            try:
+                _backup_sqlite_database(legacy, destination)
+                return destination, "migrated_legacy_database"
+            except Exception:
+                # Never hide the old, readable database behind a newly-created
+                # empty/corrupt volume DB if migration fails.
+                for suffix in ("", "-wal", "-shm"):
+                    try:
+                        Path(str(destination) + suffix).unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                return legacy, "migration_failed_using_legacy_fallback"
+        return destination, "new_volume_database"
+    return root / "data" / "foundry.sqlite3", "local_fallback"
+
+
+DB_PATH, DB_MIGRATION_STATUS = _choose_db_path()
 
 
 def storage_status() -> dict[str, Any]:
@@ -42,6 +121,7 @@ def storage_status() -> dict[str, Any]:
             "storage_mode": mode,
             "database_ready": integrity == "ok",
             "integrity_check": integrity,
+            "migration_status": DB_MIGRATION_STATUS,
         }
     except Exception:
         return {
@@ -49,6 +129,7 @@ def storage_status() -> dict[str, Any]:
             "storage_mode": mode,
             "database_ready": False,
             "integrity_check": "failed",
+            "migration_status": DB_MIGRATION_STATUS,
         }
     finally:
         if connection is not None:
