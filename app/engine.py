@@ -578,7 +578,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 if rng.random()<0.25: context_filter=str(rng.choice(context_filters))
                 if rng.random()<0.20: confirmation_filter=str(rng.choice(confirmation_filters))
                 spec=make_spec(genes=(family,fast,slow,period,stop,direction,context_filter,confirmation_filter))
-        if algorithm=="surrogate_genetic" and len(evaluated)>=32 and (last_model_fit_at<0 or len(evaluated)-last_model_fit_at>=64):
+        if algorithm=="surrogate_genetic" and len(evaluated)>=32 and (last_model_fit_at<0 or len(evaluated)-last_model_fit_at>=256):
             try:
                 from sklearn.ensemble import ExtraTreesRegressor
                 training_rows=list(evaluated.values())
@@ -587,13 +587,13 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 for training_row in training_rows:
                     training_spec=StrategySpec(**training_row["strategy"])
                     X.append(feature_vector(training_spec)); y.append(surrogate_target(training_row))
-                model=ExtraTreesRegressor(n_estimators=96,min_samples_leaf=2,max_features=0.9,
+                model=ExtraTreesRegressor(n_estimators=64,min_samples_leaf=2,max_features=0.9,
                                           random_state=int(seed+len(evaluated)),n_jobs=1)
                 model.fit(np.asarray(X,dtype=float),np.asarray(y,dtype=float))
                 # Active-learning proposal pool: exploit low predicted loss, explore
                 # model disagreement, and prefer structurally novel genomes.
                 proposals=[spec]
-                for _ in range(127):
+                for _ in range(63):
                     proposals.append(make_spec())
                 unseen=[candidate for candidate in proposals if genome(candidate) not in evaluated]
                 if unseen:
