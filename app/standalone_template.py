@@ -38,8 +38,29 @@ def replay(df):
     x['ema_slow']=c.ewm(span=s['slow'],adjust=False,min_periods=s['slow']).mean()
     tr=pd.concat([x.high-x.low,(x.high-prev).abs(),(x.low-prev).abs()],axis=1).max(axis=1)
     x['atr']=tr.ewm(alpha=1/s['atr_period'],adjust=False,min_periods=s['atr_period']).mean()
-    x['long_signal']=(x.ema_fast>x.ema_slow)&(x.ema_fast.shift(1)<=x.ema_slow.shift(1))
-    x['short_signal']=(x.ema_fast<x.ema_slow)&(x.ema_fast.shift(1)>=x.ema_slow.shift(1))
+    family=s.get('family','ema_crossover')
+    long=(x.ema_fast>x.ema_slow)&(x.ema_fast.shift(1)<=x.ema_slow.shift(1))
+    short=(x.ema_fast<x.ema_slow)&(x.ema_fast.shift(1)>=x.ema_slow.shift(1))
+    if family in ('channel_breakout','volume_breakout'):
+        upper=x.high.rolling(s['slow'],min_periods=s['slow']).max().shift(1)
+        lower=x.low.rolling(s['slow'],min_periods=s['slow']).min().shift(1)
+        long=(c>upper)&(c.shift(1)<=upper.shift(1))
+        short=(c<lower)&(c.shift(1)>=lower.shift(1))
+        if family=='volume_breakout':
+            baseline=x.volume.rolling(s['fast'],min_periods=s['fast']).mean().shift(1)
+            active=x.volume>=baseline*1.5
+            long=long&active
+            short=short&active
+    elif family=='rsi_reversion':
+        delta=c.diff()
+        gain=delta.clip(lower=0).ewm(alpha=1/s['fast'],adjust=False,min_periods=s['fast']).mean()
+        loss=(-delta.clip(upper=0)).ewm(alpha=1/s['fast'],adjust=False,min_periods=s['fast']).mean()
+        rs=gain/loss.replace(0,np.nan)
+        rsi=100-100/(1+rs)
+        long=(rsi.shift(1)<=30)&(rsi>30)
+        short=(rsi.shift(1)>=70)&(rsi<70)
+    x['long_signal']=long.fillna(False)
+    x['short_signal']=short.fillna(False)
     balance=float(CFG['initial_balance']); ledger=[]; streak=0; max_streak=0; i=max(s['slow'],s['atr_period'])
     while i<len(x)-1:
         row=x.iloc[i]
