@@ -1,5 +1,10 @@
 # Changelog
 
+## V0.7.5 — 2026-10-17
+
+- Fixed an invalid `elif` placement in the independent audit signal engine that prevented the server from importing.
+- Moved context/confirmation filter setup after the complete strategy-family branch chain.
+
 ## V0.7.4 — 2026-10-17
 
 - Fixed the search UI to treat `completed_with_shortfall` as a terminal state, preventing long polling after an incomplete run.
