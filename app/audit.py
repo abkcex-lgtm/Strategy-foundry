@@ -234,6 +234,22 @@ def _independent_signals(d: pd.DataFrame, spec: dict[str, Any]):
     return long,short,atr,fast,slow,period
 
 
+def _resolve_bar_exit_independent(side: str, bar_open: float, bar_high: float, bar_low: float, stop: float, target: float):
+    """Independent conservative OHLC exit resolution; gap fills take precedence."""
+    if side == "LONG":
+        if bar_open <= stop: return "SL", bar_open
+        if bar_open >= target: return "TP", target
+        sl = bar_low <= stop; tp = bar_high >= target
+    else:
+        if bar_open >= stop: return "SL", bar_open
+        if bar_open <= target: return "TP", target
+        sl = bar_high >= stop; tp = bar_low <= target
+    if sl and tp: raise ValueError("UNRESOLVED_AMBIGUITY: finer data required")
+    if sl: return "SL", stop
+    if tp: return "TP", target
+    return None
+
+
 def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str, Any]) -> dict[str, Any]:
     """Recompute the trade ledger independently for deterministic cross-engine checks."""
     d=frame.copy().reset_index(drop=True)
@@ -264,11 +280,9 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
         ex=None; px=None; reason=None
         for j in range(ei,len(d)):
             bar=d.iloc[j]
-            sl=(float(bar.low)<=stop) if side=="LONG" else (float(bar.high)>=stop)
-            tp=(float(bar.high)>=target) if side=="LONG" else (float(bar.low)<=target)
-            if sl and tp: raise ValueError(f"UNRESOLVED_AMBIGUITY row={j}")
-            if sl: ex=j; px=stop; reason="SL"; break
-            if tp: ex=j; px=target; reason="TP"; break
+            resolution=_resolve_bar_exit_independent(side,float(bar.open),float(bar.high),float(bar.low),stop,target)
+            if resolution is not None:
+                reason,px=resolution; ex=j; break
         if ex is None: break
         gross=(px-entry)*qty*(1 if side=="LONG" else -1)
         ec=entry*qty*rate; xc=px*qty*rate; net=gross-ec-xc; balance+=net
