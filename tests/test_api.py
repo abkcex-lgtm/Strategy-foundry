@@ -12,9 +12,10 @@ def test_health_endpoint():
     assert r.json()['features']['tracked_binance_download_jobs'] is True
     assert r.json()['features']['tracked_search_jobs'] is True
     assert r.json()['features']['persistent_search_history'] is True
+    assert r.json()['features']['persistent_job_status'] is True
     assert r.json()['features']['search_history_endpoint']=='/api/search-history'
     assert r.json()['features']['search_job_endpoint']=='/api/search-jobs/{dataset_id}'
-    assert r.json()['version']=='0.5.0'
+    assert r.json()['version']=='0.5.1'
 
 def test_home_page_serves_persian_ui():
     r=client.get('/')
@@ -106,3 +107,14 @@ def test_chart_focus_rejects_unknown_trade(monkeypatch):
     monkeypatch.setitem(main.RUNS,run_id,{'run_id':run_id,'dataset_id':dataset_id,'ledger':[]})
     response=client.get(f'/api/runs/{run_id}/chart?trade_id=999')
     assert response.status_code==404
+
+
+def test_persistent_job_status_round_trip(tmp_path, monkeypatch):
+    import app.persistence as persistence
+    monkeypatch.setattr(persistence, "DB_PATH", tmp_path / "jobs.sqlite3")
+    payload = {"job_id": "job-test", "kind": "strategy_search", "status": "running", "evaluated_candidates": 25}
+    persistence.save_job("job-test", "strategy_search", payload)
+    restored = persistence.load_jobs()
+    assert restored["job-test"]["status"] == "running"
+    assert restored["job-test"]["evaluated_candidates"] == 25
+    assert restored["job-test"]["kind"] == "strategy_search"
