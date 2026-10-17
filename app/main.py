@@ -10,7 +10,7 @@ from pydantic import BaseModel,Field
 from .engine import backtest,search_candidates
 from .audit import independent_replay, FIELDS
 from .data import download_binance_month,validate_ohlcv,split_reference_period
-from .persistence import load_datasets,load_dataset_metadata,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles,save_search,list_search_history,load_search_result,save_job,load_jobs,save_job_genome_hashes,load_job_genome_hashes
+from .persistence import load_datasets,load_dataset_metadata,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles,save_search,list_search_history,load_search_result,save_job,load_jobs,save_job_genome_hashes,load_job_genome_hashes,save_job_batch_checkpoint
 
 ROOT=Path(__file__).resolve().parent
 app=FastAPI(title='Strategy Foundry API',version='0.6.0',description='Server-side strategy research and simulation only; never sends live orders.')
@@ -238,9 +238,11 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
             batch_req=req.copy(update={'candidates':batch_size,'seed':batch_seed})
             batch_base=completed
             def on_progress(progress):
+                progress_count=int(progress.get('evaluated_candidates',0))
+                if progress_count%250!=0 and progress_count!=batch_size: return
                 job.update(progress)
                 job.update({'status':'running','requested_candidates':req.candidates,
-                            'evaluated_candidates':batch_base+int(progress.get('evaluated_candidates',0)),
+                            'evaluated_candidates':batch_base+progress_count,
                             'completed_candidates':batch_base,
                             'completed_batches':batch_index,
                             'current_batch':batch_index+1,
@@ -248,7 +250,6 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
                 save_job(job_id,'strategy_search',job)
             chunk=await asyncio.to_thread(_perform_search,dataset_id,batch_req,on_progress,seen,True,False)
             hashes=chunk.pop('_internal_evaluated_genome_hashes',[])
-            save_job_genome_hashes(job_id,hashes)
             seen.update(hashes)
             actual=len(hashes)
             completed+=actual
@@ -281,7 +282,7 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
                         'checkpoint_passing_results':passing,
                         'checkpoint_near_misses':near,
                         'message':f'دستهٔ {batch_index} تکمیل شد؛ {completed:,} نامزد یکتا ارزیابی شد.'})
-            save_job(job_id,'strategy_search',job)
+            save_job_batch_checkpoint(job_id,'strategy_search',job,hashes)
             if actual==0 and batch_index>=max_attempts:
                 break
         all_passing=bool(passing)
