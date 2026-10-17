@@ -90,7 +90,7 @@ class StrategySpec:
         if not (2 <= self.atr_period <= 200): raise ValueError("atr_period must be 2..200")
         if not (0.2 <= self.stop_atr <= 10): raise ValueError("stop_atr must be 0.2..10")
         if self.direction not in {"both","long","short"}: raise ValueError("Invalid direction")
-        if self.family not in {"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal"}:
+        if self.family not in {"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top"}:
             raise ValueError("Unsupported strategy family")
         if self.context_filter not in {"none","ema_trend","adx_strength","volume_confirm","vwap_side","low_volatility"}:
             raise ValueError("Unsupported context filter")
@@ -230,6 +230,56 @@ def indicators(df, spec):
         lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
         long_signal=(c>c.shift(spec.fast))&(c>upper)&(c.shift(1)<=upper.shift(1))
         short_signal=(c<c.shift(spec.fast))&(c<lower)&(c.shift(1)>=lower.shift(1))
+
+    elif spec.family=="swing_structure_break":
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1); lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        long_signal=(c>upper)&(c.shift(1)<=upper.shift(1)); short_signal=(c<lower)&(c.shift(1)>=lower.shift(1))
+    elif spec.family=="failed_breakout_reversal":
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(2); lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(2)
+        long_signal=(x.low.shift(1)<lower)&(c.shift(1)<lower)&(c>lower)&(c>x.open)
+        short_signal=(x.high.shift(1)>upper)&(c.shift(1)>upper)&(c<upper)&(c<x.open)
+    elif spec.family=="wick_rejection":
+        body=(c-x.open).abs().clip(lower=1e-12); lower_wick=np.minimum(x.open,c)-x.low; upper_wick=x.high-np.maximum(x.open,c)
+        location=(c-x.low)/(x.high-x.low).replace(0,np.nan)
+        long_signal=(lower_wick>=2.0*body)&(location>=0.65)&(c>x.open); short_signal=(upper_wick>=2.0*body)&(location<=0.35)&(c<x.open)
+    elif spec.family=="range_expansion_breakout":
+        bar_range=x.high-x.low; baseline=bar_range.rolling(spec.fast,min_periods=spec.fast).mean().shift(1)
+        long_signal=(bar_range>=1.5*baseline)&(c>x.high.shift(1))&(c.shift(1)<=x.high.shift(1))
+        short_signal=(bar_range>=1.5*baseline)&(c<x.low.shift(1))&(c.shift(1)>=x.low.shift(1))
+    elif spec.family=="three_bar_momentum":
+        upper=x.high.rolling(spec.fast,min_periods=spec.fast).max().shift(1); lower=x.low.rolling(spec.fast,min_periods=spec.fast).min().shift(1)
+        rising=(c>c.shift(1))&(c.shift(1)>c.shift(2))&(c.shift(2)>c.shift(3)); falling=(c<c.shift(1))&(c.shift(1)<c.shift(2))&(c.shift(2)<c.shift(3))
+        long_signal=rising&(c>upper); short_signal=falling&(c<lower)
+    elif spec.family=="volatility_regime_breakout":
+        atr_base=x.atr.rolling(spec.slow,min_periods=spec.slow).median().shift(1)
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1); lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        active=x.atr>atr_base
+        long_signal=active&(c>upper)&(c.shift(1)<=upper.shift(1)); short_signal=active&(c<lower)&(c.shift(1)>=lower.shift(1))
+    elif spec.family=="trend_exhaustion_reversal":
+        body=(c-x.open).abs().clip(lower=1e-12); lower_wick=np.minimum(x.open,c)-x.low; upper_wick=x.high-np.maximum(x.open,c)
+        long_signal=(c.shift(1)<c.shift(spec.fast+1))&(c.shift(1)<x.open.shift(1))&(c>x.open)&(lower_wick>=body)
+        short_signal=(c.shift(1)>c.shift(spec.fast+1))&(c.shift(1)>x.open.shift(1))&(c<x.open)&(upper_wick>=body)
+    elif spec.family=="volume_climax_reversal":
+        vol_threshold=x.volume.rolling(spec.slow,min_periods=spec.slow).quantile(0.90).shift(1)
+        body=(c-x.open).abs().clip(lower=1e-12); lower_wick=np.minimum(x.open,c)-x.low; upper_wick=x.high-np.maximum(x.open,c)
+        long_signal=(x.volume>vol_threshold)&(lower_wick>=1.5*body)&(c>x.open); short_signal=(x.volume>vol_threshold)&(upper_wick>=1.5*body)&(c<x.open)
+    elif spec.family=="range_compression_breakout":
+        bar_range=x.high-x.low; avg_range=bar_range.rolling(spec.fast,min_periods=spec.fast).mean()
+        compression_level=avg_range.rolling(spec.slow,min_periods=spec.slow).quantile(0.25).shift(1); compressed=avg_range.shift(1)<compression_level
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1); lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        long_signal=compressed&(c>upper)&(c.shift(1)<=upper.shift(1)); short_signal=compressed&(c<lower)&(c.shift(1)>=lower.shift(1))
+    elif spec.family=="support_resistance_rejection":
+        support=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1); resistance=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        body=(c-x.open).abs().clip(lower=1e-12); lower_wick=np.minimum(x.open,c)-x.low; upper_wick=x.high-np.maximum(x.open,c)
+        long_signal=(x.low<=support+x.atr*0.3)&(c>support)&(lower_wick>=body); short_signal=(x.high>=resistance-x.atr*0.3)&(c<resistance)&(upper_wick>=body)
+    elif spec.family=="micro_double_bottom":
+        current_low=x.low.rolling(spec.fast,min_periods=spec.fast).min(); prior_low=x.low.shift(spec.fast).rolling(spec.fast,min_periods=spec.fast).min()
+        trigger=x.high.shift(1).rolling(spec.fast,min_periods=spec.fast).max()
+        long_signal=((current_low-prior_low).abs()<=x.atr*0.35)&(x.low<=current_low+x.atr*0.1)&(c>trigger)&(c>x.open); short_signal=pd.Series(False,index=x.index)
+    elif spec.family=="micro_double_top":
+        current_high=x.high.rolling(spec.fast,min_periods=spec.fast).max(); prior_high=x.high.shift(spec.fast).rolling(spec.fast,min_periods=spec.fast).max()
+        trigger=x.low.shift(1).rolling(spec.fast,min_periods=spec.fast).min()
+        short_signal=((current_high-prior_high).abs()<=x.atr*0.35)&(x.high>=current_high-x.atr*0.1)&(c<trigger)&(c<x.open); long_signal=pd.Series(False,index=x.index)
     if spec.context_filter=="ema_trend":
         long_signal=long_signal&(x.ema_fast>x.ema_slow)
         short_signal=short_signal&(x.ema_fast<x.ema_slow)
@@ -380,7 +430,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         raise ValueError("Unsupported search algorithm")
     cfg=normalize_contract(contract)
     rng=np.random.default_rng(seed)
-    all_families=("ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal")
+    all_families=("ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top")
     all_context_filters=("none","ema_trend","adx_strength","volume_confirm","vwap_side","low_volatility")
     all_confirmation_filters=("none","candle_direction","momentum","rsi_midline")
     space=dict(search_space or {})
@@ -390,7 +440,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     if not families or any(f not in all_families for f in families): raise ValueError("Search family selection is empty or contains unsupported families")
     if not context_filters or any(f not in all_context_filters for f in context_filters): raise ValueError("Context filter selection is empty or unsupported")
     if not confirmation_filters or any(f not in all_confirmation_filters for f in confirmation_filters): raise ValueError("Confirmation filter selection is empty or unsupported")
-    names={"ema_crossover":"EMA crossover","channel_breakout":"Price channel breakout","rsi_reversion":"RSI reversion","volume_breakout":"Volume-confirmed breakout","ema_pullback":"EMA trend pullback","macd_crossover":"MACD crossover","bollinger_reversion":"Bollinger mean reversion","inside_bar_breakout":"Inside-bar breakout","engulfing_reversal":"Engulfing candle reversal","momentum_breakout":"Momentum-confirmed breakout","stochastic_reversion":"Stochastic reversion","roc_momentum":"Rate-of-change momentum","adx_trend":"ADX directional trend","keltner_breakout":"Keltner channel breakout","atr_squeeze_breakout":"Volatility squeeze breakout","obv_trend":"OBV volume trend","vwap_reclaim":"VWAP reclaim","pivot_reversal":"Support/resistance pivot reversal"}
+    names={"ema_crossover":"EMA crossover","channel_breakout":"Price channel breakout","rsi_reversion":"RSI reversion","volume_breakout":"Volume-confirmed breakout","ema_pullback":"EMA trend pullback","macd_crossover":"MACD crossover","bollinger_reversion":"Bollinger mean reversion","inside_bar_breakout":"Inside-bar breakout","engulfing_reversal":"Engulfing candle reversal","momentum_breakout":"Momentum-confirmed breakout","stochastic_reversion":"Stochastic reversion","roc_momentum":"Rate-of-change momentum","adx_trend":"ADX directional trend","keltner_breakout":"Keltner channel breakout","atr_squeeze_breakout":"Volatility squeeze breakout","obv_trend":"OBV volume trend","vwap_reclaim":"VWAP reclaim","pivot_reversal":"Support/resistance pivot reversal","swing_structure_break":"شکست ساختار سوئینگ","failed_breakout_reversal":"برگشت شکست ناموفق","wick_rejection":"رد قیمت با سایه کندل","range_expansion_breakout":"شکست با انبساط دامنه","three_bar_momentum":"مومنتوم سه‌کندلی","volatility_regime_breakout":"شکست در رژیم نوسان","trend_exhaustion_reversal":"برگشت فرسودگی روند","volume_climax_reversal":"برگشت اوج حجم","range_compression_breakout":"شکست پس از فشردگی دامنه","support_resistance_rejection":"رد قیمت حمایت/مقاومت","micro_double_bottom":"کف دوقلوی کوتاه‌مدت","micro_double_top":"سقف دوقلوی کوتاه‌مدت"}
     fast_values=np.array([3,4,5,6,8,9,10,12,14,16,18,21,24,28,32,36,40,48,55,64,72,89],dtype=int)
     slow_values=np.array([12,16,18,20,24,28,32,36,40,48,55,64,72,89,100,120,144,180,200,240,300,400,500],dtype=int)
     periods=np.array([5,7,9,10,12,14,16,18,21,24,28,30,40,50],dtype=int)
