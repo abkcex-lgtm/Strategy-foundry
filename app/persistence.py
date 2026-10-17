@@ -27,6 +27,10 @@ def _connect():
       search_id TEXT PRIMARY KEY, dataset_id TEXT NOT NULL, request_json TEXT NOT NULL,
       result_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS jobs (
+      job_id TEXT PRIMARY KEY, kind TEXT NOT NULL, status TEXT NOT NULL,
+      payload_json TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
     """)
     return c
 
@@ -179,3 +183,41 @@ def load_search_result(search_id: str):
     finally:
         c.close()
 
+
+
+
+def save_job(job_id: str, kind: str, payload: dict[str, Any]):
+    """Persist the latest observable state of an asynchronous job."""
+    status = str(payload.get("status", "unknown"))
+    c = _connect()
+    try:
+        c.execute(
+            "INSERT INTO jobs(job_id,kind,status,payload_json,updated_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP) "
+            "ON CONFLICT(job_id) DO UPDATE SET kind=excluded.kind,status=excluded.status,"
+            "payload_json=excluded.payload_json,updated_at=CURRENT_TIMESTAMP",
+            (job_id, kind, status, json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                                               default=_json_default, allow_nan=False)),
+        )
+        c.commit()
+    finally:
+        c.close()
+
+
+def load_jobs() -> dict[str, dict[str, Any]]:
+    """Load job status after restart; running work is marked interrupted by the caller."""
+    c = _connect()
+    try:
+        rows = c.execute("SELECT job_id,kind,payload_json FROM jobs").fetchall()
+        out = {}
+        for job_id, kind, payload in rows:
+            try:
+                item = json.loads(payload)
+                if isinstance(item, dict):
+                    item.setdefault("job_id", job_id)
+                    item.setdefault("kind", kind)
+                    out[job_id] = item
+            except (ValueError, TypeError):
+                continue
+        return out
+    finally:
+        c.close()
