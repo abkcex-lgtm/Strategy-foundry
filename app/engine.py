@@ -423,7 +423,7 @@ def backtest(frame, spec=None, contract=None, execution_frame=None):
     exec_df=None
     if execution_frame is not None:
         exec_df=execution_frame.copy().reset_index(drop=True)
-        validate_ohlcv(exec_df,1000,strict_gaps=True)
+        validate_ohlcv(exec_df,1000,strict_gaps=False)
         execution_hash=sha256_bytes(exec_df.to_csv(index=False,float_format="%.12g").encode())
         if len(df)>1:
             base_interval=int(df.open_time.diff().dropna().mode().iloc[0])
@@ -455,30 +455,47 @@ def backtest(frame, spec=None, contract=None, execution_frame=None):
         try: qty,target,entry_rate,exit_rate=_size_and_target(entry,stop,side,risk_budget,cfg)
         except ValueError: i+=1; continue
         if qty<=0: i+=1; continue
-        exit_i=exit_price=exit_time=None; reason=None
+        exit_i=exit_price=exit_time=None; reason=None; resolution_status="resolved_base_ohlc"
         for j in range(entry_i,len(x)):
             if exec_df is not None:
-                resolution=_resolve_execution_interval(side,exec_df,int(open_times[j]),base_interval,stop,target)
+                try:
+                    resolution=_resolve_execution_interval(side,exec_df,int(open_times[j]),base_interval,stop,target)
+                except DataIntegrityError:
+                    # Never guess the path: book the modeled stop outcome and flag the trade.
+                    reason,exit_price,exit_time="SL_UNRESOLVED",stop,int(open_times[j])
+                    exit_i=j
+                    resolution_status="unresolved_as_loss"
+                    break
                 if resolution is not None:
-                    reason,exit_price,exit_time=resolution; exit_i=j; break
+                    reason,exit_price,exit_time=resolution; exit_i=j
+                    resolution_status="resolved_1s_ohlc"
+                    break
             else:
-                resolution=_resolve_bar_exit(side,float(open_values[j]),float(high_values[j]),float(low_values[j]),stop,target)
+                try:
+                    resolution=_resolve_bar_exit(side,float(open_values[j]),float(high_values[j]),float(low_values[j]),stop,target)
+                except DataIntegrityError:
+                    reason,exit_price,exit_time="SL_UNRESOLVED",stop,int(open_times[j])
+                    exit_i=j
+                    resolution_status="unresolved_as_loss"
+                    break
                 if resolution is not None:
-                    reason,exit_price=resolution; exit_i=j; exit_time=int(open_times[j]); break
+                    reason,exit_price=resolution; exit_i=j; exit_time=int(open_times[j])
+                    resolution_status="resolved_base_ohlc"
+                    break
         if exit_i is None: break
         gross=(exit_price-entry)*qty*(1 if side=="LONG" else -1)
         entry_cost=entry*qty*entry_rate; exit_cost=exit_price*qty*exit_rate
         net=gross-entry_cost-exit_cost; balance+=net
         if reason=="TP": streak=0
         else: streak+=1; max_streak=max(max_streak,streak)
-        ledger.append({"trade_id":len(ledger)+1,"signal_time":int(open_times[i]),"entry_time":int(open_times[entry_i]),"exit_time":int(exit_time),"direction":side,"signal_price":float(row.close),"entry_price":entry,"stop_loss":stop,"take_profit":target,"exit_price":float(exit_price),"exit_reason":reason,"quantity":qty,"risk_budget":risk_budget,"gross_pnl":gross,"entry_cost":entry_cost,"exit_cost":exit_cost,"fees_slippage":entry_cost+exit_cost,"net_pnl":net,"balance_after":balance,"loss_streak_after":streak})
+        ledger.append({"trade_id":len(ledger)+1,"signal_time":int(open_times[i]),"entry_time":int(open_times[entry_i]),"exit_time":int(exit_time),"direction":side,"signal_price":float(row.close),"entry_price":entry,"stop_loss":stop,"take_profit":target,"exit_price":float(exit_price),"exit_reason":reason,"quantity":qty,"risk_budget":risk_budget,"gross_pnl":gross,"entry_cost":entry_cost,"exit_cost":exit_cost,"fees_slippage":entry_cost+exit_cost,"net_pnl":net,"balance_after":balance,"loss_streak_after":streak,"resolution_status":resolution_status,"execution_ambiguity":resolution_status=="unresolved_as_loss"})
         signal_cursor=int(np.searchsorted(signal_positions,exit_i+1,side="left"))
     wins=[t for t in ledger if t["exit_reason"]=="TP" and t["net_pnl"]>0]
     gp=sum(max(0,t["net_pnl"]) for t in ledger); gl=abs(sum(min(0,t["net_pnl"]) for t in ledger))
     span_days=max((int(df.open_time.iloc[-1])-int(df.open_time.iloc[0]))/86400000,1/1440)
     wr=100*len(wins)/len(ledger) if ledger else 0.0; pf=gp/gl if gl else (math.inf if gp else 0.0); tp_day=len(wins)/span_days
     passes=(not cfg["use_min_win_rate"] or wr>cfg["min_win_rate_pct"]) and (not cfg["use_min_profit_factor"] or pf>cfg["min_profit_factor"]) and (not cfg["use_min_tp_per_day"] or tp_day>=cfg["min_tp_per_day"]) and (not cfg["use_max_consecutive_losses"] or max_streak<=cfg["max_consecutive_losses"])
-    metrics={"trades":len(ledger),"wins":len(wins),"losses":sum(t["net_pnl"]<=0 for t in ledger),"win_rate_pct":wr,"profit_factor":pf if math.isfinite(pf) else None,"avg_net_tp_per_day":tp_day,"max_consecutive_losses":max_streak,"net_pnl":sum(t["net_pnl"] for t in ledger),"final_balance":balance,"total_costs":sum(t["fees_slippage"] for t in ledger),"data_hash_sha256":data_hash,"execution_data_hash_sha256":execution_hash,"execution_resolution":"1s_ohlc" if exec_df is not None else "base_ohlc_only","rows":len(df),"span_days":span_days,"passes_all_targets":bool(passes)}
+    metrics={"trades":len(ledger),"wins":len(wins),"losses":sum(t["net_pnl"]<=0 for t in ledger),"win_rate_pct":wr,"profit_factor":pf if math.isfinite(pf) else None,"avg_net_tp_per_day":tp_day,"max_consecutive_losses":max_streak,"net_pnl":sum(t["net_pnl"] for t in ledger),"final_balance":balance,"total_costs":sum(t["fees_slippage"] for t in ledger),"data_hash_sha256":data_hash,"execution_data_hash_sha256":execution_hash,"execution_resolution":"1s_ohlc" if exec_df is not None else "base_ohlc_only","unresolved_as_loss_count":sum(t.get("execution_ambiguity",False) for t in ledger),"rows":len(df),"span_days":span_days,"passes_all_targets":bool(passes)}
     run_hash=sha256_bytes(json.dumps({"spec":asdict(spec),"contract":cfg,"data_hash":data_hash,"execution_data_hash":execution_hash,"execution_resolution":"1s_ohlc" if exec_df is not None else "base_ohlc_only"},sort_keys=True).encode())
     return {"strategy":asdict(spec),"contract":cfg,"metrics":metrics,"ledger":ledger,"data_report":report,"run_hash_sha256":run_hash}
 
