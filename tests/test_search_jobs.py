@@ -33,6 +33,7 @@ def test_search_job_is_tracked_and_uses_train_only(monkeypatch):
             "contract": contract or {},
             "all_passing": False,
             "results": [],
+            "evaluated_genome_hashes": [f"test-genome-{i}" for i in range(candidates)],
             "warning": "test-only stub",
         }
 
