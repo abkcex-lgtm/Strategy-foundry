@@ -8,7 +8,7 @@
 .trade-row{cursor:pointer;transition:background .15s ease}.trade-row:hover,.trade-row:focus{background:#24364d;outline:2px solid #70a7ff;outline-offset:-2px}.trade-row.selected-trade{background:#25384e;box-shadow:inset -3px 0 #70a7ff}.trade-row td:first-child{font-weight:800}
 
 
-/* V0.9.3: quick section navigation; improves access without removing any controls. */
+/* V0.9.4: quick section navigation; improves access without removing any controls. */
 .quick-nav{position:sticky;top:72px;z-index:4;display:flex;gap:7px;align-items:center;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;padding:9px 10px;margin:0 0 18px;border:1px solid #2b3a4d;border-radius:13px;background:rgba(17,24,34,.96);backdrop-filter:blur(14px);box-shadow:0 8px 22px #0003}
 .quick-nav a{flex:0 0 auto;display:inline-flex;align-items:center;min-height:36px;padding:6px 11px;border:1px solid transparent;border-radius:9px;color:#c4d3e7;text-decoration:none;font-size:12px;white-space:nowrap;transition:background .15s,border-color .15s,color .15s}
 .quick-nav a:hover,.quick-nav a:focus-visible{background:#233650;border-color:#45658d;color:#fff;outline:none}
@@ -16,3 +16,25 @@
 .jump-target,#researchSummary,#riskSettings,#searchSettings,#chartSection,#ledgerSection,#searchResultsSection,#searchHistorySection,#runHistorySection{scroll-margin-top:128px}
 @media(max-width:760px){.quick-nav{top:0;margin-inline:-2px;padding:7px;gap:5px;border-radius:10px}.quick-nav a{min-height:38px;padding:7px 10px;font-size:12px}.jump-target,#researchSummary,#riskSettings,#searchSettings,#chartSection,#ledgerSection,#searchResultsSection,#searchHistorySection,#runHistorySection{scroll-margin-top:70px}}
 @media(prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+
+
+/* V0.9.4: visibly prominent navigation launchpad; no existing controls are removed. */
+.access-launchpad{margin:0 0 16px;padding:18px;border:1px solid #385170;border-radius:18px;background:linear-gradient(135deg,rgba(39,63,91,.72),rgba(22,31,44,.98) 58%,rgba(37,35,67,.75));box-shadow:0 12px 34px #0003}
+.access-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}
+.access-heading h2{margin:1px 0 3px;font-size:clamp(18px,2vw,23px);line-height:1.4}
+.access-heading p{margin:0;color:#b7c5d8;font-size:12px}
+.access-heading .access-eyebrow{color:#91baff;font-size:10px;font-weight:800;letter-spacing:.5px}
+.access-count{flex:0 0 auto;border:1px solid #5479a6;background:#1b304b;color:#d7e7ff;padding:6px 10px;border-radius:99px;font-size:11px}
+.access-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}
+.access-grid a{min-width:0;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:9px;padding:12px 10px;border:1px solid #34455d;border-radius:12px;background:rgba(13,20,30,.76);color:#eaf2ff;text-decoration:none;transition:transform .15s,border-color .15s,background .15s}
+.access-grid a:hover,.access-grid a:focus-visible{transform:translateY(-2px);border-color:#77a9ef;background:#223852;outline:2px solid transparent}
+.access-number{display:grid;place-items:center;width:29px;height:29px;border-radius:9px;background:#243d5c;color:#9dc5ff;font-size:10px;font-weight:800}
+.access-grid a span:nth-child(2){min-width:0}
+.access-grid strong,.access-grid small{display:block;overflow-wrap:anywhere}
+.access-grid strong{font-size:12px;line-height:1.5}
+.access-grid small{margin-top:2px;color:#9eafc4;font-size:10px;line-height:1.5}
+.access-grid b{color:#8ebaff;font-size:15px}
+.quick-nav{border-color:#426086;background:rgba(14,21,31,.98)}
+.quick-nav:before{content:"پرش سریع";flex:0 0 auto;color:#91baff;font-size:11px;font-weight:800;padding-inline:5px}
+@media(max-width:1100px){.access-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:760px){.access-launchpad{padding:13px;margin-bottom:12px;border-radius:14px}.access-heading{align-items:flex-start}.access-heading h2{font-size:18px}.access-count{font-size:10px;padding:5px 7px}.access-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.access-grid a{grid-template-columns:auto minmax(0,1fr);gap:7px;padding:10px 8px}.access-grid a b{display:none}.access-number{width:26px;height:26px}.access-grid strong{font-size:11px}.access-grid small{font-size:9px}.quick-nav{top:0}}
