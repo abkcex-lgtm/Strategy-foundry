@@ -110,7 +110,7 @@ def test_independent_audit_books_unresolved_execution_as_loss(monkeypatch):
         long = pd.Series(False, index=df.index); long.iloc[3] = True
         short = pd.Series(False, index=df.index)
         atr = pd.Series(1.0, index=df.index)
-        return long, short, atr, pd.Series(1.0, index=df.index), pd.Series(2.0, index=df.index), 2
+        return long, short, atr, 2, 3, 2
 
     monkeypatch.setattr(audit, "_independent_signals", signals)
     monkeypatch.setattr(audit, "_resolve_execution_interval_independent",
