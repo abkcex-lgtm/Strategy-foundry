@@ -13,6 +13,15 @@ from .data import download_binance_month,validate_ohlcv,split_reference_period
 from .persistence import load_datasets,load_dataset_metadata,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles,save_search,list_search_history,load_search_result,save_job,load_jobs,save_job_genome_hashes,load_job_genome_hashes,save_job_batch_checkpoint
 
 ROOT=Path(__file__).resolve().parent
+
+def _period_label(frame:pd.DataFrame, note:str='') -> str:
+    if frame.empty:
+        return 'empty split'
+    first=pd.to_datetime(int(frame.open_time.iloc[0]),unit='ms',utc=True).isoformat()
+    last=pd.to_datetime(int(frame.open_time.iloc[-1]),unit='ms',utc=True).isoformat()
+    suffix=f' ({note})' if note else ''
+    return f'{first} to {last}{suffix}'
+
 app=FastAPI(title='Strategy Foundry API',version='0.7.3',description='Server-side strategy research and simulation only; never sends live orders.')
 app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')
 DATASETS:dict[str,pd.DataFrame]=load_datasets()
@@ -199,9 +208,9 @@ def _perform_search(dataset_id:str,req:SearchRequest,progress_callback=None,excl
     manifest_hash=hashlib.sha256(json.dumps(manifest,sort_keys=True,allow_nan=False).encode()).hexdigest()
     search_id=uuid.uuid4().hex[:16]
     result.update({'dataset_id':dataset_id,'search_id':search_id,'search_manifest':manifest,'search_manifest_sha256':manifest_hash,
-      'search_period':'2026-04-01 to 2026-07-01 UTC (TRAIN only)',
-      'development_period':'2026-07-01 to 2026-08-01 UTC (not used in search)',
-      'oos_period':'2026-08-01 to 2026-10-01 UTC (not used in search)',
+      'search_period':_period_label(splits['train'],'TRAIN only'),
+      'development_period':_period_label(splits['development'],'not used in search'),
+      'oos_period':_period_label(splits['oos'],'not used in search'),
       'selection_policy':'Candidates are searched and ranked on TRAIN only. OOS is not read for candidate selection.'})
     genome_hashes=result.pop('evaluated_genome_hashes',[])
     if save_result: save_search(search_id,dataset_id,manifest,result)
@@ -300,7 +309,7 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
                 break
         all_passing=bool(passing)
         selected=passing if all_passing else near[:5]
-        train=split_reference_period(DATASETS[dataset_id])['train']
+        splits=split_reference_period(DATASETS[dataset_id]); train=splits['train']
         manifest={'dataset_id':dataset_id,
                   'train_data_hash_sha256':hashlib.sha256(train.to_csv(index=False,float_format='%.12g').encode()).hexdigest(),
                   'requested_candidates':req.candidates,'evaluated_unique_candidates':completed,
