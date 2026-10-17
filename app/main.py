@@ -26,7 +26,7 @@ class BacktestRequest(BaseModel):
 class SearchRequest(BaseModel):
     candidates:int=Field(default=500,ge=1,le=10000)
     seed:int=42
-    algorithm:str="hybrid_genetic"  # hybrid_genetic | stratified_random
+    algorithm:str="surrogate_genetic"  # hybrid_genetic | stratified_random
     search_space:dict[str,Any]=Field(default_factory=dict)
     contract:dict[str,Any]=Field(default_factory=dict)
 class DownloadRequest(BaseModel):
