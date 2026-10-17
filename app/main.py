@@ -26,6 +26,7 @@ class BacktestRequest(BaseModel):
 class SearchRequest(BaseModel):
     candidates:int=Field(default=500,ge=1,le=10000)
     seed:int=42
+    algorithm:str="hybrid_genetic"  # hybrid_genetic | stratified_random
     contract:dict[str,Any]=Field(default_factory=dict)
 class DownloadRequest(BaseModel):
     symbol:str='ETHUSDT'
@@ -180,7 +181,7 @@ def _perform_search(dataset_id:str,req:SearchRequest):
     if df is None: raise ValueError('ابتدا داده را دریافت کنید.')
     splits=split_reference_period(df); train=splits['train']
     if len(train)<100: raise ValueError('دادهٔ Train برای بازهٔ Apr-Jun 2026 کافی نیست؛ جست‌وجو آغاز نشد.')
-    result=search_candidates(train,req.candidates,req.seed,req.contract)
+    result=search_candidates(train,req.candidates,req.seed,req.contract,req.algorithm)
     manifest={'dataset_id':dataset_id,'train_data_hash_sha256':hashlib.sha256(train.to_csv(index=False,float_format='%.12g').encode()).hexdigest(),
               'candidates':req.candidates,'seed':req.seed,'contract':result.get('contract',{})}
     manifest_hash=hashlib.sha256(json.dumps(manifest,sort_keys=True,allow_nan=False).encode()).hexdigest()
@@ -227,7 +228,7 @@ async def start_search_job(dataset_id:str,req:SearchRequest):
     if dataset_id not in DATASETS: raise HTTPException(404,'ابتدا داده را دریافت کنید.')
     job_id=uuid.uuid4().hex
     SEARCH_JOBS[job_id]={'job_id':job_id,'kind':'strategy_search','status':'queued',
-        'message':'جست‌وجو در صف سرور قرار گرفت','requested_candidates':req.candidates,'evaluated_candidates':0}
+        'message':'جست‌وجو در صف سرور قرار گرفت','requested_candidates':req.candidates,'evaluated_candidates':0,'algorithm':req.algorithm}
     asyncio.create_task(_run_search_job(job_id,dataset_id,req))
     return {'job_id':job_id,'status':'queued','message':'جست‌وجو در سرور ثبت شد؛ وضعیت را پیگیری کنید.'}
 
