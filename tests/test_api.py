@@ -1,4 +1,6 @@
+import pandas as pd
 from fastapi.testclient import TestClient
+import app.main as main
 from app.main import app
 
 client=TestClient(app)
@@ -12,7 +14,7 @@ def test_health_endpoint():
     assert r.json()['features']['persistent_search_history'] is True
     assert r.json()['features']['search_history_endpoint']=='/api/search-history'
     assert r.json()['features']['search_job_endpoint']=='/api/search-jobs/{dataset_id}'
-    assert r.json()['version']=='0.4.0'
+    assert r.json()['version']=='0.5.0'
 
 def test_home_page_serves_persian_ui():
     r=client.get('/')
@@ -61,3 +63,43 @@ def test_download_rejects_unsupported_interval_before_scheduling():
     })
     assert r.status_code==400
     assert 'پشتیبانی‌نشده' in r.json()['detail']
+
+
+def test_chart_focus_centers_selected_trade(monkeypatch):
+    dataset_id='chart-focus-test'
+    run_id='chart-focus-run'
+    df=pd.DataFrame({
+        'open_time':list(range(30)),
+        'open':[100.0+i for i in range(30)],
+        'high':[101.0+i for i in range(30)],
+        'low':[99.0+i for i in range(30)],
+        'close':[100.5+i for i in range(30)],
+        'volume':[10.0]*30,
+    })
+    trade={
+        'trade_id':7,'signal_time':10,'entry_time':12,'exit_time':15,
+        'direction':'LONG','entry_price':112.0,'stop_loss':110.0,
+        'take_profit':119.0,'exit_price':119.0,'exit_reason':'TP','net_pnl':35.0
+    }
+    monkeypatch.setitem(main.DATASETS,dataset_id,df)
+    monkeypatch.setitem(main.RUNS,run_id,{'run_id':run_id,'dataset_id':dataset_id,'ledger':[trade]})
+    response=client.get(f'/api/runs/{run_id}/chart?offset=0&limit=10&trade_id=7')
+    assert response.status_code==200
+    body=response.json()
+    assert body['focused_trade_id']==7
+    assert body['offset']==7
+    assert len(body['candles'])==10
+    assert any(t['trade_id']==7 for t in body['trades'])
+
+
+def test_chart_focus_rejects_unknown_trade(monkeypatch):
+    dataset_id='chart-focus-empty-test'
+    run_id='chart-focus-empty-run'
+    df=pd.DataFrame({
+        'open_time':list(range(10)),'open':[100.0]*10,'high':[101.0]*10,
+        'low':[99.0]*10,'close':[100.0]*10,'volume':[10.0]*10
+    })
+    monkeypatch.setitem(main.DATASETS,dataset_id,df)
+    monkeypatch.setitem(main.RUNS,run_id,{'run_id':run_id,'dataset_id':dataset_id,'ledger':[]})
+    response=client.get(f'/api/runs/{run_id}/chart?trade_id=999')
+    assert response.status_code==404
