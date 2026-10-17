@@ -270,6 +270,18 @@ def _resolve_execution_interval_independent(side, execution_frame, start_ms, int
 def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str, Any], execution_frame=None) -> dict[str, Any]:
     """Recompute the trade ledger independently for deterministic cross-engine checks."""
     d=frame.copy().reset_index(drop=True)
+    # Normalize independently: CSV/SQLite can infer OHLCV columns as strings.
+    required=["open_time","open","high","low","close","volume"]
+    try:
+        for column in required:
+            d[column]=pd.to_numeric(d[column],errors="raise")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"Independent replay requires numeric OHLCV columns: {exc}") from exc
+    if d["open_time"].isna().any() or not np.isfinite(d["open_time"].to_numpy(dtype=float)).all():
+        raise ValueError("Independent replay found invalid open_time timestamps")
+    if not np.equal(d["open_time"].to_numpy(dtype=float),np.floor(d["open_time"].to_numpy(dtype=float))).all():
+        raise ValueError("Independent replay requires integer-millisecond open_time timestamps")
+    d["open_time"]=d["open_time"].astype("int64")
     exec_df=None
     base_interval=int(d.open_time.diff().dropna().mode().iloc[0]) if len(d)>1 else None
     if execution_frame is not None:
