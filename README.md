@@ -72,7 +72,7 @@ The router does not create API access or credits. Unconfigured providers are ski
 ## V0.6.0 release notes
 
 - Added 12 independently replayable price-action/regime families: swing-structure break, failed-breakout reversal, wick rejection, range expansion, three-bar momentum, volatility-regime breakout, trend-exhaustion reversal, volume-climax reversal, range-compression breakout, support/resistance rejection, micro double bottom, and micro double top. The engine and independent audit implement separate signal calculations; UI exposes them in manual and search family controls.
-- Added signal-generation coverage for all 30 families. This expands structural diversity but is **not** yet the promised 500,000-candidate resumable search: the API remains capped at 10,000 until durable batch checkpoints, bounded-memory result storage, cancellation/resume, and full-run validation are implemented.
+- Added signal-generation coverage for all 30 families. The background search endpoint accepts up to 500,000 candidates in 10,000-candidate batches, persists each completed batch atomically, deduplicates genome fingerprints globally, and offers resume after interruption. The synchronous endpoint remains capped at 10,000. A full 500k production run has not yet been performance-tested or certified.
 
 ## V0.6.0 release notes
 
@@ -84,7 +84,7 @@ The router does not create API access or credits. Unconfigured providers are ski
 - Search and Binance-download job status/progress are written to SQLite as jobs advance, so the latest visible state remains available after a process restart on hosts with a durable SQLite volume.
 - If a process restarts while a job was queued or running, the job is restored as **interrupted** instead of falsely appearing active. This is status persistence, **not** resumable execution; the computation itself must be started again.
 - `/api/health` reports `persistent_job_status: true`, and the API/UI version is `0.5.1`.
-- The search ceiling remains 10,000. This release does not claim pause/resume checkpoints or 500,000-candidate support.
+- Historical note for v0.5.1: the search ceiling was 10,000, without resumable checkpoints.
 
 ## V0.5.0 release notes
 
