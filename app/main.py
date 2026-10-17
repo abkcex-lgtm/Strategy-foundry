@@ -185,6 +185,7 @@ def _perform_search(dataset_id:str,req:SearchRequest):
 
 @app.post('/api/search/{dataset_id}')
 def search(dataset_id:str,req:SearchRequest):
+    if dataset_id not in DATASETS: raise HTTPException(404,'ابتدا داده را دریافت کنید.')
     try: return _perform_search(dataset_id,req)
     except ValueError as exc:
         if 'ابتدا داده' in str(exc) or 'Train برای بازه' in str(exc): raise HTTPException(422,str(exc)) from exc
@@ -267,6 +268,7 @@ def audit_run(run_id:str):
         return {'status':'MATCH' if ok else 'MISMATCH','matched':ok,'engine_a_trades':len(first),'engine_b_trades':len(other),
                 'mismatches':mismatches,'method':'independent replay; exact discrete fields + tight numeric tolerance',
                 'certified':False,'note':'تطبیق موتور، به‌تنهایی صحت داده یا سودآوری آینده را تضمین نمی‌کند.'}
+    except HTTPException: raise
     except Exception as exc: raise HTTPException(422,f'تطبیق مستقل متوقف شد: {exc}') from exc
 
 @app.get('/api/runs/{run_id}/chart')
