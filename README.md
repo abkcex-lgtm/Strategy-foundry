@@ -69,6 +69,11 @@ Configure provider keys as host-side secret environment variables, never in fron
 
 The router does not create API access or credits. Unconfigured providers are skipped, and when no key is configured the API reports that clearly. The assistant is not yet an autonomous source-code repair agent; ordinary chat must not be described as code changes or tests being executed.
 
+## V0.6.0 release notes
+
+- Added 12 independently replayable price-action/regime families: swing-structure break, failed-breakout reversal, wick rejection, range expansion, three-bar momentum, volatility-regime breakout, trend-exhaustion reversal, volume-climax reversal, range-compression breakout, support/resistance rejection, micro double bottom, and micro double top. The engine and independent audit implement separate signal calculations; UI exposes them in manual and search family controls.
+- Added signal-generation coverage for all 30 families. This expands structural diversity but is **not** yet the promised 500,000-candidate resumable search: the API remains capped at 10,000 until durable batch checkpoints, bounded-memory result storage, cancellation/resume, and full-run validation are implemented.
+
 ## V0.5.1 release notes
 
 - Search and Binance-download job status/progress are written to SQLite as jobs advance, so the latest visible state remains available after a process restart on hosts with a durable SQLite volume.
@@ -86,7 +91,7 @@ The router does not create API access or credits. Unconfigured providers are ski
 
 ## Status
 
-Current API/workspace version: **0.5.1**. The header reports the live API version; verify `/api/health` returns `0.5.0` to confirm the server update. The workspace header reads the running server version from `/api/health`.
+Current API/workspace version: **0.6.0**. The header reports the live API version; verify `/api/health` returns `0.5.0` to confirm the server update. The workspace header reads the running server version from `/api/health`.
 
 Implemented in this foundation: server-side API, OHLCV checks, Binance archive download path, tracked download and asynchronous search jobs with status polling, TRAIN-only search selection, persisted source provenance and data SHA-256 fingerprints, live dashboard summary of data/risk/filters/fees, editable settings/profile validation, SQLite dataset/run/profile/search-result persistence with saved search manifests and reopenable result history, risk/cost-aware ledger, deterministic genetic search with crossover/mutation/stratified seeds/immigrant exploration, an ExtraTrees surrogate-guided proposal mode, a stratified-random baseline, user-selectable family/context/confirmation search space, and 18 causal signal families (EMA crossover, channel breakout, RSI reversion, volume breakout, EMA pullback, MACD crossover, Bollinger reversion, inside-bar breakout, engulfing reversal, momentum breakout, stochastic reversion, ROC momentum, ADX/DMI trend, Keltner breakout, volatility squeeze breakout, OBV trend, VWAP reclaim, and support/resistance pivot reversal). Reported search results are independently replayed against a separate ledger engine; UI exposes search mode and family labels. Other implemented elements include per-filter failures/distances, OHLC candlestick view with trade overlays, paging/zoom presets, clickable/keyboard-selectable ledger rows that focus a selected trade on the chart, TP-only/winner/loser filters, CSV and standalone Python replay export, run history and reproducibility manifests.
 
