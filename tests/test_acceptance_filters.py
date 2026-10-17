@@ -1,6 +1,7 @@
 import pandas as pd
 
 import app.engine as engine
+import app.audit as audit
 
 
 def test_disabled_acceptance_filters_do_not_add_search_distance(monkeypatch):
@@ -17,8 +18,10 @@ def test_disabled_acceptance_filters_do_not_add_search_distance(monkeypatch):
                 "trades": 0,
             },
             "run_hash_sha256": "test-hash",
+            "ledger": [],
         }
     monkeypatch.setattr(engine, "backtest", fake_backtest)
+    monkeypatch.setattr(audit, "independent_replay", lambda frame, spec, cfg: {"ledger": []})
     cfg = {
         "use_min_win_rate": False,
         "use_min_profit_factor": False,
