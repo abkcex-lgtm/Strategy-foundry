@@ -413,6 +413,20 @@ def backtest(frame, spec=None, contract=None, execution_frame=None):
     spec=StrategySpec(**spec) if isinstance(spec,dict) else (spec or StrategySpec()); spec.validate()
     cfg=normalize_contract(contract)
     df=frame.copy().reset_index(drop=True)
+    # CSV/SQLite round-trips can leave OHLCV columns as strings. Validation
+    # checks a numeric copy, so normalize the actual execution frame as well
+    # before diff(), indicator arithmetic, hashing, and ledger timestamps.
+    required=["open_time","open","high","low","close","volume"]
+    try:
+        for column in required:
+            df[column]=pd.to_numeric(df[column],errors="raise")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise DataIntegrityError(f"OHLCV columns must be numeric before backtest: {exc}") from exc
+    if df["open_time"].isna().any() or not np.isfinite(df["open_time"].to_numpy(dtype=float)).all():
+        raise DataIntegrityError("open_time contains invalid timestamps")
+    if not np.equal(df["open_time"].to_numpy(dtype=float),np.floor(df["open_time"].to_numpy(dtype=float))).all():
+        raise DataIntegrityError("open_time timestamps must be integer milliseconds")
+    df["open_time"]=df["open_time"].astype("int64")
     if len(df)>1:
         diffs=df.open_time.diff().dropna(); interval=int(diffs.mode().iloc[0]) if len(diffs) else None
         report=validate_ohlcv(df,interval,strict_gaps=True)
