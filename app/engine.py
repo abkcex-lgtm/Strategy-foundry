@@ -405,14 +405,59 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     results=list(evaluated.values())
     results.sort(key=fitness)
     passing=[r for r in results if r["metrics"]["passes_all_targets"]]
-    selected=passing if passing else results[:5]
-    near_miss_shortfall=max(0,5-len(selected)) if not passing else 0
+    # Independently replay every candidate that will be presented as passing.
+    # If no candidate passes, independently replay candidates in rank order until
+    # five verifiable near-misses are collected. This is separate code in audit.py.
+    from .audit import independent_replay, FIELDS
+    audit_failures=[]
+    audited=[]
+    audit_pool=passing if passing else results
+    for row in audit_pool:
+        try:
+            primary=backtest(frame,StrategySpec(**row["strategy"]),cfg)
+            second=independent_replay(frame,row["strategy"],cfg)
+            a=primary["ledger"]; b=second["ledger"]
+            matched=len(a)==len(b)
+            if matched:
+                for ta,tb in zip(a,b):
+                    for field in FIELDS:
+                        va,vb=ta[field],tb[field]
+                        if isinstance(va,(int,float)) and not isinstance(va,bool):
+                            if not math.isclose(float(va),float(vb),rel_tol=1e-10,abs_tol=1e-8):
+                                matched=False; break
+                        elif va!=vb:
+                            matched=False; break
+                    if not matched: break
+            row["independent_audit"]={"status":"MATCH" if matched else "MISMATCH",
+                                      "primary_trades":len(a),"independent_trades":len(b),
+                                      "ledger_fields_checked":len(FIELDS),
+                                      "engine":"app.audit.independent_replay"}
+            if matched:
+                audited.append(row)
+            else:
+                audit_failures.append({"strategy":row["strategy"],"reason":"Trade ledger mismatch"})
+        except Exception as exc:
+            row["independent_audit"]={"status":"FAILED","reason":str(exc),"engine":"app.audit.independent_replay"}
+            audit_failures.append({"strategy":row["strategy"],"reason":str(exc)})
+        if not passing and len(audited)>=5:
+            break
+    if passing:
+        selected=[r for r in audited if r["metrics"]["passes_all_targets"]]
+        all_passing=bool(selected)
+        if not selected:
+            # Fail closed: do not call a strategy passing if independent replay disagrees.
+            selected=[]
+    else:
+        selected=audited[:5]
+        all_passing=False
+    near_miss_shortfall=max(0,5-len(selected)) if not all_passing else 0
     for row in results: row.pop("_genome",None)
     return {"requested_candidates":max_candidates,"evaluated_candidates":len(results),
             "failed_candidates":errors,"duplicate_genomes_skipped":duplicate_genomes,
             "seed":seed,"algorithm":algorithm,"generations":generation,
-            "family_evaluated_counts":family_counts,"contract":cfg,"all_passing":bool(passing),
-            "results":selected,"requested_near_misses":0 if passing else 5,
-            "returned_near_misses":0 if passing else len(selected),"near_miss_shortfall":near_miss_shortfall,
-            "warning":("Deterministic stratified random baseline; no OOS certification." if algorithm=="stratified_random" else
-                       "Hybrid genetic search with stratified seeds, crossover, mutation, and immigrant exploration. Bounded to 10,000 candidates pending resumable resource-managed batch jobs; ranked on TRAIN only. Not 500k-certified.") }
+            "family_evaluated_counts":family_counts,"contract":cfg,"all_passing":all_passing,
+            "independent_audit_failures":audit_failures,
+            "results":selected,"requested_near_misses":0 if all_passing else 5,
+            "returned_near_misses":0 if all_passing else len(selected),"near_miss_shortfall":near_miss_shortfall,
+            "warning":("Deterministic stratified random baseline; selected results independently replayed; OOS not certified." if algorithm=="stratified_random" else
+                       "Hybrid genetic search with stratified seeds, crossover, mutation, immigrant exploration and independent ledger replay of reported results. Bounded to 10,000 candidates pending resumable resource-managed batch jobs; ranked on TRAIN only. Not 500k-certified.") }
