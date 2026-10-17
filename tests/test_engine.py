@@ -17,6 +17,20 @@ def test_valid_data_report():
     r=validate_ohlcv(candles())
     assert r['rows']==300 and r['gap_count']==0
 
+def test_backtest_and_independent_replay_normalize_stringified_ohlcv():
+    # Reproduce CSV/SQLite round-trips where timestamps and prices arrive as text.
+    df=candles(800).astype(str)
+    spec=StrategySpec(fast=5,slow=18,atr_period=7,stop_atr=1.5)
+    cfg=normalize_contract({"reward_risk":2.0})
+    primary=backtest(df,spec,cfg)
+    independent=independent_replay(df,primary["strategy"],primary["contract"])
+    assert len(primary["ledger"])==len(independent["ledger"])
+    assert primary["metrics"]["data_hash_sha256"]==independent["metrics"]["data_hash_sha256"]
+    for a,b in zip(primary["ledger"],independent["ledger"]):
+        assert a["entry_time"]==b["entry_time"]
+        assert a["exit_time"]==b["exit_time"]
+        assert a["net_pnl"]==pytest.approx(b["net_pnl"],rel=1e-10,abs=1e-8)
+
 def test_duplicate_timestamp_rejected():
     df=candles(); df.loc[3,'open_time']=df.loc[2,'open_time']
     with pytest.raises(DataIntegrityError): validate_ohlcv(df)
