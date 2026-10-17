@@ -44,6 +44,18 @@ def test_unknown_strategy_family_is_rejected():
     with pytest.raises(ValueError, match="Unsupported strategy family"):
         StrategySpec(family="future_peeking").validate()
 
+@pytest.mark.parametrize("family", ["ema_crossover", "channel_breakout", "rsi_reversion", "volume_breakout"])
+def test_future_candle_changes_do_not_rewrite_past_signals(family):
+    df = candles(500)
+    spec = StrategySpec(fast=5, slow=18, atr_period=7, stop_atr=1.5, family=family)
+    original = indicators(df, spec)
+    changed = df.copy()
+    changed.loc[300:, ["open", "high", "low", "close"]] = changed.loc[300:, ["open", "high", "low", "close"]] * 1.7
+    changed.loc[300:, "volume"] = changed.loc[300:, "volume"] * 4.0
+    revised = indicators(changed, spec)
+    for column in ("long_signal", "short_signal"):
+        assert original.loc[:299, column].tolist() == revised.loc[:299, column].tolist()
+
 def test_backtest_is_deterministic():
     df=candles(); spec=StrategySpec(fast=5,slow=18,atr_period=7,stop_atr=1.5)
     try:
