@@ -23,6 +23,7 @@ A checked box means implementation exists; it does not establish profitability o
 - [ ] Two-year 1m performance and memory benchmark
 - [x] SQLite persistence for datasets, run history, and editable profiles (durability depends on host disk; authentication/multi-user isolation remains open)
 - [x] OHLC candlestick chart with trade SL/TP/entry/exit overlays and candle-window paging\n- [ ] Smooth pan/zoom, replay controls, indicator and drawing tools, all setup annotations for candidate-library strategies
+- [x] Tracked asynchronous strategy-search jobs with status polling; search and ranking explicitly use TRAIN only
 - [x] Multi-provider chat router with automatic fallback across configured OpenAI, Groq, OpenRouter, Cerebras, and custom OpenAI-compatible endpoints
 - [ ] AI assistant autonomous code repair, voice/files/media, and guarded bug-fix workflow
 - [ ] Standalone export replay run on exact source CSV and ledger equality verified
