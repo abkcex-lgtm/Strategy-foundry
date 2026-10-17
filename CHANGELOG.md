@@ -1,5 +1,13 @@
 # Changelog
 
+## V0.7.0 — 2026-10-17
+
+- Added composite strategy genomes that combine two distinct entry families with AND/OR/XOR logic; genetic crossover/mutation and the ExtraTrees active-learning feature vector now include structural composition.
+- Implemented independent audit-side composition logic and added ledger parity tests for all three operators.
+- Background search supports requests up to 500,000 candidates using 10,000-candidate chunks, global SHA-256 genome deduplication, atomic batch checkpoints, and a resume endpoint.
+- Full 500k production performance, resource limits, and end-to-end resume testing remain acceptance tasks; the version does not claim that such a full run has already passed.
+
+
 ## V0.6.0 — 2026-10-17
 
 - Expanded the executable strategy catalogue from 18 to 30 with 12 price-action/regime-based families, implemented separately in the primary engine and independent audit engine.
