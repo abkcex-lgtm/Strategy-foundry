@@ -1,5 +1,5 @@
 from __future__ import annotations
-import hashlib, json, math
+import hashlib, json, math, time
 from dataclasses import dataclass, asdict
 from typing import Any
 import numpy as np
@@ -368,7 +368,7 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
     return sum(distances.values()), failed, distances
 
 
-def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="surrogate_genetic", search_space=None):
+def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="surrogate_genetic", search_space=None, progress_callback=None):
     """Deterministic bounded evolutionary search on TRAIN only.
 
     max_candidates counts distinct parameter genomes actually evaluated. This is
@@ -400,6 +400,21 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     errors=0
     family_counts={f:0 for f in families}
     duplicate_genomes=0
+    started_at=time.monotonic()
+    last_progress_count=-1
+
+    def emit_progress(force=False):
+        nonlocal last_progress_count
+        if progress_callback is None: return
+        count=len(evaluated)
+        if not force and count%25!=0: return
+        if count==last_progress_count and not force: return
+        last_progress_count=count
+        progress_callback({"status":"running","requested_candidates":max_candidates,
+                           "evaluated_candidates":count,"failed_candidates":errors,
+                           "duplicate_genomes_skipped":duplicate_genomes,
+                           "elapsed_seconds":round(time.monotonic()-started_at,2),
+                           "family_evaluated_counts":dict(family_counts)})
 
     def make_spec(family=None, genes=None):
         if genes is not None:
@@ -477,6 +492,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         if len(evaluated)>=max_candidates: break
         row=evaluate(spec)
         if row is not None: population.append((spec,row))
+        emit_progress()
 
     generation=0
     while len(evaluated)<max_candidates:
@@ -547,8 +563,10 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             population.append((spec,row))
             if len(population)>256:
                 population=sorted(population,key=lambda pair:fitness(pair[1]))[:192]
+        emit_progress()
         if errors+duplicate_genomes>max_candidates*30: break
 
+    emit_progress(force=True)
     results=list(evaluated.values())
     results.sort(key=fitness)
     passing=[r for r in results if r["metrics"]["passes_all_targets"]]
