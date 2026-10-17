@@ -5,3 +5,4 @@ numpy>=1.26,<3
 httpx>=0.27,<1
 pytest>=8,<9
 python-multipart>=0.0.9
+scikit-learn>=1.5,<2
