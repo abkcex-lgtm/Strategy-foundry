@@ -2,7 +2,7 @@ import math
 import pandas as pd
 import pytest
 from app.data import validate_ohlcv, DataIntegrityError
-from app.engine import backtest, StrategySpec, CONTRACT, normalize_contract, _size_and_target
+from app.engine import backtest, indicators, StrategySpec, CONTRACT, normalize_contract, _size_and_target
 from app.audit import independent_replay
 
 def candles(n=300):
@@ -27,6 +27,22 @@ def test_bad_ohlc_rejected():
 
 def test_strategy_parameters():
     with pytest.raises(ValueError): StrategySpec(fast=36,slow=9).validate()
+
+@pytest.mark.parametrize("family", ["ema_crossover", "channel_breakout", "rsi_reversion", "volume_breakout"])
+def test_supported_strategy_families_produce_causal_signal_columns(family):
+    df = candles(500)
+    spec = StrategySpec(fast=5, slow=18, atr_period=7, stop_atr=1.5, family=family)
+    out = indicators(df, spec)
+    assert "long_signal" in out and "short_signal" in out
+    assert not out["long_signal"].isna().any()
+    assert not out["short_signal"].isna().any()
+    assert out["long_signal"].dtype == bool
+    assert out["short_signal"].dtype == bool
+
+
+def test_unknown_strategy_family_is_rejected():
+    with pytest.raises(ValueError, match="Unsupported strategy family"):
+        StrategySpec(family="future_peeking").validate()
 
 def test_backtest_is_deterministic():
     df=candles(); spec=StrategySpec(fast=5,slow=18,atr_period=7,stop_atr=1.5)
