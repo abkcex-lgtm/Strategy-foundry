@@ -10,10 +10,10 @@ from pydantic import BaseModel,Field
 from .engine import backtest,search_candidates
 from .audit import independent_replay, FIELDS
 from .data import download_binance_month,validate_ohlcv,split_reference_period
-from .persistence import load_datasets,load_dataset_metadata,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles,save_search,list_search_history,load_search_result
+from .persistence import load_datasets,load_dataset_metadata,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles,save_search,list_search_history,load_search_result,save_job,load_jobs
 
 ROOT=Path(__file__).resolve().parent
-app=FastAPI(title='Strategy Foundry API',version='0.5.0',description='Server-side strategy research and simulation only; never sends live orders.')
+app=FastAPI(title='Strategy Foundry API',version='0.5.1',description='Server-side strategy research and simulation only; never sends live orders.')
 app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')
 DATASETS:dict[str,pd.DataFrame]=load_datasets()
 DATASET_METADATA:dict[str,dict[str,Any]]=load_dataset_metadata()
@@ -47,7 +47,7 @@ class AIChatRequest(BaseModel):
 @app.get('/',response_class=HTMLResponse)
 def home(): return (ROOT/'static'/'index.html').read_text(encoding='utf-8')
 @app.get('/api/health')
-def health(): return {'status':'ok','service':'strategy-foundry','version':'0.5.0','execution':'server-side','live_trading':False,'persistent_store':'sqlite','loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'persistent_search_history':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','search_history_endpoint':'/api/search-history','question_first_assistant_routing':True}}
+def health(): return {'status':'ok','service':'strategy-foundry','version':'0.5.1','execution':'server-side','live_trading':False,'persistent_store':'sqlite','loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'persistent_search_history':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','search_history_endpoint':'/api/search-history','question_first_assistant_routing':True}}
 @app.get('/api/contract')
 def contract():
     from .engine import normalize_contract
@@ -101,7 +101,7 @@ DOWNLOAD_JOBS:dict[str,dict[str,Any]]={}
 
 async def _run_download_job(job_id:str,req:DownloadRequest):
     job=DOWNLOAD_JOBS[job_id]
-    job.update({'status':'running','message':'در حال اتصال به آرشیو رسمی Binance','completed_months':0,'total_months':(req.end_year*12+req.end_month-1)-(req.start_year*12+req.start_month-1)+1,'rows_downloaded':0})
+    job.update({'status':'running','kind':'data_download','message':'در حال اتصال به آرشیو رسمی Binance','completed_months':0,'total_months':(req.end_year*12+req.end_month-1)-(req.start_year*12+req.start_month-1)+1,'rows_downloaded':0}); save_job(job_id, 'data_download', job)
     try:
         start=req.start_year*12+req.start_month-1
         end=req.end_year*12+req.end_month-1
@@ -111,7 +111,7 @@ async def _run_download_job(job_id:str,req:DownloadRequest):
             job.update({'message':f'دریافت و بررسی {year}-{month:02d}','current_month':f'{year}-{month:02d}'})
             df,h,url=await download_binance_month(req.symbol,req.interval,year,month)
             chunks.append(df); hashes.append({'sha256':h,'url':url})
-            job.update({'completed_months':len(chunks),'rows_downloaded':sum(len(part) for part in chunks)})
+            job.update({'completed_months':len(chunks),'rows_downloaded':sum(len(part) for part in chunks)}); save_job(job_id, 'data_download', job)
         merged=pd.concat(chunks,ignore_index=True).sort_values('open_time').reset_index(drop=True)
         job.update({'message':'اعتبارسنجی نهایی ترتیب زمانی، شکاف‌ها و OHLCV'})
         report=validate_ohlcv(merged,60000 if req.interval=='1m' else None,strict_gaps=(req.interval=='1m'))
@@ -120,9 +120,9 @@ async def _run_download_job(job_id:str,req:DownloadRequest):
         save_dataset(key,merged,metadata)
         DATASETS[key]=merged; DATASET_METADATA[key]=metadata
         result={'dataset_id':key,'symbol':req.symbol.upper(),'interval':req.interval,'report':report,'monthly_archive_hashes':hashes,'rows':len(merged),'splits':{k:len(v) for k,v in split_reference_period(merged).items()}}
-        job.update({'status':'completed','message':'داده دریافت، اعتبارسنجی و ذخیره شد','result':result,'rows_downloaded':len(merged),'completed_months':job['total_months']})
+        job.update({'status':'completed','message':'داده دریافت، اعتبارسنجی و ذخیره شد','result':result,'rows_downloaded':len(merged),'completed_months':job['total_months']}); save_job(job_id, 'data_download', job)
     except Exception as exc:
-        job.update({'status':'failed','message':f'دریافت/اعتبارسنجی کامل نشد؛ بک‌تست شروع نشد: {exc}','error':str(exc)})
+        job.update({'status':'failed','message':f'دریافت/اعتبارسنجی کامل نشد؛ بک‌تست شروع نشد: {exc}','error':str(exc)}); save_job(job_id, 'data_download', job)
 
 @app.post('/api/data/binance')
 async def download_data(req:DownloadRequest):
@@ -136,6 +136,17 @@ async def download_data(req:DownloadRequest):
     return {'job_id':job_id,'status':'queued','message':'درخواست دریافت در سرور ثبت شد؛ وضعیت را از مسیر پیگیری بررسی کنید.'}
 
 SEARCH_JOBS:dict[str,dict[str,Any]]={}
+# Restore visible job history after process restart. A running task cannot be resumed
+# yet; mark it interrupted rather than falsely reporting that it is still running.
+for _job_id, _job in load_jobs().items():
+    if _job.get("kind") == "data_download":
+        DOWNLOAD_JOBS[_job_id] = _job
+    else:
+        SEARCH_JOBS[_job_id] = _job
+    if _job.get("status") in {"queued", "running"}:
+        _job.update({"status": "interrupted", "message": "سرور دوباره راه‌اندازی شد؛ وضعیت ذخیره شد اما این عملیات هنوز قابلیت ادامه از checkpoint ندارد."})
+        save_job(_job_id, _job.get("kind", "strategy_search"), _job)
+
 
 @app.get('/api/jobs/{job_id}')
 def get_job(job_id:str):
@@ -205,17 +216,20 @@ def search(dataset_id:str,req:SearchRequest):
 
 async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
     job=SEARCH_JOBS[job_id]
-    job.update({'status':'running','message':'جست‌وجوی محدود روی بخش TRAIN؛ توسعه و OOS وارد انتخاب نمی‌شوند.'})
+    job.update({'status':'running','kind':'strategy_search','message':'جست‌وجوی محدود روی بخش TRAIN؛ توسعه و OOS وارد انتخاب نمی‌شوند.'}); save_job(job_id, 'strategy_search', job)
     try:
         def on_progress(progress):
             job.update(progress)
             job.update({'status':'running','message':'در حال ارزیابی نامزدها؛ انتخاب فقط از TRAIN انجام می‌شود.'})
+            save_job(job_id, 'strategy_search', job)
         result=await asyncio.to_thread(_perform_search,dataset_id,req,on_progress)
         job.update({'status':'completed','message':'جست‌وجو پایان یافت','result':result,
                     'evaluated_candidates':result.get('evaluated_candidates',0),
                     'requested_candidates':result.get('requested_candidates',req.candidates)})
+        save_job(job_id, 'strategy_search', job)
     except Exception as exc:
         job.update({'status':'failed','message':f'جست‌وجو کامل نشد: {exc}','error':str(exc)})
+        save_job(job_id, 'strategy_search', job)
 
 @app.get('/api/search-history')
 def search_history(limit:int=Query(default=30,ge=1,le=200)):
@@ -232,7 +246,7 @@ async def start_search_job(dataset_id:str,req:SearchRequest):
     if dataset_id not in DATASETS: raise HTTPException(404,'ابتدا داده را دریافت کنید.')
     job_id=uuid.uuid4().hex
     SEARCH_JOBS[job_id]={'job_id':job_id,'kind':'strategy_search','status':'queued',
-        'message':'جست‌وجو در صف سرور قرار گرفت','requested_candidates':req.candidates,'evaluated_candidates':0,'algorithm':req.algorithm}
+        'message':'جست‌وجو در صف سرور قرار گرفت','requested_candidates':req.candidates,'evaluated_candidates':0,'algorithm':req.algorithm,'kind':'strategy_search'}
     asyncio.create_task(_run_search_job(job_id,dataset_id,req))
     return {'job_id':job_id,'status':'queued','message':'جست‌وجو در سرور ثبت شد؛ وضعیت را پیگیری کنید.'}
 
