@@ -218,8 +218,28 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None):
         spec=StrategySpec(f"{name_prefix} {fast}/{slow} ATR {period}x{mult:g}",fast,slow,period,mult,"both",seed,family)
         try:
             r=backtest(frame,spec,cfg); m=r["metrics"]
-            dist=(max(0,cfg["min_win_rate_pct"]+0.0001-m["win_rate_pct"])/max(cfg["min_win_rate_pct"],1) if cfg["use_min_win_rate"] else 0)+(max(0,cfg["min_profit_factor"]+0.0001-(m["profit_factor"] or 0)) if cfg["use_min_profit_factor"] else 0)+(max(0,cfg["min_tp_per_day"]-m["avg_net_tp_per_day"])/max(cfg["min_tp_per_day"],1) if cfg["use_min_tp_per_day"] else 0)+(max(0,m["max_consecutive_losses"]-cfg["max_consecutive_losses"])/max(cfg["max_consecutive_losses"],1) if cfg["use_max_consecutive_losses"] else 0)
-            results.append({"strategy":r["strategy"],"contract":cfg,"metrics":m,"distance":dist,"run_hash_sha256":r["run_hash_sha256"]})
+            failed=[]; criterion_distances={}
+            if cfg["use_min_win_rate"]:
+                gap=max(0.0,cfg["min_win_rate_pct"]+0.0001-m["win_rate_pct"])
+                criterion_distances["win_rate_pct"]=gap/max(cfg["min_win_rate_pct"],1.0)
+                if m["win_rate_pct"]<=cfg["min_win_rate_pct"]: failed.append("win_rate_pct")
+            if cfg["use_min_profit_factor"]:
+                pf=math.inf if m["profit_factor"] is None else float(m["profit_factor"])
+                gap=max(0.0,cfg["min_profit_factor"]+0.0001-pf)
+                criterion_distances["profit_factor"]=gap
+                if pf<=cfg["min_profit_factor"]: failed.append("profit_factor")
+            if cfg["use_min_tp_per_day"]:
+                gap=max(0.0,cfg["min_tp_per_day"]-m["avg_net_tp_per_day"])
+                criterion_distances["avg_net_tp_per_day"]=gap/max(cfg["min_tp_per_day"],1.0)
+                if m["avg_net_tp_per_day"]<cfg["min_tp_per_day"]: failed.append("avg_net_tp_per_day")
+            if cfg["use_max_consecutive_losses"]:
+                gap=max(0.0,m["max_consecutive_losses"]-cfg["max_consecutive_losses"])
+                criterion_distances["max_consecutive_losses"]=gap/max(cfg["max_consecutive_losses"],1)
+                if m["max_consecutive_losses"]>cfg["max_consecutive_losses"]: failed.append("max_consecutive_losses")
+            dist=sum(criterion_distances.values())
+            results.append({"strategy":r["strategy"],"contract":cfg,"metrics":m,"distance":dist,
+                            "failed_conditions":failed,"criterion_distances":criterion_distances,
+                            "run_hash_sha256":r["run_hash_sha256"]})
         except (ValueError,DataIntegrityError,IndexError): errors+=1
     results.sort(key=lambda r:(not r["metrics"]["passes_all_targets"],r["distance"],r["metrics"]["max_consecutive_losses"],-r["metrics"]["win_rate_pct"],-r["metrics"]["avg_net_tp_per_day"],-(r["metrics"]["profit_factor"] or 0)))
     passing=[r for r in results if r["metrics"]["passes_all_targets"]]
