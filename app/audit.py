@@ -10,9 +10,7 @@ FIELDS = ("trade_id","signal_time","entry_time","exit_time","direction","signal_
           "risk_budget","gross_pnl","entry_cost","exit_cost","fees_slippage","net_pnl",
           "balance_after","loss_streak_after")
 
-def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str, Any]) -> dict[str, Any]:
-    """Recompute the trade ledger independently for deterministic cross-engine checks."""
-    d=frame.copy().reset_index(drop=True)
+def _independent_signals(d: pd.DataFrame, spec: dict[str, Any]):
     close=d["close"].astype(float); prev=close.shift(1)
     fast=int(spec["fast"]); slow=int(spec["slow"]); period=int(spec["atr_period"])
     ef=close.ewm(span=fast,adjust=False,min_periods=fast).mean()
@@ -219,8 +217,29 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
         loss=(-delta.clip(upper=0)).ewm(alpha=1/period,adjust=False,min_periods=period).mean()
         rsi=100-100/(1+gain/loss.replace(0,np.nan))
         long=long&(rsi>50); short=short&(rsi<50)
+    if spec.get("signal_composition","single")!="single":
+        secondary_spec={**spec,"family":spec.get("secondary_family","none"),
+                       "secondary_family":"none","signal_composition":"single"}
+        sec_long,sec_short,_,_,_,_=_independent_signals(d,secondary_spec)
+        operation=spec.get("signal_composition")
+        if operation=="and":
+            long=long&sec_long; short=short&sec_short
+        elif operation=="or":
+            long=long|sec_long; short=short|sec_short
+        elif operation=="xor":
+            long=long^sec_long; short=short^sec_short
+        else:
+            raise ValueError("Unsupported signal composition")
     long=long.fillna(False)
     short=short.fillna(False)
+    return long,short,atr,fast,slow,period
+
+
+def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str, Any]) -> dict[str, Any]:
+    """Recompute the trade ledger independently for deterministic cross-engine checks."""
+    d=frame.copy().reset_index(drop=True)
+    close=d["close"].astype(float)
+    long,short,atr,fast,slow,period=_independent_signals(d,spec)
     rate=(float(cfg["commission_pct_per_side"])+float(cfg["slippage_pct_per_side"]))/100.0
     balance=float(cfg["initial_balance"]); streak=0; ledger=[]; max_streak=0
     i=max(slow,period)
