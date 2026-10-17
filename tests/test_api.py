@@ -16,6 +16,7 @@ def test_home_page_serves_persian_ui():
     r=client.get('/')
     assert r.status_code==200
     assert 'Strategy Foundry' in r.text
+    assert 'خلاصهٔ زندهٔ پژوهش' in r.text
 
 def test_contract_defaults_endpoint():
     r=client.get('/api/contract')
