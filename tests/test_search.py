@@ -7,7 +7,7 @@ import app.audit as audit
 from app.engine import normalize_contract, search_candidates
 
 
-def test_search_explores_eighteen_families_and_returns_five_near_misses(monkeypatch):
+def test_search_explores_all_supported_families_and_returns_five_near_misses(monkeypatch):
     seen = []
 
     def fake_backtest(frame, spec, contract):
@@ -40,7 +40,7 @@ def test_search_explores_eighteen_families_and_returns_five_near_misses(monkeypa
     monkeypatch.setattr(audit, "independent_replay", lambda frame, spec, cfg: {"ledger": []})
     result = search_candidates(pd.DataFrame(), max_candidates=60, seed=42, contract=normalize_contract())
 
-    assert set(seen) == {"ema_crossover", "channel_breakout", "rsi_reversion", "volume_breakout", "ema_pullback", "macd_crossover", "bollinger_reversion", "inside_bar_breakout", "engulfing_reversal", "momentum_breakout", "stochastic_reversion", "roc_momentum", "adx_trend", "keltner_breakout", "atr_squeeze_breakout", "obv_trend", "vwap_reclaim", "pivot_reversal"}
+    assert set(seen) == {"ema_crossover", "channel_breakout", "rsi_reversion", "volume_breakout", "ema_pullback", "macd_crossover", "bollinger_reversion", "inside_bar_breakout", "engulfing_reversal", "momentum_breakout", "stochastic_reversion", "roc_momentum", "adx_trend", "keltner_breakout", "atr_squeeze_breakout", "obv_trend", "vwap_reclaim", "pivot_reversal", "swing_structure_break", "failed_breakout_reversal", "wick_rejection", "range_expansion_breakout", "three_bar_momentum", "volatility_regime_breakout", "trend_exhaustion_reversal", "volume_climax_reversal", "range_compression_breakout", "support_resistance_rejection", "micro_double_bottom", "micro_double_top"}
     assert result["evaluated_candidates"] == 60
     assert result["all_passing"] is False
     assert result["requested_near_misses"] == 5
