@@ -71,7 +71,7 @@ The router does not create API access or credits. Unconfigured providers are ski
 
 ## Status
 
-Implemented in this foundation: server-side API, OHLCV checks, Binance archive download path, tracked download and asynchronous search jobs with status polling, TRAIN-only search selection, persisted source provenance and data SHA-256 fingerprints, editable settings/profile validation, SQLite dataset/run/profile persistence, risk/cost-aware ledger, bounded candidate search, OHLC candlestick view with trade overlays and paging, CSV and standalone Python replay export, an independent replay/audit endpoint, run history, and automated tests.
+Implemented in this foundation: server-side API, OHLCV checks, Binance archive download path, tracked download and asynchronous search jobs with status polling, TRAIN-only search selection, persisted source provenance and data SHA-256 fingerprints, editable settings/profile validation, SQLite dataset/run/profile persistence, risk/cost-aware ledger, bounded candidate search, OHLC candlestick view with trade overlays, paging, zoom presets, and latest-candle navigation, CSV and standalone Python replay export, an independent replay/audit endpoint, run history, and automated tests.
 
 Not yet certified/complete: 500k+ candidate search, 1-second ambiguity resolution, standalone-export execution and exact ledger equality on real data, smooth zoom/pan/replay/drawing tools, indicator selection beyond the current EMA crossover family, full authentication/multi-user isolation, complete AI/voice/files engineer workflow, long-run benchmarks, and deployment smoke test. The independent audit engine has a synthetic-data unit test; this is not a market-data certificate. See app/ACCEPTANCE_GATES.md.
 
