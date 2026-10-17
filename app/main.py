@@ -338,9 +338,28 @@ async def start_search_job(dataset_id:str,req:SearchRequest):
     if dataset_id not in DATASETS: raise HTTPException(404,'ابتدا داده را دریافت کنید.')
     job_id=uuid.uuid4().hex
     SEARCH_JOBS[job_id]={'job_id':job_id,'kind':'strategy_search','status':'queued',
-        'message':'جست‌وجو در صف سرور قرار گرفت','requested_candidates':req.candidates,'evaluated_candidates':0,'algorithm':req.algorithm,'kind':'strategy_search'}
+        'dataset_id':dataset_id,'request':req.dict(),
+        'message':'جست‌وجوی دسته‌ای در صف سرور قرار گرفت','requested_candidates':req.candidates,
+        'evaluated_candidates':0,'completed_candidates':0,'completed_batches':0,
+        'checkpoint_passing_results':[],'checkpoint_near_misses':[],'algorithm':req.algorithm}
+    save_job(job_id,'strategy_search',SEARCH_JOBS[job_id])
     asyncio.create_task(_run_search_job(job_id,dataset_id,req))
-    return {'job_id':job_id,'status':'queued','message':'جست‌وجو در سرور ثبت شد؛ وضعیت را پیگیری کنید.'}
+    return {'job_id':job_id,'status':'queued','message':'جست‌وجوی دسته‌ای در سرور ثبت شد؛ وضعیت را پیگیری کنید.'}
+
+@app.post('/api/search-job/{job_id}/resume')
+async def resume_search_job(job_id:str):
+    job=SEARCH_JOBS.get(job_id)
+    if job is None: raise HTTPException(404,'جست‌وجوی ذخیره‌شده پیدا نشد.')
+    if job.get('status') not in {'interrupted','failed'}:
+        raise HTTPException(409,'فقط جست‌وجوی متوقف‌شده یا ناموفق قابل ادامه است.')
+    dataset_id=job.get('dataset_id')
+    if dataset_id not in DATASETS: raise HTTPException(409,'دادهٔ اصلی در ذخیره‌سازی موجود نیست؛ ادامهٔ جست‌وجو امن نیست.')
+    try: req=SearchRequest(**job['request'])
+    except Exception as exc: raise HTTPException(409,f'تنظیمات ذخیره‌شده قابل بازیابی نیست: {exc}') from exc
+    job.update({'status':'queued','message':'ادامه از آخرین دستهٔ کامل‌شده','error':None})
+    save_job(job_id,'strategy_search',job)
+    asyncio.create_task(_run_search_job(job_id,dataset_id,req))
+    return {'job_id':job_id,'status':'queued','completed_batches':job.get('completed_batches',0),'evaluated_candidates':job.get('completed_candidates',0)}
 
 @app.post('/api/evaluate/{dataset_id}')
 def evaluate_strategy(dataset_id:str,req:BacktestRequest):
