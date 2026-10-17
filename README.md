@@ -74,6 +74,11 @@ The router does not create API access or credits. Unconfigured providers are ski
 - Added 12 independently replayable price-action/regime families: swing-structure break, failed-breakout reversal, wick rejection, range expansion, three-bar momentum, volatility-regime breakout, trend-exhaustion reversal, volume-climax reversal, range-compression breakout, support/resistance rejection, micro double bottom, and micro double top. The engine and independent audit implement separate signal calculations; UI exposes them in manual and search family controls.
 - Added signal-generation coverage for all 30 families. This expands structural diversity but is **not** yet the promised 500,000-candidate resumable search: the API remains capped at 10,000 until durable batch checkpoints, bounded-memory result storage, cancellation/resume, and full-run validation are implemented.
 
+## V0.6.0 release notes
+
+- Added 12 independently replayable price-action/regime families: swing-structure break, failed-breakout reversal, wick rejection, range expansion, three-bar momentum, volatility-regime breakout, trend-exhaustion reversal, volume-climax reversal, range-compression breakout, support/resistance rejection, micro double bottom, and micro double top. The engine and independent audit implement separate signal calculations; UI exposes them in manual and search family controls.
+- Added signal-generation coverage for all 30 families. This expands structural diversity but is **not** yet the promised 500,000-candidate resumable search: the API remains capped at 10,000 until durable batch checkpoints, bounded-memory result storage, cancellation/resume, and full-run validation are implemented.
+
 ## V0.5.1 release notes
 
 - Search and Binance-download job status/progress are written to SQLite as jobs advance, so the latest visible state remains available after a process restart on hosts with a durable SQLite volume.
