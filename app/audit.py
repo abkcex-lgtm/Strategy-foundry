@@ -132,9 +132,6 @@ def _independent_signals(d: pd.DataFrame, spec: dict[str, Any]):
         upper=d.high.rolling(slow,min_periods=slow).max().shift(1); lower=d.low.rolling(slow,min_periods=slow).min().shift(1)
         long=(close>close.shift(fast))&(close>upper)&(close.shift(1)<=upper.shift(1))
         short=(close<close.shift(fast))&(close<lower)&(close.shift(1)>=lower.shift(1))
-    context_filter=spec.get("context_filter","none")
-    confirmation_filter=spec.get("confirmation_filter","none")
-
     elif family=="swing_structure_break":
         upper=d.high.rolling(slow,min_periods=slow).max().shift(1); lower=d.low.rolling(slow,min_periods=slow).min().shift(1)
         long=(close>upper)&(close.shift(1)<=upper.shift(1)); short=(close<lower)&(close.shift(1)>=lower.shift(1))
@@ -184,6 +181,8 @@ def _independent_signals(d: pd.DataFrame, spec: dict[str, Any]):
         current_high=d.high.rolling(fast,min_periods=fast).max(); prior_high=d.high.shift(fast).rolling(fast,min_periods=fast).max()
         trigger=d.low.shift(1).rolling(fast,min_periods=fast).min()
         short=((current_high-prior_high).abs()<=atr*0.35)&(d.high>=current_high-atr*0.1)&(close<trigger)&(close<d.open); long=pd.Series(False,index=d.index)
+    context_filter=spec.get("context_filter","none")
+    confirmation_filter=spec.get("confirmation_filter","none")
     if context_filter=="ema_trend":
         long=long&(ef>es); short=short&(ef<es)
     elif context_filter=="adx_strength":
