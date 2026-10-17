@@ -13,7 +13,7 @@ from .data import download_binance_month,validate_ohlcv,split_reference_period
 from .persistence import load_datasets,load_dataset_metadata,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles,save_search,list_search_history,load_search_result
 
 ROOT=Path(__file__).resolve().parent
-app=FastAPI(title='Strategy Foundry API',version='0.4.0',description='Server-side strategy research and simulation only; never sends live orders.')
+app=FastAPI(title='Strategy Foundry API',version='0.5.0',description='Server-side strategy research and simulation only; never sends live orders.')
 app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')
 DATASETS:dict[str,pd.DataFrame]=load_datasets()
 DATASET_METADATA:dict[str,dict[str,Any]]=load_dataset_metadata()
@@ -47,7 +47,7 @@ class AIChatRequest(BaseModel):
 @app.get('/',response_class=HTMLResponse)
 def home(): return (ROOT/'static'/'index.html').read_text(encoding='utf-8')
 @app.get('/api/health')
-def health(): return {'status':'ok','service':'strategy-foundry','version':'0.4.0','execution':'server-side','live_trading':False,'persistent_store':'sqlite','loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'persistent_search_history':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','search_history_endpoint':'/api/search-history','question_first_assistant_routing':True}}
+def health(): return {'status':'ok','service':'strategy-foundry','version':'0.5.0','execution':'server-side','live_trading':False,'persistent_store':'sqlite','loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'persistent_search_history':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','search_history_endpoint':'/api/search-history','question_first_assistant_routing':True}}
 @app.get('/api/contract')
 def contract():
     from .engine import normalize_contract
@@ -297,11 +297,22 @@ def audit_run(run_id:str):
     except Exception as exc: raise HTTPException(422,f'تطبیق مستقل متوقف شد: {exc}') from exc
 
 @app.get('/api/runs/{run_id}/chart')
-def run_chart(run_id:str,offset:int=Query(default=0,ge=0),limit:int=Query(default=500,ge=1,le=2000)):
+def run_chart(run_id:str,offset:int=Query(default=0,ge=0),limit:int=Query(default=500,ge=1,le=2000),trade_id:int|None=Query(default=None,ge=1)):
     r=RUNS.get(run_id)
     if not r: raise HTTPException(404,'Run پیدا نشد.')
     dataset_id=r.get('dataset_id') or RUN_DATASET.get(run_id); df=DATASETS.get(dataset_id) if dataset_id else None
     if df is None: raise HTTPException(409,'دادهٔ اصلی در دسترس نیست.')
+    # Optional ledger-driven focus: locate the trade's entry candle and center it in the visible window.
+    if trade_id is not None:
+        trade=next((t for t in r.get('ledger',[]) if int(t.get('trade_id',-1))==trade_id),None)
+        if trade is None: raise HTTPException(404,'معاملهٔ درخواستی در دفتر این اجرا پیدا نشد.')
+        try:
+            entry_time=int(trade['entry_time'])
+            position=int(df['open_time'].searchsorted(entry_time))
+            offset=max(0,min(max(0,len(df)-limit),position-limit//2))
+        except Exception as exc:
+            raise HTTPException(422,'موقعیت معامله برای فوکوس نمودار قابل محاسبه نیست.') from exc
+    offset=max(0,min(offset,max(0,len(df)-limit)))
     part=df.iloc[offset:offset+limit]
     candles=part[['open_time','open','high','low','close','volume']].to_dict(orient='records')
     if candles:
@@ -309,7 +320,7 @@ def run_chart(run_id:str,offset:int=Query(default=0,ge=0),limit:int=Query(defaul
         markers=[{k:t.get(k) for k in ('trade_id','signal_time','entry_time','exit_time','direction','entry_price','stop_loss','take_profit','exit_price','exit_reason','net_pnl')}
                  for t in r['ledger'] if int(t['entry_time'])<=window_end and int(t['exit_time'])>=window_start]
     else: markers=[]
-    return {'run_id':run_id,'offset':offset,'total_rows':len(df),'candles':candles,'trades':markers}
+    return {'run_id':run_id,'offset':offset,'total_rows':len(df),'candles':candles,'trades':markers,'focused_trade_id':trade_id}
 
 @app.get('/api/runs/{run_id}/ledger.csv')
 def export_ledger(run_id:str):
