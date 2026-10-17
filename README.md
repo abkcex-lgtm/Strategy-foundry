@@ -69,6 +69,12 @@ Configure provider keys as host-side secret environment variables, never in fron
 
 The router does not create API access or credits. Unconfigured providers are skipped, and when no key is configured the API reports that clearly. The assistant is not yet an autonomous source-code repair agent; ordinary chat must not be described as code changes or tests being executed.
 
+## V0.7.0 release notes
+
+- Search can generate structurally compositional strategy genomes: two distinct strategy families combined with AND, OR, or XOR logic. Composition is part of the genome hash, crossover/mutation, ML feature representation, manual backtest settings, and independent audit replay.
+- Background search accepts up to 500,000 candidates in 10,000-candidate batches, persists each completed batch atomically, globally deduplicates genome fingerprints, and exposes resume after interruption. The synchronous endpoint remains capped at 10,000.
+- Added tests for composition ledger parity, global genome deduplication, 500k request validation, and atomic checkpoint persistence. A full 500k production-scale run is not yet measured or certified.
+
 ## V0.6.0 release notes
 
 - Added 12 independently replayable price-action/regime families: swing-structure break, failed-breakout reversal, wick rejection, range expansion, three-bar momentum, volatility-regime breakout, trend-exhaustion reversal, volume-climax reversal, range-compression breakout, support/resistance rejection, micro double bottom, and micro double top. The engine and independent audit implement separate signal calculations; UI exposes them in manual and search family controls.
@@ -96,7 +102,7 @@ The router does not create API access or credits. Unconfigured providers are ski
 
 ## Status
 
-Current API/workspace version: **0.6.0**. The header reports the live API version; verify `/api/health` returns `0.5.0` to confirm the server update. The workspace header reads the running server version from `/api/health`.
+Current API/workspace version: **0.7.0**. The header reports the live API version; verify `/api/health` returns `0.5.0` to confirm the server update. The workspace header reads the running server version from `/api/health`.
 
 Implemented in this foundation: server-side API, OHLCV checks, Binance archive download path, tracked download and asynchronous search jobs with status polling, TRAIN-only search selection, persisted source provenance and data SHA-256 fingerprints, live dashboard summary of data/risk/filters/fees, editable settings/profile validation, SQLite dataset/run/profile/search-result persistence with saved search manifests and reopenable result history, risk/cost-aware ledger, deterministic genetic search with crossover/mutation/stratified seeds/immigrant exploration, an ExtraTrees surrogate-guided proposal mode, a stratified-random baseline, user-selectable family/context/confirmation search space, and 18 causal signal families (EMA crossover, channel breakout, RSI reversion, volume breakout, EMA pullback, MACD crossover, Bollinger reversion, inside-bar breakout, engulfing reversal, momentum breakout, stochastic reversion, ROC momentum, ADX/DMI trend, Keltner breakout, volatility squeeze breakout, OBV trend, VWAP reclaim, and support/resistance pivot reversal). Reported search results are independently replayed against a separate ledger engine; UI exposes search mode and family labels. Other implemented elements include per-filter failures/distances, OHLC candlestick view with trade overlays, paging/zoom presets, clickable/keyboard-selectable ledger rows that focus a selected trade on the chart, TP-only/winner/loser filters, CSV and standalone Python replay export, run history and reproducibility manifests.
 
