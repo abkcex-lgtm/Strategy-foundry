@@ -117,8 +117,8 @@ def test_independent_engine_matches_primary_ledger(family):
 def test_hybrid_genetic_search_is_seeded_and_reports_real_evaluations():
     from app.engine import search_candidates
     df=candles(700)
-    a=search_candidates(df,25,seed=123,contract={"use_min_tp_per_day":False})
-    b=search_candidates(df,25,seed=123,contract={"use_min_tp_per_day":False})
+    a=search_candidates(df,25,seed=123,contract={"use_min_tp_per_day":False},algorithm="hybrid_genetic")
+    b=search_candidates(df,25,seed=123,contract={"use_min_tp_per_day":False},algorithm="hybrid_genetic")
     assert a["algorithm"]=="hybrid_genetic"
     assert a["seed"]==123
     assert a["evaluated_candidates"]==b["evaluated_candidates"]
@@ -165,3 +165,26 @@ def test_compositional_context_filters_are_causal_and_independently_replayed(con
 def test_unknown_composition_filter_is_rejected():
     with pytest.raises(ValueError, match="Unsupported context filter"):
         StrategySpec(context_filter="future_leak").validate()
+
+
+def test_surrogate_genetic_search_fits_ml_model(monkeypatch):
+    import hashlib
+    import app.engine as engine
+    import app.audit as audit
+    def fake_backtest(frame, spec, contract):
+        metrics = {"trades": 12, "wins": 3, "losses": 9, "win_rate_pct": 25.0,
+                   "profit_factor": 0.6, "avg_net_tp_per_day": 0.2,
+                   "max_consecutive_losses": 7, "net_pnl": -30.0,
+                   "final_balance": 970.0, "total_costs": 1.0,
+                   "data_hash_sha256": "a" * 64, "rows": 300, "span_days": 1.0,
+                   "passes_all_targets": False}
+        return {"strategy": engine.asdict(spec), "contract": contract, "metrics": metrics,
+                "run_hash_sha256": hashlib.sha256(repr(spec).encode()).hexdigest(), "ledger": []}
+    monkeypatch.setattr(engine, "backtest", fake_backtest)
+    monkeypatch.setattr(audit, "independent_replay", lambda frame, spec, cfg: {"ledger": []})
+    result = engine.search_candidates(pd.DataFrame(), max_candidates=80, seed=19,
+                                      algorithm="surrogate_genetic")
+    assert result["algorithm"] == "surrogate_genetic"
+    assert result["surrogate_model_fits"] >= 1
+    assert result["evaluated_candidates"] == 80
+    assert "ExtraTrees" in result["warning"]
