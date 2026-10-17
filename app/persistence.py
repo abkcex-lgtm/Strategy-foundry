@@ -256,3 +256,25 @@ def load_job_genome_hashes(job_id: str) -> set[str]:
         ).fetchall()}
     finally:
         c.close()
+
+
+
+def save_job_batch_checkpoint(job_id: str, kind: str, payload: dict[str, Any], hashes: list[str]):
+    """Atomically commit a completed search batch's genome fingerprints and job checkpoint."""
+    status = str(payload.get("status", "unknown"))
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                         default=_json_default, allow_nan=False)
+    c = _connect()
+    try:
+        if hashes:
+            c.executemany("INSERT OR IGNORE INTO job_genomes(job_id,genome_hash) VALUES(?,?)",
+                          [(job_id, str(value)) for value in hashes])
+        c.execute(
+            "INSERT INTO jobs(job_id,kind,status,payload_json,updated_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP) "
+            "ON CONFLICT(job_id) DO UPDATE SET kind=excluded.kind,status=excluded.status,"
+            "payload_json=excluded.payload_json,updated_at=CURRENT_TIMESTAMP",
+            (job_id, kind, status, encoded),
+        )
+        c.commit()
+    finally:
+        c.close()
