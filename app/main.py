@@ -13,7 +13,7 @@ from .data import download_binance_month,validate_ohlcv,split_reference_period
 from .persistence import load_datasets,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles
 
 ROOT=Path(__file__).resolve().parent
-app=FastAPI(title='Strategy Foundry API',version='0.2.0',description='Server-side strategy research and simulation only; never sends live orders.')
+app=FastAPI(title='Strategy Foundry API',version='0.3.0',description='Server-side strategy research and simulation only; never sends live orders.')
 app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')
 DATASETS:dict[str,pd.DataFrame]=load_datasets()
 RUNS:dict[str,dict[str,Any]]=load_runs()
