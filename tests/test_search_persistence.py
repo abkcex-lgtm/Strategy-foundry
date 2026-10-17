@@ -15,6 +15,7 @@ def test_search_results_and_manifest_persist(tmp_path, monkeypatch):
         "all_passing": False,
         "results": [{"strategy": {"name": "candidate 1"}, "distance": 0.2}],
         "search_period": "TRAIN only",
+        "search_manifest_sha256": "deadbeef",
     }
 
     persistence.save_search(search_id, manifest["dataset_id"], manifest, result)
@@ -25,3 +26,4 @@ def test_search_results_and_manifest_persist(tmp_path, monkeypatch):
     assert history[0]["search_id"] == search_id
     assert history[0]["evaluated_candidates"] == 18
     assert history[0]["result_count"] == 1
+    assert history[0]["search_manifest_sha256"] == "deadbeef"
