@@ -15,7 +15,7 @@ def test_health_endpoint():
     assert r.json()['features']['persistent_job_status'] is True
     assert r.json()['features']['search_history_endpoint']=='/api/search-history'
     assert r.json()['features']['search_job_endpoint']=='/api/search-jobs/{dataset_id}'
-    assert r.json()['version']=='0.7.2'
+    assert r.json()['version']=='0.7.3'
 
 def test_home_page_serves_persian_ui():
     r=client.get('/')
@@ -136,3 +136,11 @@ def test_atomic_job_batch_checkpoint_persists_job_and_genomes(tmp_path, monkeypa
     restored = persistence.load_jobs()
     assert restored["batch-job"]["completed_batches"] == 1
     assert persistence.load_job_genome_hashes("batch-job") == {"abc", "def"}
+
+
+def test_search_resume_frontend_reuses_existing_job_and_handles_shortfall():
+    response = client.get('/static/app.js')
+    assert response.status_code == 200
+    source = response.text
+    assert "existingJobId?{job_id:existingJobId}:await api('/api/search-jobs/'" in source
+    assert "['completed','completed_with_shortfall'].includes(state.status)" in source
