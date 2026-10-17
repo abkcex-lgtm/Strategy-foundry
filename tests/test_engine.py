@@ -273,3 +273,25 @@ def test_exit_fill_resolves_gaps_before_intrabar_ambiguity(side, bar_open, bar_h
 def test_exit_fill_rejects_unresolved_intrabar_sl_tp_ambiguity():
     with pytest.raises(DataIntegrityError, match="same-candle SL/TP ambiguity"):
         _resolve_bar_exit("LONG", 100.0, 105.0, 97.0, 98.0, 104.0)
+
+
+def test_search_returns_exactly_five_audited_near_misses_when_no_candidate_passes():
+    from app.engine import search_candidates
+    result = search_candidates(
+        candles(700),
+        25,
+        seed=20261017,
+        algorithm="stratified_random",
+        contract={
+            "reward_risk": 2.0,
+            "min_win_rate_pct": 99.9,
+            "min_profit_factor": 1000.0,
+            "min_tp_per_day": 1000.0,
+            "max_consecutive_losses": 0,
+        },
+    )
+    assert result["all_passing"] is False
+    assert result["returned_near_misses"] == 5
+    assert len(result["results"]) == 5
+    assert result["near_miss_shortfall"] == 0
+    assert all(item.get("independent_audit", {}).get("status") == "MATCH" for item in result["results"])
