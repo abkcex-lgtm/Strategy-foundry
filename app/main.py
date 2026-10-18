@@ -360,14 +360,76 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
             save_job_batch_checkpoint(job_id,'strategy_search',job,hashes)
             if actual==0 and batch_index>=max_attempts:
                 break
-        all_passing=bool(passing)
-        selected=passing if all_passing else near[:5]
         splits=split_reference_period(DATASETS[dataset_id]); train=splits['train']
         development=splits['development']
+        # A TRAIN pass is only a candidate. It must independently pass every
+        # enabled acceptance filter on DEVELOPMENT before it can be reported
+        # as a passing strategy. OOS remains untouched by this selection step.
+        development_passing=[]
+        development_near=[]
+        development_audit_failures=[]
+        for item in passing:
+            item['train_metrics']=item.get('metrics',{})
+            item['train_distance']=float(item.get('distance',math.inf))
+            try:
+                cfg=normalize_contract(item.get('contract') or req.contract)
+                dev_run=backtest(development,item['strategy'],cfg)
+                dev_audit=independent_replay(development,item['strategy'],cfg)
+                primary_ledger=dev_run['ledger']; independent_ledger=dev_audit['ledger']
+                matched=len(primary_ledger)==len(independent_ledger)
+                if matched:
+                    for primary_trade, independent_trade in zip(primary_ledger,independent_ledger):
+                        for field in FIELDS:
+                            left=primary_trade[field]; right=independent_trade[field]
+                            if isinstance(left,(int,float)) and not isinstance(left,bool):
+                                if not math.isclose(float(left),float(right),rel_tol=1e-10,abs_tol=1e-8):
+                                    matched=False; break
+                            elif left!=right:
+                                matched=False; break
+                        if not matched: break
+                item['development_data_hash_sha256']=dev_run['metrics']['data_hash_sha256']
+                item['development_metrics']=dev_run['metrics']
+                item['development_independent_audit']={'status':'MATCH' if matched else 'MISMATCH',
+                    'primary_trades':len(primary_ledger),'independent_trades':len(independent_ledger),
+                    'ledger_fields_checked':len(FIELDS)}
+                if not matched:
+                    item['development_evaluation_status']='AUDIT_MISMATCH'
+                    development_audit_failures.append({'strategy':item.get('strategy'),'reason':'Development ledger mismatch'})
+                    continue
+                distance,failed,distances=_candidate_distance(dev_run['metrics'],cfg)
+                item['metrics']=dev_run['metrics']
+                item['metrics_split']='development'
+                item['distance']=float(distance)
+                item['failed_conditions']=failed
+                item['criterion_distances']=distances
+                item['development_evaluation_status']='COMPLETED'
+                item['development_passes_all_targets']=not failed
+                if not failed:
+                    development_passing.append(item)
+                else:
+                    development_near.append(item)
+            except Exception as exc:
+                item['development_evaluation_status']='PREFLIGHT_FAILED'
+                item['development_evaluation_reason']=str(exc)
+                development_audit_failures.append({'strategy':item.get('strategy'),'reason':str(exc)})
+        near.extend(development_near)
+        def final_near_key(item):
+            m=item.get('metrics',{})
+            pf=m.get('profit_factor')
+            return (0 if item.get('development_evaluation_status')=='COMPLETED' else 1,
+                    float(item.get('distance',math.inf)),
+                    int(m.get('max_consecutive_losses',10**9)),
+                    -float(m.get('win_rate_pct',0)),
+                    -float(m.get('avg_net_tp_per_day',0)),
+                    -float(pf if pf is not None else 1e9))
+        near=sorted(near,key=final_near_key)[:5]
+        passing=development_passing
+        all_passing=bool(passing)
+        selected=passing if all_passing else near[:5]
         manifest={'dataset_id':dataset_id,
                   'train_data_hash_sha256':hashlib.sha256(train.to_csv(index=False,float_format='%.12g').encode()).hexdigest(),
                   'development_data_hash_sha256':hashlib.sha256(development.to_csv(index=False,float_format='%.12g').encode()).hexdigest(),
-                  'near_miss_ranking_policy':'TRAIN pass detection; DEVELOPMENT ranks frozen near-miss pool only when no TRAIN candidate passes; OOS untouched.',
+                  'near_miss_ranking_policy':'TRAIN candidates must pass independent DEVELOPMENT backtest and ledger replay before being marked passing; OOS remains untouched.',
                   'requested_candidates':req.candidates,'evaluated_unique_candidates':completed,
                   'completed_batches':batch_index,'seed':req.seed,'algorithm':req.algorithm,
                   'contract':selected[0].get('contract',{}) if selected else req.contract,
@@ -388,8 +450,9 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
                       'search_period':_period_label(splits['train'],'TRAIN only'),
                       'development_period':_period_label(splits['development'],'near-miss ranking only when no TRAIN candidate passes'),
                       'oos_period':_period_label(splits['oos'],'not used in search'),
-                      'selection_policy':'Candidates are globally deduplicated and pass detection uses TRAIN. If no TRAIN candidate passes, the frozen near-miss pool is ranked on DEVELOPMENT. OOS is not read for candidate selection.',
+                      'selection_policy':'Candidate genomes are generated and first screened on TRAIN; a pass is reported only after every enabled filter and independent ledger replay also pass on DEVELOPMENT. OOS is not read for selection.',
                       'near_miss_ranking_policy':manifest['near_miss_ranking_policy'],
+                      'development_audit_failures':development_audit_failures,
                       'warning':('Completed all requested globally unique candidate evaluations; all reported passing candidates were independently replayed.' if completed>=req.candidates else
                                  'INCOMPLETE SEARCH: candidate space/attempt limit prevented the requested unique evaluation count. Do not treat this as a completed 500k search.') }
         save_search(search_id,dataset_id,manifest,final_result)
