@@ -500,6 +500,8 @@ def backtest(frame, spec=None, contract=None, execution_frame=None):
                         raise DataIntegrityError(f"Unresolved same-candle SL/TP ambiguity at {int(open_times[j])}; automatic 1-second resolution failed: {fetch_exc}") from fetch_exc
                     execution_frames_used.append(seconds)
                     resolution=_resolve_execution_interval(side,seconds,int(open_times[j]),base_interval,stop,target)
+                    if resolution is None:
+                        raise DataIntegrityError(f"1-second data contradicts ambiguous base candle at {int(open_times[j])}")
                     if resolution is not None:
                         reason,exit_price,exit_time=resolution; exit_i=j
                         resolution_status="resolved_1s_ohlc_auto"

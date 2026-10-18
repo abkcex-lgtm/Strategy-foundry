@@ -345,6 +345,8 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
                     except Exception as fetch_exc:
                         raise ValueError(f"UNRESOLVED_AMBIGUITY at {int(d.open_time.iloc[j])}; automatic 1-second resolution failed: {fetch_exc}") from fetch_exc
                     resolution=_resolve_execution_interval_independent(side,seconds,int(d.open_time.iloc[j]),base_interval,stop,target)
+                    if resolution is None:
+                        raise ValueError(f"1-second data contradicts ambiguous base candle at {int(d.open_time.iloc[j])}")
                     if resolution is not None:
                         reason,px,exit_time=resolution; ex=j; resolution_status="resolved_1s_ohlc_auto"; break
                 if resolution is not None:

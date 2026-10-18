@@ -71,7 +71,7 @@ def health(): return {'status':'ok','service':'strategy-foundry','version':'0.9.
 @app.get('/api/contract')
 def contract():
     from .engine import normalize_contract
-    return {'contract':normalize_contract(),'editable':True,'notes':['این فقط یک پروفایل اولیه و قابل‌ویرایش است، نه قرارداد قفل‌شده.','سفارش واقعی ارسال نمی‌شود.','داده مصنوعی بازار ساخته نمی‌شود.','اگر ترتیب SL/TP حتی با دادهٔ اجرایی موجود روشن نشود، معامله به‌صورت محافظه‌کارانه ضرر SL با هزینه‌ها ثبت و در دفتر معاملات علامت‌گذاری می‌شود.','دادهٔ تایم‌فریم اجرایی هنوز از طریق API جست‌وجو به‌صورت خودکار دریافت و متصل نمی‌شود.']}
+    return {'contract':normalize_contract(),'editable':True,'notes':['این فقط یک پروفایل اولیه و قابل‌ویرایش است، نه قرارداد قفل‌شده.','سفارش واقعی ارسال نمی‌شود.','داده مصنوعی بازار ساخته نمی‌شود.','اگر کندل ۱دقیقه‌ای هم‌زمان SL و TP را لمس کند، پنجرهٔ دقیق ۱ثانیه‌ای از Binance USD-M دریافت و اعتبارسنجی می‌شود؛ اگر داده ناقص یا مبهم باشد، بک‌تست رد می‌شود و معاملهٔ ساختگی ثبت نمی‌شود.','دادهٔ ۱ثانیه‌ای فقط برای پنجره‌های مبهم دریافت می‌شود و هش آن در گزارش اجرا ثبت می‌شود.']}
 @app.post('/api/settings/validate')
 def validate_settings(req:BacktestRequest):
     from .engine import normalize_contract
