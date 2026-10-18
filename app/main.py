@@ -450,7 +450,7 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
                       'search_period':_period_label(splits['train'],'TRAIN only'),
                       'development_period':_period_label(splits['development'],'near-miss ranking only when no TRAIN candidate passes'),
                       'oos_period':_period_label(splits['oos'],'not used in search'),
-                      'selection_policy':'Candidate genomes are generated and first screened on TRAIN; a pass is reported only after every enabled filter and independent ledger replay also pass on DEVELOPMENT. OOS is not read for selection.',
+                      'selection_policy':'Candidate genomes are generated and first screened on TRAIN; a pass is reported only after every enabled filter and independent ledger replay also pass on DEVELOPMENT. OOS is not read for candidate selection.',
                       'near_miss_ranking_policy':manifest['near_miss_ranking_policy'],
                       'development_audit_failures':development_audit_failures,
                       'warning':('Completed all requested globally unique candidate evaluations; all reported passing candidates were independently replayed.' if completed>=req.candidates else
