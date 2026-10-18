@@ -1,5 +1,5 @@
 '''Standalone replay: generated per run; does not import Strategy Foundry.'''
-import sys, json, hashlib, math
+import sys, json, hashlib, math, urllib.request, urllib.parse
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass, replace
@@ -318,6 +318,41 @@ def resolve_execution_interval(side, execution_df, start_ms, interval_ms, stop, 
     return None
 
 
+_EXECUTION_CACHE = {}
+
+def download_execution_window(symbol, start_ms, interval_ms):
+    symbol=str(symbol).upper()
+    if not symbol.isalnum(): raise ValueError('Invalid Binance USD-M symbol')
+    if interval_ms<=0 or interval_ms%1000: raise ValueError('Execution interval must be whole seconds')
+    if start_ms<1_000_000_000_000: raise ValueError(f'Unresolved same-candle SL/TP ambiguity at invalid timestamp {start_ms}')
+    seconds=interval_ms//1000
+    if seconds>1500: raise ValueError(f'Unresolved same-candle SL/TP ambiguity at {start_ms}; 1-second window exceeds 1500 seconds')
+    key=(symbol,int(start_ms),int(seconds))
+    if key in _EXECUTION_CACHE: return _EXECUTION_CACHE[key].copy()
+    params=urllib.parse.urlencode({'symbol':symbol,'interval':'1s','startTime':int(start_ms),'endTime':int(start_ms)+seconds*1000-1,'limit':min(1500,seconds)})
+    url='https://fapi.binance.com/fapi/v1/klines?'+params
+    try:
+        request=urllib.request.Request(url,headers={'User-Agent':'StrategyFoundry-Standalone/0.9.5'})
+        with urllib.request.urlopen(request,timeout=20) as response:
+            payload=json.loads(response.read().decode('utf-8'))
+        if not isinstance(payload,list) or len(payload)!=seconds:
+            got=len(payload) if isinstance(payload,list) else 'non-list response'
+            raise ValueError(f'Expected {seconds} one-second candles, got {got}')
+        rows=[]
+        for item in payload:
+            if not isinstance(item,list) or len(item)<6: raise ValueError('Unexpected Binance kline response shape')
+            rows.append((int(item[0]),float(item[1]),float(item[2]),float(item[3]),float(item[4]),float(item[5])))
+        frame=pd.DataFrame(rows,columns=['open_time','open','high','low','close','volume'])
+        validate(frame)
+        times=frame.open_time.to_numpy(dtype='int64')
+        if len(frame)!=seconds or int(times[0])!=start_ms or int(times[-1])!=start_ms+(seconds-1)*1000 or (pd.Series(times).diff().dropna()!=1000).any():
+            raise ValueError('One-second timestamps are missing, duplicated, or misaligned')
+    except Exception as exc:
+        raise ValueError(f'Unresolved same-candle SL/TP ambiguity at {start_ms}; automatic 1-second resolution failed: {exc}') from exc
+    _EXECUTION_CACHE[key]=frame.copy()
+    return frame
+
+
 def replay(df, execution_df=None):
     df=df.copy().reset_index(drop=True); validate(df)
     if len(df)>1:
@@ -327,6 +362,7 @@ def replay(df, execution_df=None):
             raise ValueError('Timestamp gaps detected; replay requires contiguous candles')
     data_hash=digest(df.to_csv(index=False,float_format='%.12g').encode())
     execution_hash=None
+    execution_frames_used=[]
     base_interval=int(df.open_time.diff().dropna().mode().iloc[0]) if len(df)>1 else None
     if execution_df is not None:
         execution_df=execution_df.copy().reset_index(drop=True); validate(execution_df)
@@ -357,9 +393,8 @@ def replay(df, execution_df=None):
             if execution_df is not None:
                 try:
                     resolution=resolve_execution_interval(side,execution_df,int(bar.open_time),base_interval,stop,target)
-                except ValueError:
-                    reason,exit_price,exit_time='SL_UNRESOLVED',stop,int(bar.open_time)
-                    exit_i=j; resolution_status='unresolved_as_loss'; break
+                except ValueError as exc:
+                    raise ValueError(f'EXECUTION_PREFLIGHT_FAILED at {int(bar.open_time)}: {exc}') from exc
                 if resolution is not None:
                     reason,exit_price,exit_time=resolution; exit_i=j; resolution_status='resolved_1s_ohlc'; break
                 continue
@@ -372,7 +407,14 @@ def replay(df, execution_df=None):
                 if bar_open<=target: exit_i=j; exit_price=target; exit_time=int(bar.open_time); reason='TP'; break
                 sl=float(bar.high)>=stop; tp=float(bar.low)<=target
             if sl and tp:
-                reason='SL_UNRESOLVED'; exit_i=j; exit_price=stop; exit_time=int(bar.open_time); resolution_status='unresolved_as_loss'; break
+                try:
+                    seconds=download_execution_window(str(CFG.get('symbol','ETHUSDT')),int(bar.open_time),base_interval)
+                    execution_frames_used.append(seconds)
+                    resolution=resolve_execution_interval(side,seconds,int(bar.open_time),base_interval,stop,target)
+                    if resolution is None: raise ValueError('1-second data contradicts ambiguous base candle')
+                except Exception as exc:
+                    raise ValueError(f'Unresolved same-candle SL/TP ambiguity at {int(bar.open_time)}; replay stopped: {exc}') from exc
+                reason,exit_price,exit_time=resolution; exit_i=j; resolution_status='resolved_1s_ohlc_auto'; break
             if sl: exit_i=j; exit_price=stop; exit_time=int(bar.open_time); reason='SL'; resolution_status='resolved_base_ohlc'; break
             if tp: exit_i=j; exit_price=target; exit_time=int(bar.open_time); reason='TP'; resolution_status='resolved_base_ohlc'; break
         if exit_i is None: break
@@ -384,8 +426,12 @@ def replay(df, execution_df=None):
     wins=[t for t in ledger if t['exit_reason']=='TP' and t['net_pnl']>0]; gp=sum(max(0,t['net_pnl']) for t in ledger); gl=abs(sum(min(0,t['net_pnl']) for t in ledger))
     span=max((int(df.open_time.iloc[-1])-int(df.open_time.iloc[0]))/86400000,1/1440)
     wr=100*len(wins)/len(ledger) if ledger else 0.0; pf=gp/gl if gl else (math.inf if gp else 0.0); tpday=len(wins)/span
-    metrics={'trades':len(ledger),'wins':len(wins),'losses':sum(t['net_pnl']<=0 for t in ledger),'win_rate_pct':wr,'profit_factor':pf if math.isfinite(pf) else None,'avg_net_tp_per_day':tpday,'max_consecutive_losses':max_streak,'net_pnl':sum(t['net_pnl'] for t in ledger),'final_balance':balance,'total_costs':sum(t['fees_slippage'] for t in ledger),'data_hash_sha256':data_hash,'execution_data_hash_sha256':execution_hash,'execution_resolution':'1s_ohlc' if execution_df is not None else 'base_ohlc_only','unresolved_as_loss_count':sum(t.get('execution_ambiguity',False) for t in ledger),'rows':len(df),'span_days':span,'passes_all_targets':bool((not CFG.get('use_min_win_rate',True) or wr>CFG['min_win_rate_pct']) and (not CFG.get('use_min_profit_factor',True) or pf>CFG['min_profit_factor']) and (not CFG.get('use_min_tp_per_day',True) or tpday>=CFG['min_tp_per_day']) and (not CFG.get('use_max_consecutive_losses',True) or max_streak<=CFG['max_consecutive_losses']))}
-    run_hash=digest(json.dumps({'spec':s,'contract':CFG,'data_hash':data_hash,'execution_data_hash':execution_hash,'execution_resolution':'1s_ohlc' if execution_df is not None else 'base_ohlc_only'},sort_keys=True).encode())
+    if execution_frames_used:
+        combined=pd.concat(execution_frames_used,ignore_index=True).drop_duplicates(subset=['open_time']).sort_values('open_time').reset_index(drop=True)
+        execution_hash=digest(combined.to_csv(index=False,float_format='%.12g').encode())
+    execution_resolution='1s_ohlc' if execution_df is not None else ('1s_ohlc_auto' if execution_frames_used else 'base_ohlc_only')
+    metrics={'trades':len(ledger),'wins':len(wins),'losses':sum(t['net_pnl']<=0 for t in ledger),'win_rate_pct':wr,'profit_factor':pf if math.isfinite(pf) else None,'avg_net_tp_per_day':tpday,'max_consecutive_losses':max_streak,'net_pnl':sum(t['net_pnl'] for t in ledger),'final_balance':balance,'total_costs':sum(t['fees_slippage'] for t in ledger),'data_hash_sha256':data_hash,'execution_data_hash_sha256':execution_hash,'execution_resolution':execution_resolution,'unresolved_as_loss_count':sum(t.get('execution_ambiguity',False) for t in ledger),'rows':len(df),'span_days':span,'passes_all_targets':bool((not CFG.get('use_min_win_rate',True) or wr>CFG['min_win_rate_pct']) and (not CFG.get('use_min_profit_factor',True) or pf>CFG['min_profit_factor']) and (not CFG.get('use_min_tp_per_day',True) or tpday>=CFG['min_tp_per_day']) and (not CFG.get('use_max_consecutive_losses',True) or max_streak<=CFG['max_consecutive_losses']))}
+    run_hash=digest(json.dumps({'spec':s,'contract':CFG,'data_hash':data_hash,'execution_data_hash':execution_hash,'execution_resolution':execution_resolution},sort_keys=True).encode())
     return {'metrics':metrics,'ledger':ledger,'run_hash_sha256':run_hash}
 if __name__=='__main__':
     if len(sys.argv) not in (2,3): raise SystemExit('Usage: python replay.py EXACT_SOURCE.csv [EXACT_1S_EXECUTION.csv]')

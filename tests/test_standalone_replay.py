@@ -31,6 +31,8 @@ def test_standalone_template_contains_all_engine_families_and_composition():
     assert "SL_UNRESOLVED" in template
     assert "resolution_status" in template
     assert "execution_ambiguity" in template
+    assert "download_execution_window" in template
+    assert "Unresolved same-candle SL/TP ambiguity" in template
     assert "def indicators(df, spec)" in engine
     compile(template, "standalone_template.py", "exec")
 
