@@ -25,6 +25,18 @@ def _contract_for_dataset(dataset_id:str, overrides:dict[str,Any]|None=None) -> 
     return cfg
 
 
+def _independent_ledger_matches(primary:dict[str,Any], independent:dict[str,Any]) -> bool:
+    a=primary.get('ledger',[]); b=independent.get('ledger',[])
+    if len(a)!=len(b): return False
+    for left,right in zip(a,b):
+        for field in FIELDS:
+            x=left.get(field); y=right.get(field)
+            if isinstance(x,(int,float)) and not isinstance(x,bool):
+                if not math.isclose(float(x),float(y),rel_tol=1e-10,abs_tol=1e-8): return False
+            elif x!=y: return False
+    return open_position_matches(primary,independent)
+
+
 def _period_label(frame:pd.DataFrame, note:str='') -> str:
     if frame.empty:
         return 'empty split'
@@ -224,6 +236,9 @@ def _rank_near_misses_on_development(result:dict[str,Any],splits:dict[str,pd.Dat
         try:
             cfg=normalize_contract(item.get('contract') or result.get('contract') or req.contract)
             dev_run=backtest(development,item['strategy'],cfg)
+            dev_audit=independent_replay(development,item['strategy'],cfg)
+            if not _independent_ledger_matches(dev_run,dev_audit):
+                raise ValueError("Development independent ledger/open-position mismatch")
             distance,failed,distances=_candidate_distance(dev_run['metrics'],cfg)
             item['metrics']=dev_run['metrics']
             item['metrics_split']='development'

@@ -196,3 +196,30 @@ def test_open_position_at_end_is_reported_and_cannot_pass_targets(monkeypatch):
     assert result["open_position"]["entry_time"]==start+7*60_000
     assert result["metrics"]["open_positions_at_end"]==1
     assert result["metrics"]["passes_all_targets"] is False
+
+
+
+def test_independent_audit_matches_open_position_at_end(monkeypatch):
+    from app import engine, audit
+    from app.engine import StrategySpec, backtest
+    from app.audit import independent_replay, open_position_matches
+    start=1_800_000_000_000
+    base=pd.DataFrame({"open_time":[start+i*60_000 for i in range(8)],"open":[100.0]*8,
+        "high":[100.5]*8,"low":[99.5]*8,"close":[100.0]*8,"volume":[1.0]*8})
+    def primary_signals(df,spec):
+        out=df.copy(); out["atr"]=1.0; out["long_signal"]=False; out["short_signal"]=False
+        out.loc[6,"long_signal"]=True
+        return out
+    def independent_signals(df,spec):
+        long=pd.Series(False,index=df.index); long.iloc[6]=True
+        short=pd.Series(False,index=df.index); atr=pd.Series(1.0,index=df.index)
+        return long,short,atr,2,3,2
+    monkeypatch.setattr(engine,"indicators",primary_signals)
+    monkeypatch.setattr(audit,"_independent_signals",independent_signals)
+    spec=StrategySpec(fast=2,slow=3,atr_period=2,stop_atr=1)
+    cfg=engine.normalize_contract({})
+    primary=backtest(base,spec,cfg)
+    independent=independent_replay(base,spec.__dict__,cfg)
+    assert primary["open_position"] is not None
+    assert independent["open_position"] is not None
+    assert open_position_matches(primary,independent)

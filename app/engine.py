@@ -561,6 +561,9 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
         gap=max(0.0,streak-int(cfg["max_consecutive_losses"]))
         distances["max_consecutive_losses"]=gap/max(int(cfg["max_consecutive_losses"]),1)
         if streak>int(cfg["max_consecutive_losses"]): failed.append("max_consecutive_losses")
+    if int(metrics.get("open_positions_at_end",0))>0:
+        distances["open_positions_at_end"]=1.0
+        failed.append("open_positions_at_end")
     return sum(distances.values()), failed, distances
 
 
