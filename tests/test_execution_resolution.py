@@ -177,3 +177,22 @@ def test_download_binance_execution_window_validates_exact_response(monkeypatch)
     assert len(frame) == 60
     assert int(frame.open_time.iloc[0]) == start
     assert int(frame.open_time.iloc[-1]) == start + 59_000
+
+
+
+def test_open_position_at_end_is_reported_and_cannot_pass_targets(monkeypatch):
+    from app import engine
+    from app.engine import StrategySpec, backtest
+    start=1_800_000_000_000
+    base=pd.DataFrame({"open_time":[start+i*60_000 for i in range(8)],"open":[100.0]*8,
+        "high":[100.5]*8,"low":[99.5]*8,"close":[100.0]*8,"volume":[1.0]*8})
+    def signals(df,spec):
+        out=df.copy(); out["atr"]=1.0; out["long_signal"]=False; out["short_signal"]=False
+        out.loc[6,"long_signal"]=True
+        return out
+    monkeypatch.setattr(engine,"indicators",signals)
+    result=backtest(base,StrategySpec(fast=2,slow=3,atr_period=2,stop_atr=1))
+    assert result["open_position"] is not None
+    assert result["open_position"]["entry_time"]==start+7*60_000
+    assert result["metrics"]["open_positions_at_end"]==1
+    assert result["metrics"]["passes_all_targets"] is False

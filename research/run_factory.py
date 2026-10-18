@@ -5,7 +5,7 @@ import pandas as pd
 ROOT=Path(__file__).resolve().parents[1]; sys.path.insert(0,str(ROOT))
 from app.data import download_binance_month, validate_ohlcv, split_reference_period
 from app.engine import search_candidates, backtest, normalize_contract, _candidate_distance
-from app.audit import independent_replay, FIELDS
+from app.audit import independent_replay, FIELDS, open_position_matches
 SYMBOL="ETHUSDT"; YEAR=2026; MONTHS=[4,5,6,7,8,9]
 EXPECTED={4:43200,5:44640,6:43200,7:44640,8:44640,9:43200}
 REQUESTED=int(os.environ.get("FOUNDRY_CANDIDATES","500000")); SEED=int(os.environ.get("FOUNDRY_SEED","42"))
@@ -27,9 +27,10 @@ def ledger_match(primary,other):
             if isinstance(p,(int,float)) and not isinstance(p,bool):
                 if not math.isclose(float(p),float(q),rel_tol=1e-10,abs_tol=1e-8): return False,{"trade_id":i,"field":field,"primary":p,"independent":q}
             elif p!=q: return False,{"trade_id":i,"field":field,"primary":p,"independent":q}
-    return True,{"primary_trades":len(a),"independent_trades":len(b),"ledger_fields_checked":len(FIELDS)}
+    if not open_position_matches(primary,other): return False,{"mismatch":"open_position","primary":primary.get("open_position"),"independent":other.get("open_position")}
+    return True,{"primary_trades":len(a),"independent_trades":len(b),"ledger_fields_checked":len(FIELDS),"open_position_checked":True}
 def brief(m):
-    keys=("trades","wins","losses","win_rate_pct","profit_factor","avg_net_tp_per_day","max_consecutive_losses","net_pnl","final_balance","total_costs","passes_all_targets","data_hash_sha256","execution_data_hash_sha256","execution_resolution","unresolved_as_loss_count")
+    keys=("trades","wins","losses","win_rate_pct","profit_factor","avg_net_tp_per_day","max_consecutive_losses","net_pnl","final_balance","total_costs","passes_all_targets","data_hash_sha256","execution_data_hash_sha256","execution_resolution","unresolved_as_loss_count","open_positions_at_end","open_position_unrealized_net_pnl")
     return {k:m.get(k) for k in keys}
 def near_key(x):
     m=x.get("development_metrics") or x.get("metrics") or {}; pf=m.get("profit_factor")

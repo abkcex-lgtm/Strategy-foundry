@@ -448,7 +448,7 @@ def backtest(frame, spec=None, contract=None, execution_frame=None):
             base_interval=int(df.open_time.diff().dropna().mode().iloc[0])
             if base_interval % 1000:
                 raise DataIntegrityError("Base candle interval cannot be resolved with 1-second candles")
-    x=indicators(df,spec); balance=float(cfg["initial_balance"]); ledger=[]; streak=0; max_streak=0
+    x=indicators(df,spec); balance=float(cfg["initial_balance"]); ledger=[]; streak=0; max_streak=0; open_position=None
     # Visit only actual signal candles instead of scanning every row in Python.
     # Indicator calculations remain full-resolution and causal; this is a
     # semantics-preserving execution optimization, not candle subsampling.
@@ -511,7 +511,14 @@ def backtest(frame, spec=None, contract=None, execution_frame=None):
                     reason,exit_price=resolution; exit_i=j; exit_time=int(open_times[j])
                     resolution_status="resolved_base_ohlc"
                     break
-        if exit_i is None: break
+        if exit_i is None:
+            last_price=float(x.close.iloc[-1])
+            unrealized_gross=(last_price-entry)*qty*(1 if side=="LONG" else -1)
+            open_position={"signal_time":int(open_times[i]),"entry_time":int(open_times[entry_i]),"direction":side,
+                           "entry_price":entry,"stop_loss":stop,"take_profit":target,"quantity":qty,"risk_budget":risk_budget,
+                           "last_price":last_price,"unrealized_gross_pnl":unrealized_gross,
+                           "unrealized_net_pnl":unrealized_gross-entry*qty*entry_rate-last_price*qty*exit_rate}
+            break
         gross=(exit_price-entry)*qty*(1 if side=="LONG" else -1)
         entry_cost=entry*qty*entry_rate; exit_cost=exit_price*qty*exit_rate
         net=gross-entry_cost-exit_cost; balance+=net
@@ -523,14 +530,14 @@ def backtest(frame, spec=None, contract=None, execution_frame=None):
     gp=sum(max(0,t["net_pnl"]) for t in ledger); gl=abs(sum(min(0,t["net_pnl"]) for t in ledger))
     span_days=max((int(df.open_time.iloc[-1])-int(df.open_time.iloc[0]))/86400000,1/1440)
     wr=100*len(wins)/len(ledger) if ledger else 0.0; pf=gp/gl if gl else (math.inf if gp else 0.0); tp_day=len(wins)/span_days
-    passes=(not cfg["use_min_win_rate"] or wr>cfg["min_win_rate_pct"]) and (not cfg["use_min_profit_factor"] or pf>cfg["min_profit_factor"]) and (not cfg["use_min_tp_per_day"] or tp_day>=cfg["min_tp_per_day"]) and (not cfg["use_max_consecutive_losses"] or max_streak<=cfg["max_consecutive_losses"])
+    passes=(not cfg["use_min_win_rate"] or wr>cfg["min_win_rate_pct"]) and (not cfg["use_min_profit_factor"] or pf>cfg["min_profit_factor"]) and (not cfg["use_min_tp_per_day"] or tp_day>=cfg["min_tp_per_day"]) and (not cfg["use_max_consecutive_losses"] or max_streak<=cfg["max_consecutive_losses"]) and open_position is None
     if execution_frames_used:
         combined_execution=pd.concat(execution_frames_used,ignore_index=True).drop_duplicates(subset=["open_time"]).sort_values("open_time").reset_index(drop=True)
         execution_hash=sha256_bytes(combined_execution.to_csv(index=False,float_format="%.12g").encode())
     execution_resolution="1s_ohlc" if exec_df is not None else ("1s_ohlc_auto" if execution_frames_used else "base_ohlc_only")
-    metrics={"trades":len(ledger),"wins":len(wins),"losses":sum(t["net_pnl"]<=0 for t in ledger),"win_rate_pct":wr,"profit_factor":pf if math.isfinite(pf) else None,"avg_net_tp_per_day":tp_day,"max_consecutive_losses":max_streak,"net_pnl":sum(t["net_pnl"] for t in ledger),"final_balance":balance,"total_costs":sum(t["fees_slippage"] for t in ledger),"data_hash_sha256":data_hash,"execution_data_hash_sha256":execution_hash,"execution_resolution":execution_resolution,"unresolved_as_loss_count":sum(t.get("execution_ambiguity",False) for t in ledger),"rows":len(df),"span_days":span_days,"passes_all_targets":bool(passes)}
-    run_hash=sha256_bytes(json.dumps({"spec":asdict(spec),"contract":cfg,"data_hash":data_hash,"execution_data_hash":execution_hash,"execution_resolution":execution_resolution},sort_keys=True).encode())
-    return {"strategy":asdict(spec),"contract":cfg,"metrics":metrics,"ledger":ledger,"data_report":report,"run_hash_sha256":run_hash}
+    metrics={"trades":len(ledger),"wins":len(wins),"losses":sum(t["net_pnl"]<=0 for t in ledger),"win_rate_pct":wr,"profit_factor":pf if math.isfinite(pf) else None,"avg_net_tp_per_day":tp_day,"max_consecutive_losses":max_streak,"net_pnl":sum(t["net_pnl"] for t in ledger),"final_balance":balance,"total_costs":sum(t["fees_slippage"] for t in ledger),"data_hash_sha256":data_hash,"execution_data_hash_sha256":execution_hash,"execution_resolution":execution_resolution,"unresolved_as_loss_count":sum(t.get("execution_ambiguity",False) for t in ledger),"open_positions_at_end":1 if open_position else 0,"open_position_unrealized_net_pnl":open_position["unrealized_net_pnl"] if open_position else 0.0,"rows":len(df),"span_days":span_days,"passes_all_targets":bool(passes)}
+    run_hash=sha256_bytes(json.dumps({"spec":asdict(spec),"contract":cfg,"data_hash":data_hash,"execution_data_hash":execution_hash,"execution_resolution":execution_resolution,"open_position":open_position},sort_keys=True).encode())
+    return {"strategy":asdict(spec),"contract":cfg,"metrics":metrics,"ledger":ledger,"open_position":open_position,"data_report":report,"run_hash_sha256":run_hash}
 
 def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[float, list[str], dict[str, float]]:
     failed: list[str] = []
@@ -800,7 +807,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     # Independently replay every candidate that will be presented as passing.
     # If no candidate passes, independently replay candidates in rank order until
     # five verifiable near-misses are collected. This is separate code in audit.py.
-    from .audit import independent_replay, FIELDS
+    from .audit import independent_replay, FIELDS, open_position_matches
     audit_failures=[]
     audited=[]
     passing_ids={id(row) for row in passing}
@@ -821,6 +828,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                         elif va!=vb:
                             matched=False; break
                     if not matched: break
+            matched = matched and open_position_matches(primary, second)
             row["independent_audit"]={"status":"MATCH" if matched else "MISMATCH",
                                       "primary_trades":len(a),"independent_trades":len(b),
                                       "ledger_fields_checked":len(FIELDS),

@@ -332,7 +332,7 @@ def download_execution_window(symbol, start_ms, interval_ms):
     params=urllib.parse.urlencode({'symbol':symbol,'interval':'1s','startTime':int(start_ms),'endTime':int(start_ms)+seconds*1000-1,'limit':min(1500,seconds)})
     url='https://fapi.binance.com/fapi/v1/klines?'+params
     try:
-        request=urllib.request.Request(url,headers={'User-Agent':'StrategyFoundry-Standalone/0.9.5'})
+        request=urllib.request.Request(url,headers={'User-Agent':'StrategyFoundry-Standalone/0.9.6'})
         with urllib.request.urlopen(request,timeout=20) as response:
             payload=json.loads(response.read().decode('utf-8'))
         if not isinstance(payload,list) or len(payload)!=seconds:
@@ -373,7 +373,7 @@ def replay(df, execution_df=None):
     spec_obj=StrategySpec(**s)
     spec_obj.validate()
     x=indicators(df,spec_obj)
-    balance=float(CFG['initial_balance']); ledger=[]; streak=0; max_streak=0; i=max(s['slow'],s['atr_period'])
+    balance=float(CFG['initial_balance']); ledger=[]; streak=0; max_streak=0; open_position=None; i=max(s['slow'],s['atr_period'])
     while i<len(x)-1:
         row=x.iloc[i]
         if not np.isfinite(row.atr) or row.atr<=0: i+=1; continue
@@ -417,7 +417,14 @@ def replay(df, execution_df=None):
                 reason,exit_price,exit_time=resolution; exit_i=j; resolution_status='resolved_1s_ohlc_auto'; break
             if sl: exit_i=j; exit_price=stop; exit_time=int(bar.open_time); reason='SL'; resolution_status='resolved_base_ohlc'; break
             if tp: exit_i=j; exit_price=target; exit_time=int(bar.open_time); reason='TP'; resolution_status='resolved_base_ohlc'; break
-        if exit_i is None: break
+        if exit_i is None:
+            last_price=float(x.close.iloc[-1])
+            unrealized_gross=(last_price-entry)*qty*(1 if side=='LONG' else -1)
+            open_position={'signal_time':int(row.open_time),'entry_time':int(x.iloc[entry_i].open_time),'direction':side,
+                           'entry_price':entry,'stop_loss':stop,'take_profit':target,'quantity':qty,'risk_budget':risk,
+                           'last_price':last_price,'unrealized_gross_pnl':unrealized_gross,
+                           'unrealized_net_pnl':unrealized_gross-entry*qty*rate-last_price*qty*rate}
+            break
         gross=(exit_price-entry)*qty*(1 if side=='LONG' else -1); entry_cost=entry*qty*rate; exit_cost=exit_price*qty*rate; net=gross-entry_cost-exit_cost; balance+=net
         if reason=='TP': streak=0
         else: streak+=1; max_streak=max(max_streak,streak)
@@ -430,9 +437,9 @@ def replay(df, execution_df=None):
         combined=pd.concat(execution_frames_used,ignore_index=True).drop_duplicates(subset=['open_time']).sort_values('open_time').reset_index(drop=True)
         execution_hash=digest(combined.to_csv(index=False,float_format='%.12g').encode())
     execution_resolution='1s_ohlc' if execution_df is not None else ('1s_ohlc_auto' if execution_frames_used else 'base_ohlc_only')
-    metrics={'trades':len(ledger),'wins':len(wins),'losses':sum(t['net_pnl']<=0 for t in ledger),'win_rate_pct':wr,'profit_factor':pf if math.isfinite(pf) else None,'avg_net_tp_per_day':tpday,'max_consecutive_losses':max_streak,'net_pnl':sum(t['net_pnl'] for t in ledger),'final_balance':balance,'total_costs':sum(t['fees_slippage'] for t in ledger),'data_hash_sha256':data_hash,'execution_data_hash_sha256':execution_hash,'execution_resolution':execution_resolution,'unresolved_as_loss_count':sum(t.get('execution_ambiguity',False) for t in ledger),'rows':len(df),'span_days':span,'passes_all_targets':bool((not CFG.get('use_min_win_rate',True) or wr>CFG['min_win_rate_pct']) and (not CFG.get('use_min_profit_factor',True) or pf>CFG['min_profit_factor']) and (not CFG.get('use_min_tp_per_day',True) or tpday>=CFG['min_tp_per_day']) and (not CFG.get('use_max_consecutive_losses',True) or max_streak<=CFG['max_consecutive_losses']))}
-    run_hash=digest(json.dumps({'spec':s,'contract':CFG,'data_hash':data_hash,'execution_data_hash':execution_hash,'execution_resolution':execution_resolution},sort_keys=True).encode())
-    return {'metrics':metrics,'ledger':ledger,'run_hash_sha256':run_hash}
+    metrics={'trades':len(ledger),'wins':len(wins),'losses':sum(t['net_pnl']<=0 for t in ledger),'win_rate_pct':wr,'profit_factor':pf if math.isfinite(pf) else None,'avg_net_tp_per_day':tpday,'max_consecutive_losses':max_streak,'net_pnl':sum(t['net_pnl'] for t in ledger),'final_balance':balance,'total_costs':sum(t['fees_slippage'] for t in ledger),'data_hash_sha256':data_hash,'execution_data_hash_sha256':execution_hash,'execution_resolution':execution_resolution,'unresolved_as_loss_count':sum(t.get('execution_ambiguity',False) for t in ledger),'open_positions_at_end':1 if open_position else 0,'open_position_unrealized_net_pnl':open_position['unrealized_net_pnl'] if open_position else 0.0,'rows':len(df),'span_days':span,'passes_all_targets':bool((not CFG.get('use_min_win_rate',True) or wr>CFG['min_win_rate_pct']) and (not CFG.get('use_min_profit_factor',True) or pf>CFG['min_profit_factor']) and (not CFG.get('use_min_tp_per_day',True) or tpday>=CFG['min_tp_per_day']) and (not CFG.get('use_max_consecutive_losses',True) or max_streak<=CFG['max_consecutive_losses']) and open_position is None)}
+    run_hash=digest(json.dumps({'spec':s,'contract':CFG,'data_hash':data_hash,'execution_data_hash':execution_hash,'execution_resolution':execution_resolution,'open_position':open_position},sort_keys=True).encode())
+    return {'metrics':metrics,'ledger':ledger,'open_position':open_position,'run_hash_sha256':run_hash}
 if __name__=='__main__':
     if len(sys.argv) not in (2,3): raise SystemExit('Usage: python replay.py EXACT_SOURCE.csv [EXACT_1S_EXECUTION.csv]')
     result=replay(pd.read_csv(sys.argv[1]),pd.read_csv(sys.argv[2]) if len(sys.argv)==3 else None)

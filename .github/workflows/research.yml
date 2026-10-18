@@ -1,5 +1,5 @@
 
-name: ETHUSDT Strategy Factory research (reference split correction)
+name: ETHUSDT Strategy Factory research v0.9.6 (open-position audit)
 on:
   push:
     paths:
@@ -14,7 +14,7 @@ permissions:
   contents: write
 concurrency:
   group: ethusdt-strategy-factory-research
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   research:
     runs-on: ubuntu-latest
@@ -35,6 +35,8 @@ jobs:
           cache-dependency-path: requirements.txt
       - name: Install declared dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Run tests before expensive research
+        run: python -m pytest -q
       - name: Compile and run the real-data factory
         run: |
           python -m compileall -q app research

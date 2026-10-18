@@ -31,6 +31,7 @@ def test_standalone_template_contains_all_engine_families_and_composition():
     assert "EXECUTION_PREFLIGHT_FAILED" in template
     assert "resolution_status" in template
     assert "execution_ambiguity" in template
+    assert "open_positions_at_end" in template
     assert "download_execution_window" in template
     assert "Unresolved same-candle SL/TP ambiguity" in template
     assert "def indicators(df, spec)" in engine

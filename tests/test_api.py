@@ -15,7 +15,7 @@ def test_health_endpoint():
     assert r.json()['features']['persistent_job_status'] is True
     assert r.json()['features']['search_history_endpoint']=='/api/search-history'
     assert r.json()['features']['search_job_endpoint']=='/api/search-jobs/{dataset_id}'
-    assert r.json()['version']=='0.9.5'
+    assert r.json()['version']=='0.9.6'
     assert main.app.version == r.json()['version']
     assert r.json()['storage']['engine'] == 'sqlite'
     assert r.json()['storage']['database_ready'] is True

@@ -10,7 +10,7 @@ pinned: false
 
 # Strategy Foundry
 
-Current source version: 0.9.5
+Current source version: 0.9.6
 
 A server-side, simulation-only strategy research foundation. It never sends live exchange orders. Passing unit tests do not imply profitability or full validation.
 

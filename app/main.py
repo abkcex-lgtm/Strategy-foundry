@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse,StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel,Field
 from .engine import backtest,search_candidates,StrategySpec,normalize_contract,_candidate_distance
-from .audit import independent_replay, FIELDS
+from .audit import independent_replay, FIELDS, open_position_matches
 from .data import download_binance_month,validate_ohlcv,split_reference_period
 from .persistence import load_datasets,load_dataset_metadata,load_runs,save_dataset,save_run,list_history,save_profile,list_profiles,save_search,list_search_history,load_search_result,save_job,load_jobs,save_job_genome_hashes,load_job_genome_hashes,save_job_batch_checkpoint,storage_status
 
@@ -67,7 +67,7 @@ class AIChatRequest(BaseModel):
 @app.get('/',response_class=HTMLResponse)
 def home(): return (ROOT/'static'/'index.html').read_text(encoding='utf-8')
 @app.get('/api/health')
-def health(): return {'status':'ok','service':'strategy-foundry','version':'0.9.5','execution':'server-side','live_trading':False,'persistent_store':'sqlite','storage':storage_status(),'loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'persistent_search_history':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','search_history_endpoint':'/api/search-history','persistent_job_status':True,'batch_search_max_candidates':500000,'global_genome_deduplication':True,'batch_checkpoint_resume':True,'question_first_assistant_routing':True,'automatic_1s_ambiguity_resolution':True,'fail_closed_execution_ambiguity':True}}
+def health(): return {'status':'ok','service':'strategy-foundry','version':'0.9.6','execution':'server-side','live_trading':False,'persistent_store':'sqlite','storage':storage_status(),'loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'persistent_search_history':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','search_history_endpoint':'/api/search-history','persistent_job_status':True,'batch_search_max_candidates':500000,'global_genome_deduplication':True,'batch_checkpoint_resume':True,'question_first_assistant_routing':True,'automatic_1s_ambiguity_resolution':True,'fail_closed_execution_ambiguity':True}}
 @app.get('/api/contract')
 def contract():
     from .engine import normalize_contract
@@ -404,6 +404,7 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
                             elif left!=right:
                                 matched=False; break
                         if not matched: break
+                matched = matched and open_position_matches(dev_run, dev_audit)
                 item['development_data_hash_sha256']=dev_run['metrics']['data_hash_sha256']
                 item['development_metrics']=dev_run['metrics']
                 item['development_independent_audit']={'status':'MATCH' if matched else 'MISMATCH',
@@ -635,7 +636,7 @@ def audit_run(run_id:str):
             bad=[k for k in FIELDS if (k not in numeric and a.get(k)!=b.get(k)) or (k in numeric and not math.isclose(float(a.get(k,0)),float(b.get(k,0)),rel_tol=1e-10,abs_tol=1e-8))]
             if bad: mismatches.append({'trade_id':idx,'fields':bad})
             if len(mismatches)>=20: break
-        ok=not mismatches and second['max_consecutive_losses']==r['metrics']['max_consecutive_losses']
+        ok=not mismatches and second['max_consecutive_losses']==r['metrics']['max_consecutive_losses'] and open_position_matches(r,second)
         return {'status':'MATCH' if ok else 'MISMATCH','matched':ok,'engine_a_trades':len(first),'engine_b_trades':len(other),
                 'mismatches':mismatches,'method':'independent replay; exact discrete fields + tight numeric tolerance',
                 'certified':False,'note':'تطبیق موتور، به‌تنهایی صحت داده یا سودآوری آینده را تضمین نمی‌کند.'}

@@ -300,7 +300,7 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
     close=d["close"].astype(float)
     long,short,atr,fast,slow,period=_independent_signals(d,spec)
     rate=(float(cfg["commission_pct_per_side"])+float(cfg["slippage_pct_per_side"]))/100.0
-    balance=float(cfg["initial_balance"]); streak=0; ledger=[]; max_streak=0
+    balance=float(cfg["initial_balance"]); streak=0; ledger=[]; max_streak=0; open_position=None
     i=max(slow,period)
     while i < len(d)-1:
         if not np.isfinite(atr.iloc[i]) or atr.iloc[i] <= 0: i+=1; continue
@@ -351,7 +351,14 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
                         reason,px,exit_time=resolution; ex=j; resolution_status="resolved_1s_ohlc_auto"; break
                 if resolution is not None:
                     reason,px=resolution; ex=j; exit_time=int(d.open_time.iloc[j]); resolution_status="resolved_base_ohlc"; break
-        if ex is None: break
+        if ex is None:
+            last_price=float(d.close.iloc[-1])
+            unrealized_gross=(last_price-entry)*qty*(1 if side=="LONG" else -1)
+            open_position={"signal_time":int(d.open_time.iloc[i]),"entry_time":int(d.open_time.iloc[ei]),"direction":side,
+                           "entry_price":entry,"stop_loss":stop,"take_profit":target,"quantity":qty,"risk_budget":risk,
+                           "last_price":last_price,"unrealized_gross_pnl":unrealized_gross,
+                           "unrealized_net_pnl":unrealized_gross-entry*qty*rate-last_price*qty*rate}
+            break
         gross=(px-entry)*qty*(1 if side=="LONG" else -1)
         ec=entry*qty*rate; xc=px*qty*rate; net=gross-ec-xc; balance+=net
         streak=0 if reason=="TP" else streak+1
@@ -362,4 +369,17 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
           "gross_pnl":gross,"entry_cost":ec,"exit_cost":xc,"fees_slippage":ec+xc,"net_pnl":net,
           "balance_after":balance,"loss_streak_after":streak,"resolution_status":resolution_status,"execution_ambiguity":resolution_status=="unresolved_as_loss"})
         i=ex+1
-    return {"ledger":ledger,"max_consecutive_losses":max_streak}
+    return {"ledger":ledger,"max_consecutive_losses":max_streak,"open_position":open_position,"open_positions_at_end":1 if open_position else 0,"open_position_unrealized_net_pnl":open_position["unrealized_net_pnl"] if open_position else 0.0}
+
+
+def open_position_matches(primary: dict[str, Any], independent: dict[str, Any]) -> bool:
+    """Compare end-of-window open-position state independently of closed-trade rows."""
+    left=primary.get("open_position"); right=independent.get("open_position")
+    if left is None or right is None: return left is None and right is None
+    if set(left) != set(right): return False
+    for key in left:
+        x=left[key]; y=right[key]
+        if isinstance(x,(int,float)) and not isinstance(x,bool):
+            if not math.isclose(float(x),float(y),rel_tol=1e-10,abs_tol=1e-8): return False
+        elif x != y: return False
+    return True
