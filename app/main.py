@@ -67,7 +67,7 @@ class AIChatRequest(BaseModel):
 @app.get('/',response_class=HTMLResponse)
 def home(): return (ROOT/'static'/'index.html').read_text(encoding='utf-8')
 @app.get('/api/health')
-def health(): return {'status':'ok','service':'strategy-foundry','version':'0.9.5','execution':'server-side','live_trading':False,'persistent_store':'sqlite','storage':storage_status(),'loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'persistent_search_history':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','search_history_endpoint':'/api/search-history','persistent_job_status':True,'batch_search_max_candidates':500000,'global_genome_deduplication':True,'batch_checkpoint_resume':True,'question_first_assistant_routing':True,'fail_closed_execution_ambiguity':True}}
+def health(): return {'status':'ok','service':'strategy-foundry','version':'0.9.5','execution':'server-side','live_trading':False,'persistent_store':'sqlite','storage':storage_status(),'loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'persistent_search_history':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','search_history_endpoint':'/api/search-history','persistent_job_status':True,'batch_search_max_candidates':500000,'global_genome_deduplication':True,'batch_checkpoint_resume':True,'question_first_assistant_routing':True,'automatic_1s_ambiguity_resolution':True,'fail_closed_execution_ambiguity':True}}
 @app.get('/api/contract')
 def contract():
     from .engine import normalize_contract

@@ -430,9 +430,10 @@ def backtest(frame, spec=None, contract=None, execution_frame=None):
     if not np.equal(df["open_time"].to_numpy(dtype=float),np.floor(df["open_time"].to_numpy(dtype=float))).all():
         raise DataIntegrityError("open_time timestamps must be integer milliseconds")
     df["open_time"]=df["open_time"].astype("int64")
+    base_interval=None
     if len(df)>1:
-        diffs=df.open_time.diff().dropna(); interval=int(diffs.mode().iloc[0]) if len(diffs) else None
-        report=validate_ohlcv(df,interval,strict_gaps=True)
+        diffs=df.open_time.diff().dropna(); base_interval=int(diffs.mode().iloc[0]) if len(diffs) else None
+        report=validate_ohlcv(df,base_interval,strict_gaps=True)
     else: report=validate_ohlcv(df,None)
     if len(df)<max(spec.slow,spec.atr_period)+3: raise DataIntegrityError("Not enough candles for warmup")
     data_hash=sha256_bytes(df.to_csv(index=False,float_format="%.12g").encode())
