@@ -56,8 +56,8 @@ def test_same_second_stop_and_target_still_fails_closed():
         _resolve_execution_interval_independent("LONG",frame,start,60_000,98.0,104.0)
 
 
-def test_primary_backtest_books_unresolved_execution_as_loss(monkeypatch):
-    import numpy as np
+def test_primary_backtest_fails_closed_on_unresolved_execution(monkeypatch):
+    import pandas as pd
     from app import engine
     from app.engine import StrategySpec, backtest
     from app.data import DataIntegrityError
@@ -68,8 +68,6 @@ def test_primary_backtest_books_unresolved_execution_as_loss(monkeypatch):
         "open": [100.0] * 8, "high": [101.0] * 8,
         "low": [99.0] * 8, "close": [100.0] * 8, "volume": [1.0] * 8,
     })
-    exec_frame, _ = one_second_path()
-    exec_frame["open_time"] = [start + 4 * 60_000 + i * 1000 for i in range(60)]
 
     def signals(df, spec):
         out = df.copy()
@@ -80,22 +78,14 @@ def test_primary_backtest_books_unresolved_execution_as_loss(monkeypatch):
         return out
 
     monkeypatch.setattr(engine, "indicators", signals)
-    def unresolved(*args, **kwargs):
-        raise DataIntegrityError("same-candle SL/TP ambiguity")
-    monkeypatch.setattr(engine, "_resolve_execution_interval", unresolved)
+    monkeypatch.setattr(engine, "_resolve_execution_interval",
+                        lambda *args, **kwargs: (_ for _ in ()).throw(DataIntegrityError("same-candle SL/TP ambiguity")))
 
-    result = backtest(base, StrategySpec(fast=2, slow=3, atr_period=2, stop_atr=1), execution_frame=exec_frame)
-    assert len(result["ledger"]) == 1
-    trade = result["ledger"][0]
-    assert trade["exit_reason"] == "SL_UNRESOLVED"
-    assert trade["resolution_status"] == "unresolved_as_loss"
-    assert trade["execution_ambiguity"] is True
-    assert trade["net_pnl"] < 0
-    assert trade["loss_streak_after"] == 1
-    assert result["metrics"]["unresolved_as_loss_count"] == 1
+    with pytest.raises(DataIntegrityError, match="Execution preflight failed"):
+        backtest(base, StrategySpec(fast=2, slow=3, atr_period=2, stop_atr=1), execution_frame=one_second_path()[0])
 
 
-def test_independent_audit_books_unresolved_execution_as_loss(monkeypatch):
+def test_independent_audit_fails_closed_on_unresolved_execution(monkeypatch):
     from app import audit
     start = 1_800_000_000_000
     base = pd.DataFrame({
@@ -103,8 +93,6 @@ def test_independent_audit_books_unresolved_execution_as_loss(monkeypatch):
         "open": [100.0] * 8, "high": [101.0] * 8,
         "low": [99.0] * 8, "close": [100.0] * 8, "volume": [1.0] * 8,
     })
-    exec_frame, _ = one_second_path()
-    exec_frame["open_time"] = [start + 4 * 60_000 + i * 1000 for i in range(60)]
 
     def signals(df, spec):
         long = pd.Series(False, index=df.index); long.iloc[3] = True
@@ -121,11 +109,5 @@ def test_independent_audit_books_unresolved_execution_as_loss(monkeypatch):
     cfg = {"initial_balance": 1000.0, "risk_mode": "fixed_usd", "risk_usd": 10.0,
            "risk_pct": 1.0, "compound": False, "reward_risk": 3.5, "target_mode": "net_rr",
            "commission_pct_per_side": 0.04, "slippage_pct_per_side": 0.02}
-    result = audit.independent_replay(base, spec, cfg, execution_frame=exec_frame)
-    assert len(result["ledger"]) == 1
-    trade = result["ledger"][0]
-    assert trade["exit_reason"] == "SL_UNRESOLVED"
-    assert trade["resolution_status"] == "unresolved_as_loss"
-    assert trade["execution_ambiguity"] is True
-    assert trade["net_pnl"] < 0
-    assert trade["loss_streak_after"] == 1
+    with pytest.raises(ValueError, match="EXECUTION_PREFLIGHT_FAILED"):
+        audit.independent_replay(base, spec, cfg, execution_frame=one_second_path()[0])
