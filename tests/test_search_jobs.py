@@ -133,6 +133,7 @@ def test_near_misses_are_ranked_on_development_without_reading_oos(monkeypatch):
 
     monkeypatch.setattr(main, "search_candidates", fake_search)
     monkeypatch.setattr(main, "backtest", fake_backtest)
+    monkeypatch.setattr(main, "independent_replay", lambda part, strategy, contract: {"ledger": [], "open_position": None, "max_consecutive_losses": 0})
     req = main.SearchRequest(candidates=2, seed=42, algorithm="stratified_random")
     result = main._perform_search(dataset_id, req, save_result=False)
 

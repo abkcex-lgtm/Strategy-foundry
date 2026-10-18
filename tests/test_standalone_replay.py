@@ -63,3 +63,4 @@ def test_generated_standalone_replay_verifies_hash_and_runs_without_factory_impo
     assert payload["run_hash_sha256"] == result["run_hash_sha256"]
     assert payload["metrics"]["data_hash_sha256"] == result["metrics"]["data_hash_sha256"]
     assert payload["ledger"] == result["ledger"]
+    assert payload["open_position"] == result["open_position"]
