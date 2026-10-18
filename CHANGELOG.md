@@ -1,5 +1,13 @@
 # Changelog
 
+## V0.9.5 — 2026-10-18
+
+- Added a persistent five-item mobile bottom navigation for Home, Data, Factory/Settings, Results, and More/Run History.
+- Kept the existing ten shortcuts, controls, panels, chart, trade ledger, search history, and run history in place; this is a navigation/layout change, not a removal of existing features.
+- Updated the workspace asset cache version and API-reported version to 0.9.5 so the deployed release can be identified.
+- Release branch: `v0.9.5-ui-redesign`. Verify the UI and existing workflows on the host before promoting to `main`.
+
+
 ## V0.7.5 — 2026-10-17
 
 - Fixed an invalid `elif` placement in the independent audit signal engine that prevented the server from importing.
