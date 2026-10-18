@@ -70,10 +70,10 @@ def run(df,data_manifest):
     train_hash=frame_hash(train); dev_hash=frame_hash(dev)
     cfg=normalize_contract({"symbol":SYMBOL,"initial_balance":1000,"risk_mode":"fixed_usd","risk_usd":10,"compound":False,"reward_risk":3.5,"target_mode":"net_rr","commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"max_positions":1,"entry_model":"next_candle_open","exit_model":"sl_tp_only","min_win_rate_pct":40,"min_profit_factor":1,"min_tp_per_day":3,"max_consecutive_losses":13,"use_min_win_rate":True,"use_min_profit_factor":True,"use_min_tp_per_day":True,"use_max_consecutive_losses":True,"break_even_enabled":False,"trailing_stop_enabled":False,"partial_exit_enabled":False,"time_exit_enabled":False})
     start=time.monotonic(); seen=set(); train_pass=[]; train_near=[]; failed=generations=fits=0; family_counts={}; completed=batches=zero=0
-    max_batches=max(5,math.ceil(REQUESTED/10000)*5)
+    max_batches=max(5,math.ceil(REQUESTED/1000)*5)
     print(f"SEARCH_START requested={REQUESTED} seed={SEED} algorithm={ALGORITHM} train_rows={len(train)} train_sha256={train_hash}",flush=True)
     while completed<REQUESTED and batches<max_batches and time.monotonic()-start<MAX_SECONDS:
-        size=min(10000,REQUESTED-completed); seed=SEED+batches*1000003
+        size=min(1000,REQUESTED-completed); seed=SEED+batches*1000003
         result=search_candidates(train,size,seed,cfg,ALGORITHM,progress_callback=None,excluded_genome_hashes=seen)
         hashes=result.pop("evaluated_genome_hashes",[]); actual=len(hashes); seen.update(hashes); completed+=actual; batches+=1
         failed+=int(result.get("failed_candidates",0)); generations+=int(result.get("generations",0)); fits+=int(result.get("surrogate_model_fits",0))
