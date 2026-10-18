@@ -1,0 +1,65 @@
+
+name: ETHUSDT Strategy Factory research
+on:
+  push:
+    paths:
+      - ".github/workflows/research.yml"
+  workflow_dispatch:
+    inputs:
+      candidates:
+        description: "Unique candidate count"
+        required: false
+        default: "500000"
+permissions:
+  contents: write
+concurrency:
+  group: ethusdt-strategy-factory-research
+  cancel-in-progress: false
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      FOUNDRY_CANDIDATES: ${{ github.event.inputs.candidates || '500000' }}
+      FOUNDRY_SEED: "42"
+      FOUNDRY_ALGORITHM: "surrogate_genetic"
+      FOUNDRY_MAX_RUNTIME_SECONDS: "19500"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+      - name: Install declared dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Compile and run the real-data factory
+        run: |
+          python -m compileall -q app research
+          python research/run_factory.py
+      - name: Upload raw-data and audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: strategy-foundry-research-${{ github.run_id }}
+          path: |
+            research-results/progress.json
+            research-results/report.json
+            research-results/validated_strategies.zip
+            research-run/ETHUSDT-1m-202604-202609.csv.gz
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Commit auditable results to main
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add research-results/progress.json
+          if [ -f research-results/report.json ]; then git add research-results/report.json; fi
+          if [ -f research-results/validated_strategies.zip ]; then git add research-results/validated_strategies.zip; fi
+          if ! git diff --cached --quiet; then
+            git commit -m "Record ETHUSDT Strategy Factory research results"
+            git push origin HEAD:main
+          fi

@@ -28,7 +28,7 @@ def test_standalone_template_contains_all_engine_families_and_composition():
     assert "secondary_family" in template
     assert "bar_open<=stop" in template
     assert "bar_open>=stop" in template
-    assert "SL_UNRESOLVED" in template
+    assert "EXECUTION_PREFLIGHT_FAILED" in template
     assert "resolution_status" in template
     assert "execution_ambiguity" in template
     assert "download_execution_window" in template
