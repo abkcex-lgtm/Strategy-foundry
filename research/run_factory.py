@@ -65,7 +65,7 @@ async def get_data():
     return df,{"source":"Binance USD-M Vision monthly archives","symbol":SYMBOL,"interval":"1m","month_rows":counts,"monthly_archives":archives,"validation":integrity,"dataset_sha256":frame_hash(df),"csv_sha256":digest(csv.read_bytes())}
 def run(df,data_manifest):
     splits=split_reference_period(df); train,dev,oos=splits["train"],splits["development"],splits["oos"]
-    if (len(train),len(dev),len(oos))!=(129600,44640,87840): raise RuntimeError(f"Unexpected split sizes {len(train)}/{len(dev)}/{len(oos)}")
+    if (len(train),len(dev),len(oos))!=(131040,44640,87840): raise RuntimeError(f"Unexpected split sizes {len(train)}/{len(dev)}/{len(oos)}")
     train_hash=frame_hash(train); dev_hash=frame_hash(dev)
     cfg=normalize_contract({"symbol":SYMBOL,"initial_balance":1000,"risk_mode":"fixed_usd","risk_usd":10,"compound":False,"reward_risk":3.5,"target_mode":"net_rr","commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"max_positions":1,"entry_model":"next_candle_open","exit_model":"sl_tp_only","min_win_rate_pct":40,"min_profit_factor":1,"min_tp_per_day":3,"max_consecutive_losses":13,"use_min_win_rate":True,"use_min_profit_factor":True,"use_min_tp_per_day":True,"use_max_consecutive_losses":True,"break_even_enabled":False,"trailing_stop_enabled":False,"partial_exit_enabled":False,"time_exit_enabled":False})
     start=time.monotonic(); seen=set(); train_pass=[]; train_near=[]; failed=generations=fits=0; family_counts={}; completed=batches=zero=0

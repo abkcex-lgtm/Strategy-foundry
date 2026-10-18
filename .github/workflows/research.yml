@@ -1,5 +1,5 @@
 
-name: ETHUSDT Strategy Factory research
+name: ETHUSDT Strategy Factory research (reference split correction)
 on:
   push:
     paths:
