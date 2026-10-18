@@ -44,6 +44,15 @@ def test_standalone_replay_matches_factory_for_each_family(family):
     exec(compile(source, "standalone_replay.py", "exec"), namespace)
     actual = namespace["replay"](frame)
 
+    assert actual["open_position"] is None if expected["open_position"] is None else actual["open_position"] is not None
+    if expected["open_position"] is not None:
+        assert set(actual["open_position"]) == set(expected["open_position"])
+        for key, value in expected["open_position"].items():
+            other = actual["open_position"][key]
+            if isinstance(value, bool) or value is None or isinstance(value, str):
+                assert other == value
+            elif isinstance(value, (int, float)):
+                assert other == pytest.approx(value, rel=1e-10, abs=1e-8)
     assert actual["run_hash_sha256"] == expected["run_hash_sha256"]
     assert set(actual["metrics"]) == set(expected["metrics"])
     for key, value in expected["metrics"].items():
