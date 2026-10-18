@@ -38,3 +38,20 @@
 .quick-nav:before{content:"پرش سریع";flex:0 0 auto;color:#91baff;font-size:11px;font-weight:800;padding-inline:5px}
 @media(max-width:1100px){.access-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:760px){.access-launchpad{padding:13px;margin-bottom:12px;border-radius:14px}.access-heading{align-items:flex-start}.access-heading h2{font-size:18px}.access-count{font-size:10px;padding:5px 7px}.access-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.access-grid a{grid-template-columns:auto minmax(0,1fr);gap:7px;padding:10px 8px}.access-grid a b{display:none}.access-number{width:26px;height:26px}.access-grid strong{font-size:11px}.access-grid small{font-size:9px}.quick-nav{top:0}}
+
+/* V0.9.5: persistent mobile dashboard navigation; existing controls and sections remain intact. */
+.mobile-dock{display:none}
+@media(max-width:760px){
+  body{padding-bottom:calc(78px + env(safe-area-inset-bottom))}
+  .mobile-dock{position:fixed;z-index:1000;inset:auto 0 0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;padding:7px 8px calc(7px + env(safe-area-inset-bottom));border-top:1px solid #3a4b62;background:rgba(13,19,28,.97);backdrop-filter:blur(14px);box-shadow:0 -8px 26px #0005}
+  .mobile-dock a{display:flex;min-width:0;min-height:51px;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:1px solid transparent;border-radius:11px;color:#b9c8dc;text-decoration:none}
+  .mobile-dock a:focus-visible,.mobile-dock a:hover{outline:2px solid #70a7ff;background:#1c2b3e;color:#fff}
+  .mobile-dock a span{font-size:20px;line-height:1.1}
+  .mobile-dock a small{font-size:10px;font-weight:700;white-space:nowrap}
+  .mobile-dock a[href="#searchResultsSection"]{color:#a8caff}
+  .access-launchpad{margin-bottom:12px}
+  .hero{gap:12px}
+  .hero-actions{flex-wrap:wrap}
+  .panel{scroll-margin-top:14px}
+}
+@media(min-width:761px){.mobile-dock{display:none}}
