@@ -477,12 +477,9 @@ def backtest(frame, spec=None, contract=None, execution_frame=None):
             if exec_df is not None:
                 try:
                     resolution=_resolve_execution_interval(side,exec_df,int(open_times[j]),base_interval,stop,target)
-                except DataIntegrityError:
-                    # Never guess the path: book the modeled stop outcome and flag the trade.
-                    reason,exit_price,exit_time="SL_UNRESOLVED",stop,int(open_times[j])
-                    exit_i=j
-                    resolution_status="unresolved_as_loss"
-                    break
+                except DataIntegrityError as exc:
+                    # Fail closed: an unresolved execution path must never become a scored trade.
+                    raise DataIntegrityError(f"Execution preflight failed at {int(open_times[j])}: {exc}") from exc
                 if resolution is not None:
                     reason,exit_price,exit_time=resolution; exit_i=j
                     resolution_status="resolved_1s_ohlc"
@@ -490,11 +487,9 @@ def backtest(frame, spec=None, contract=None, execution_frame=None):
             else:
                 try:
                     resolution=_resolve_bar_exit(side,float(open_values[j]),float(high_values[j]),float(low_values[j]),stop,target)
-                except DataIntegrityError:
-                    reason,exit_price,exit_time="SL_UNRESOLVED",stop,int(open_times[j])
-                    exit_i=j
-                    resolution_status="unresolved_as_loss"
-                    break
+                except DataIntegrityError as exc:
+                    # OHLC cannot reveal which barrier was hit first; do not score this run.
+                    raise DataIntegrityError(f"Execution preflight failed at {int(open_times[j])}: {exc}") from exc
                 if resolution is not None:
                     reason,exit_price=resolution; exit_i=j; exit_time=int(open_times[j])
                     resolution_status="resolved_base_ohlc"
