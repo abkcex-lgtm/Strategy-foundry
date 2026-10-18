@@ -13,7 +13,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: ethusdt-strategy-factory-research-v096-final
+  group: ethusdt-strategy-factory-research-v096-checkpointed
   cancel-in-progress: true
 jobs:
   research:
