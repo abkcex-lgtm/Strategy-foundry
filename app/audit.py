@@ -336,9 +336,9 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
                 bar=d.iloc[j]
                 try:
                     resolution=_resolve_bar_exit_independent(side,float(bar.open),float(bar.high),float(bar.low),stop,target)
-                except ValueError:
-                    reason,px,exit_time="SL_UNRESOLVED",stop,int(d.open_time.iloc[j])
-                    ex=j; resolution_status="unresolved_as_loss"; break
+                except ValueError as exc:
+                    # Independent replay must reject unresolved execution; never manufacture a stop fill.
+                    raise ValueError(f"EXECUTION_PREFLIGHT_FAILED at {int(d.open_time.iloc[j])}: {exc}") from exc
                 if resolution is not None:
                     reason,px=resolution; ex=j; exit_time=int(d.open_time.iloc[j]); resolution_status="resolved_base_ohlc"; break
         if ex is None: break
