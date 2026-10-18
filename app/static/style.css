@@ -99,3 +99,33 @@ html{scroll-behavior:smooth;scroll-padding-top:92px}
   .twocol{gap:7px}
 }
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important}}
+
+
+/* Actual page-style navigation for v0.9.4; original feature markup and IDs are preserved. */
+.app-page[hidden]{display:none!important}
+.app-page{min-width:0;animation:page-enter .16s ease-out}
+.page-intro{margin:4px 0 16px;padding:16px 18px;border:1px solid #2d4057;border-radius:15px;background:linear-gradient(135deg,#1a2a3c,#151c26)}
+.page-intro h2{margin:0;font-size:clamp(20px,2.5vw,27px)}
+.page-intro p{margin:5px 0 0;color:var(--muted);font-size:12px;line-height:1.8}
+.page-tabs{display:flex;gap:7px;align-items:center;margin:0 0 16px;padding:7px;border:1px solid var(--line);border-radius:14px;background:#121a25;overflow-x:auto;scrollbar-width:thin}
+.page-tab{display:flex;align-items:center;justify-content:center;gap:8px;flex:1 0 auto;min-height:42px;padding:8px 15px;border:1px solid transparent;border-radius:10px;color:#bdcce0;text-decoration:none;font-size:12px;white-space:nowrap}
+.page-tab>span:first-child{font-size:17px}
+.page-tab:hover,.page-tab:focus-visible{background:#1d2b3e;border-color:#3a5272;outline:none}
+.page-tab.active{background:linear-gradient(135deg,#2c5ca5,#3e4f9e);border-color:#6287d0;color:#fff;font-weight:700}
+.section-panel{margin-bottom:14px}
+.section-panel>h2{margin-bottom:10px}
+.app-page .panel{scroll-margin-top:16px}
+.app-page .access-launchpad{margin-bottom:14px}
+.mobile-bottom-nav a.active{background:#223b5d;color:#fff;border:1px solid #3d5d89}
+.mobile-bottom-nav a.active .nav-icon{color:#9fc1ff}
+@keyframes page-enter{from{opacity:.78;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+@media(min-width:761px){.page-tabs{position:sticky;top:74px;z-index:15;backdrop-filter:blur(14px)}}
+@media(max-width:760px){
+ .page-tabs{display:none}
+ .page-intro{padding:13px;border-radius:13px;margin-bottom:12px}
+ .page-intro h2{font-size:21px}
+ .app-page{padding-bottom:8px}
+ .app-page .panel{margin-bottom:11px}
+ .mobile-bottom-nav{display:grid}
+}
+@media(prefers-reduced-motion:reduce){.app-page{animation:none}}
