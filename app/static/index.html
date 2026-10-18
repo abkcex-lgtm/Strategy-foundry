@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#10151d"><meta name="application-version" content="0.9.4"><title>Strategy Foundry | کارخانهٔ استراتژی</title><link rel="stylesheet" href="/static/style.css?v=0.9.4"></head>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#10151d"><meta name="application-version" content="0.9.4"><title>Strategy Foundry | کارخانهٔ استراتژی</title><link rel="stylesheet" href="/static/style.css?v=0.9.4-ui2"></head>
 <body><header class="top"><div class="brand"><div class="logo">SF</div><div><strong>Strategy Foundry</strong><small>کارخانهٔ پژوهش و اعتبارسنجی استراتژی</small></div></div><div class="status"><i></i><span id="apiStatus">در حال اتصال…</span><b>فقط شبیه‌سازی</b></div></header>
 <main><section class="hero"><div><p class="eyebrow">RESEARCH WORKSPACE · <span id="workspaceVersion">V0.9.4</span></p><h1>از ایده تا معاملهٔ قابل بررسی</h1><p>دادهٔ واقعی، موتور سمت سرور، دفتر معاملات مرجع و نشان‌گذاری ورود/حدضرر/هدف روی نمودار.</p></div><div class="hero-actions"><a href="#assistantTitle" class="btn primary">شروع از دستیار</a><button id="refreshBtn" class="btn secondary">تازه‌سازی</button><a href="/docs" class="btn secondary">مستندات API</a></div></section>
 <section class="access-launchpad" aria-labelledby="accessTitle"><div class="access-heading"><div><p class="access-eyebrow">میانبرهای برنامه</p><h2 id="accessTitle">از اینجا مستقیم وارد هر بخش شو</h2><p>هیچ بخشی حذف نشده؛ فقط مسیر رسیدن به آن کوتاه‌تر شده است.</p></div><span class="access-count">۱۰ میانبر</span></div><div class="access-grid"><a href="#researchSummary"><span class="access-number">۰۱</span><span><strong>نمای کلی</strong><small>وضعیت داده و تنظیمات</small></span><b>←</b></a><a href="#dataSection"><span class="access-number">۰۲</span><span><strong>داده‌های بازار</strong><small>نماد، بازه و دانلود</small></span><b>←</b></a><a href="#strategySection"><span class="access-number">۰۳</span><span><strong>استراتژی</strong><small>خانواده و سیگنال</small></span><b>←</b></a><a href="#riskSettings"><span class="access-number">۰۴</span><span><strong>ریسک و شروط</strong><small>سرمایه، کارمزد و معیارها</small></span><b>←</b></a><a href="#searchSettings"><span class="access-number">۰۵</span><span><strong>جست‌وجو و فیلترها</strong><small>الگوریتم و دامنهٔ جست‌وجو</small></span><b>←</b></a><a href="#chartSection"><span class="access-number">۰۶</span><span><strong>نمودار و بازپخش</strong><small>ورود، حدضرر و هدف</small></span><b>←</b></a><a href="#ledgerSection"><span class="access-number">۰۷</span><span><strong>دفتر معاملات</strong><small>ریز معاملات و خروجی‌ها</small></span><b>←</b></a><a href="#searchResultsSection"><span class="access-number">۰۸</span><span><strong>نتایج جست‌وجو</strong><small>کاندیدها و وضعیت بررسی</small></span><b>←</b></a><a href="#searchHistorySection"><span class="access-number">۰۹</span><span><strong>تاریخچهٔ جست‌وجو</strong><small>جست‌وجوهای قبلی</small></span><b>←</b></a><a href="#runHistorySection"><span class="access-number">۱۰</span><span><strong>تاریخچهٔ اجرا</strong><small>اجراهای ذخیره‌شده</small></span><b>←</b></a></div></section>
@@ -32,4 +32,107 @@
 <section class="panel" id="ledgerSection"><div class="section-head"><div><h2>دفتر معاملات</h2><p>زمان، جهت، قیمت‌ها، دلیل خروج، هزینه و P&amp;L.</p></div><div class="actions"><select id="tradeFilter"><option value="all">همهٔ معاملات</option><option value="tp">فقط معاملات TP</option><option value="win">فقط برنده‌ها</option><option value="loss">فقط بازنده‌ها</option></select><button id="csvBtn" class="btn secondary" disabled>خروجی CSV</button><button id="pyBtn" class="btn secondary" disabled>خروجی Python</button><button id="auditBtn" class="btn secondary" disabled>تطبیق موتور مستقل</button></div></div><div class="table-wrap"><table><thead><tr><th>#</th><th>زمان ورود UTC</th><th>جهت</th><th>ورود</th><th>SL</th><th>TP</th><th>خروج</th><th>دلیل</th><th>هزینه</th><th>خالص</th></tr></thead><tbody id="ledgerBody"><tr><td colspan="10" class="muted">هنوز معامله‌ای وجود ندارد.</td></tr></tbody></table></div></section>
 <section class="panel" id="searchResultsSection"><div class="section-head"><div><h2>نتیجهٔ جست‌وجو</h2><p>کاندیدها اکتشافی‌اند؛ قبولی نهایی به آزمون OOS و موتور مستقل نیاز دارد.</p></div></div><div class="section-head"><div><h3>کارهای جست‌وجوی قابل ادامه</h3><p>اگر صفحه یا سرور قطع شد، از آخرین دستهٔ کامل‌شده ادامه بده.</p></div><button id="recoverSearchJobs" class="btn secondary">بررسی کارهای قبلی</button></div><div id="recoverableSearchJobs" class="search-results muted">در حال بررسی کارهای قبلی…</div><div id="searchResults" class="search-results muted">هنوز جست‌وجویی انجام نشده است.</div></section></section></div>
 <section class="panel" id="searchHistorySection"><div class="section-head"><div><h2>تاریخچهٔ جست‌وجوها</h2><p>جست‌وجوهای قبلی، seed، تعداد کاندیدها و نتایج ذخیره‌شده.</p></div><button id="searchHistoryBtn" class="btn secondary">تازه‌سازی جست‌وجوها</button></div><div id="searchHistoryList" class="search-results muted">در حال بارگذاری جست‌وجوها…</div></section>
-<section class="panel" id="runHistorySection"><div class="section-head"><div><h2>تاریخچهٔ اجراها</h2><p>اجراهای ذخیره‌شده روی سرور و شناسهٔ هش آن‌ها.</p></div><button id="historyBtn" class="btn secondary">تازه‌سازی تاریخچه</button></div><div id="historyList" class="search-results muted">در حال بارگذاری تاریخچه…</div></section><footer>Strategy Foundry · بدون سفارش واقعی · نیازی به API key صرافی نیست · نتایج گذشته سود آینده را تضمین نمی‌کنند.</footer></main><script src="/static/app.js?v=0.9.4"></script></body></html>
+<section class="panel" id="runHistorySection"><div class="section-head"><div><h2>تاریخچهٔ اجراها</h2><p>اجراهای ذخیره‌شده روی سرور و شناسهٔ هش آن‌ها.</p></div><button id="historyBtn" class="btn secondary">تازه‌سازی تاریخچه</button></div><div id="historyList" class="search-results muted">در حال بارگذاری تاریخچه…</div></section><footer>Strategy Foundry · بدون سفارش واقعی · نیازی به API key صرافی نیست · نتایج گذشته سود آینده را تضمین نمی‌کنند.</footer></main><nav class="mobile-bottom-nav" aria-label="ناوبری اصلی موبایل">
+<a href="#researchSummary" aria-label="خانه"><span class="nav-icon">⌂</span><span>خانه</span></a>
+<a href="#dataSection" aria-label="داده‌ها"><span class="nav-icon">▤</span><span>داده‌ها</span></a>
+<a href="#strategySection" aria-label="کارخانه"><span class="nav-icon">⚙</span><span>کارخانه</span></a>
+<a href="#chartSection" aria-label="نتایج"><span class="nav-icon">▥</span><span>نتایج</span></a>
+<a href="#riskSettings" aria-label="بیشتر"><span class="nav-icon">⋯</span><span>بیشتر</span></a>
+</nav>
+<script>
+/* UI-only page organization for v0.9.4. Existing controls and IDs are moved, not recreated. */
+(function(){
+ const main=document.querySelector('main');
+ if(!main||main.dataset.pageLayoutReady==='1') return;
+ main.dataset.pageLayoutReady='1';
+ const byId=id=>document.getElementById(id);
+ const make=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text)e.textContent=text;return e;};
+ const home=make('section','app-page active');home.id='page-home';home.dataset.page='home';home.setAttribute('aria-label','خانه');
+ const data=make('section','app-page');data.id='page-data';data.dataset.page='data';data.setAttribute('aria-label','داده‌های بازار');
+ const factory=make('section','app-page');factory.id='page-factory';factory.dataset.page='factory';factory.setAttribute('aria-label','کارخانه و ساخت استراتژی');
+ const results=make('section','app-page');results.id='page-results';results.dataset.page='results';results.setAttribute('aria-label','نتایج و معاملات');
+ const more=make('section','app-page');more.id='page-more';more.dataset.page='more';more.setAttribute('aria-label','تنظیمات بیشتر و تاریخچه');
+ const intro=(title,desc)=>{const e=make('div','page-intro');e.append(make('h2','',title),make('p','',desc));return e;};
+ const hero=main.querySelector(':scope > .hero');
+ const launch=main.querySelector(':scope > .access-launchpad');
+ const quick=main.querySelector(':scope > .quick-nav');
+ const assistant=main.querySelector(':scope > .assistant-panel');
+ const notices=Array.from(main.querySelectorAll(':scope > .notice'));
+ const summary=byId('researchSummary');
+ const layout=main.querySelector(':scope > .layout');
+ const footer=main.querySelector(':scope > footer');
+ const bottomNav=document.querySelector('.mobile-bottom-nav');
+ const aside=layout&&layout.querySelector('.controls');
+ const maincol=layout&&layout.querySelector('.maincol');
+ if(!hero||!launch||!assistant||!summary||!aside||!maincol) return;
+ home.append(hero,launch);
+ if(quick) home.append(quick);
+ home.append(assistant,...notices,summary);
+ data.append(intro('داده‌های بازار','نماد، بازهٔ زمانی و تایم‌فریم را انتخاب کن؛ داده‌های ذخیره‌شده و وضعیت دانلود در همین صفحه دیده می‌شود.'));
+ factory.append(intro('کارخانهٔ استراتژی','خانوادهٔ استراتژی، پارامترها، تنظیمات اجرا و جست‌وجوی کاندیدها در یک فضای کاری.'));
+ results.append(intro('نتایج و معاملات','معیارهای بک‌تست، نمودار، دفتر معاملات و خروجی‌ها.'));
+ more.append(intro('بیشتر: تنظیمات و تاریخچه','تنظیمات پیشرفته، مدیریت ریسک، پروفایل‌ها و سوابق در این صفحه باقی می‌مانند.'));
+ const original=Array.from(aside.childNodes);
+ const strategy=byId('strategySection');
+ const risk=byId('riskSettings');
+ const si=original.indexOf(strategy),ri=original.indexOf(risk);
+ if(si<0||ri<si) return;
+ const dataPanel=make('div','panel controls section-panel');
+ const factoryPanel=make('div','panel controls section-panel');
+ const morePanel=make('div','panel controls section-panel');
+ original.slice(0,si).forEach(n=>dataPanel.append(n));
+ original.slice(si,ri).forEach(n=>factoryPanel.append(n));
+ original.slice(ri,ri+1).forEach(n=>morePanel.append(n));
+ original.slice(ri+1).forEach(n=>factoryPanel.append(n));
+ data.append(dataPanel);
+ factory.append(factoryPanel);
+ more.append(morePanel);
+ const metricGrid=maincol.querySelector('.metrics-grid');
+ if(metricGrid) results.append(metricGrid);
+ Array.from(maincol.children).forEach(n=>results.append(n));
+ layout.remove();
+ const histories=[byId('searchHistorySection'),byId('runHistorySection')].filter(Boolean);
+ histories.forEach(n=>more.append(n));
+ if(footer) more.append(footer);
+ main.append(home,data,factory,results,more);
+ const tabs=make('nav','page-tabs');tabs.setAttribute('aria-label','بخش‌های اصلی برنامه');
+ const tabInfo=[
+  ['home','خانه','#researchSummary','⌂'],
+  ['data','داده‌ها','#dataSection','▤'],
+  ['factory','کارخانه','#strategySection','⚙'],
+  ['results','نتایج','#chartSection','▥'],
+  ['more','بیشتر','#riskSettings','⋯']
+ ];
+ tabInfo.forEach(([key,label,href,icon])=>{const a=make('a','page-tab');a.href=href;a.dataset.view=key;a.innerHTML='<span aria-hidden="true">'+icon+'</span><span>'+label+'</span>';tabs.append(a);});
+ main.insertBefore(tabs,home);
+ const setPage=(key,scrollTarget,updateHash)=>{
+  if(!document.getElementById('page-'+key)) key='home';
+  document.querySelectorAll('.app-page').forEach(p=>{const active=p.dataset.page===key;p.hidden=!active;p.classList.toggle('active',active);});
+  tabs.querySelectorAll('a').forEach(a=>{const active=a.dataset.view===key;a.classList.toggle('active',active);if(active)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
+  if(bottomNav) bottomNav.querySelectorAll('a').forEach((a,i)=>{const active=tabInfo[i]&&tabInfo[i][0]===key;a.classList.toggle('active',!!active);if(active)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
+  if(updateHash&&scrollTarget&&scrollTarget.id){try{history.replaceState(null,'','#'+scrollTarget.id);}catch(e){}}
+  window.scrollTo({top:0,behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+  if(scrollTarget){setTimeout(()=>scrollTarget.scrollIntoView({block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'}),30);}
+ };
+ const pageForTarget=t=>{const p=t&&t.closest('.app-page');return p?p.dataset.page:'home';};
+ const navHandler=e=>{
+  const a=e.target.closest('a[href^="#"]');if(!a)return;
+  const target=byId(decodeURIComponent(a.getAttribute('href').slice(1)));
+  if(!target)return;
+  e.preventDefault();
+  const page=pageForTarget(target);
+  setPage(page,target,true);
+ };
+ document.addEventListener('click',navHandler);
+ if(bottomNav) bottomNav.querySelectorAll('a[href^="#"]').forEach(a=>{const target=byId(a.getAttribute('href').slice(1));if(target){a.dataset.view=pageForTarget(target);}});
+ document.querySelectorAll('.access-grid a[href^="#"],.quick-nav a[href^="#"]').forEach(a=>{const target=byId(a.getAttribute('href').slice(1));if(target)a.dataset.view=pageForTarget(target);});
+ document.addEventListener('click',e=>{const a=e.target.closest('a[data-view]');if(!a)return;const key=a.dataset.view;if(!key)return;});
+ const assistantSettings=byId('assistantSettings');
+ if(assistantSettings) assistantSettings.addEventListener('click',()=>setPage('factory',byId('strategySection'),false));
+ const assistantForm=byId('assistantForm');
+ if(assistantForm){assistantForm.addEventListener('submit',()=>{});}
+ window.strategyFoundryShowPage=(key)=>setPage(key,null,false);
+ setPage('home',null,false);
+})();
+</script>
+<script src="/static/app.js?v=0.9.4"></script></body></html>
