@@ -111,3 +111,69 @@ def test_independent_audit_fails_closed_on_unresolved_execution(monkeypatch):
            "commission_pct_per_side": 0.04, "slippage_pct_per_side": 0.02}
     with pytest.raises(ValueError, match="EXECUTION_PREFLIGHT_FAILED"):
         audit.independent_replay(base, spec, cfg, execution_frame=one_second_path()[0])
+
+
+
+def test_primary_backtest_automatically_resolves_ambiguous_minute_with_seconds(monkeypatch):
+    from app import engine
+    from app.engine import StrategySpec, backtest
+
+    start = 1_800_000_000_000
+    base = pd.DataFrame({
+        "open_time": [start + i * 60_000 for i in range(8)],
+        "open": [100.0] * 8, "high": [101.0] * 8,
+        "low": [99.0] * 8, "close": [100.0] * 8, "volume": [1.0] * 8,
+    })
+    base.loc[4, "high"] = 105.0
+    base.loc[4, "low"] = 97.0
+    seconds, _ = one_second_path()
+    seconds["open_time"] = [start + 4 * 60_000 + i * 1000 for i in range(60)]
+
+    def signals(df, spec):
+        out = df.copy()
+        out["atr"] = 1.0
+        out["long_signal"] = False
+        out["short_signal"] = False
+        out.loc[3, "long_signal"] = True
+        return out
+
+    monkeypatch.setattr(engine, "indicators", signals)
+    monkeypatch.setattr(engine, "download_binance_execution_window", lambda symbol, start_ms, interval_ms: seconds.copy())
+
+    result = backtest(base, StrategySpec(fast=2, slow=3, atr_period=2, stop_atr=1))
+    assert len(result["ledger"]) == 1
+    trade = result["ledger"][0]
+    assert trade["exit_reason"] == "SL"
+    assert trade["resolution_status"] == "resolved_1s_ohlc_auto"
+    assert trade["execution_ambiguity"] is False
+    assert result["metrics"]["execution_resolution"] == "1s_ohlc_auto"
+    assert result["metrics"]["execution_data_hash_sha256"]
+
+
+def test_download_binance_execution_window_validates_exact_response(monkeypatch):
+    from app import data
+
+    start = 1_900_000_000_000
+    payload = [[start + i * 1000, "100", "101", "99", "100", "1", 0, 0, 0, 0, 0, 0] for i in range(60)]
+
+    class Response:
+        def raise_for_status(self): pass
+        def json(self): return payload
+
+    class Client:
+        def __init__(self, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def get(self, url, params):
+            assert url.endswith("/fapi/v1/klines")
+            assert params["interval"] == "1s"
+            assert params["startTime"] == start
+            assert params["limit"] == 60
+            return Response()
+
+    monkeypatch.setattr(data.httpx, "Client", Client)
+    data._cached_binance_execution_rows.cache_clear()
+    frame = data.download_binance_execution_window("ETHUSDT", start, 60_000)
+    assert len(frame) == 60
+    assert int(frame.open_time.iloc[0]) == start
+    assert int(frame.open_time.iloc[-1]) == start + 59_000

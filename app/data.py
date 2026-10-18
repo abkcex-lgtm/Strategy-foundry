@@ -93,3 +93,52 @@ def split_reference_period(df: pd.DataFrame):
         'development': df.iloc[train_end:dev_end].copy(),
         'oos': df.iloc[dev_end:].copy(),
     }
+
+
+from functools import lru_cache
+
+@lru_cache(maxsize=2048)
+def _cached_binance_execution_rows(symbol: str, start_ms: int, seconds: int):
+    url = "https://fapi.binance.com/fapi/v1/klines"
+    try:
+        with httpx.Client(timeout=20, follow_redirects=True) as client:
+            response = client.get(url, params={
+                "symbol": symbol, "interval": "1s", "startTime": start_ms,
+                "endTime": start_ms + seconds * 1000 - 1, "limit": min(1500, seconds),
+            })
+            response.raise_for_status()
+            payload = response.json()
+    except Exception as exc:
+        raise DataIntegrityError(f"Binance USD-M 1-second execution fetch failed for {symbol} at {start_ms}: {exc}") from exc
+    if not isinstance(payload, list) or len(payload) != seconds:
+        got = len(payload) if isinstance(payload, list) else "non-list response"
+        raise DataIntegrityError(f"Incomplete Binance 1-second execution window for {symbol} at {start_ms}: expected {seconds} candles, got {got}")
+    rows = []
+    try:
+        for item in payload:
+            if not isinstance(item, list) or len(item) < 6:
+                raise ValueError("Unexpected Binance kline response shape")
+            rows.append((int(item[0]), float(item[1]), float(item[2]), float(item[3]), float(item[4]), float(item[5])))
+    except (TypeError, ValueError, IndexError) as exc:
+        raise DataIntegrityError(f"Invalid Binance 1-second execution data: {exc}") from exc
+    frame = pd.DataFrame(rows, columns=["open_time", "open", "high", "low", "close", "volume"])
+    validate_ohlcv(frame, 1000, strict_gaps=True)
+    if int(frame.open_time.iloc[0]) != start_ms or int(frame.open_time.iloc[-1]) != start_ms + (seconds - 1) * 1000:
+        raise DataIntegrityError("Binance 1-second execution timestamps do not match the requested interval")
+    return tuple(tuple(row) for row in frame.itertuples(index=False, name=None))
+
+
+def download_binance_execution_window(symbol: str, start_ms: int, interval_ms: int) -> pd.DataFrame:
+    """Fetch every verified 1-second USD-M candle for one ambiguous base candle."""
+    symbol = str(symbol).upper()
+    if not symbol.isalnum():
+        raise DataIntegrityError("Invalid symbol for Binance execution resolution")
+    if interval_ms <= 0 or interval_ms % 1000:
+        raise DataIntegrityError("Execution interval must be a positive whole number of seconds")
+    if start_ms < 1_000_000_000_000:
+        raise DataIntegrityError(f"Unresolved same-candle SL/TP ambiguity at implausible timestamp {start_ms}; automatic market-data resolution refused")
+    seconds = interval_ms // 1000
+    if seconds > 1500:
+        raise DataIntegrityError(f"Unresolved same-candle SL/TP ambiguity at {start_ms}; automatic 1-second window exceeds 1500 seconds")
+    rows = _cached_binance_execution_rows(symbol, int(start_ms), int(seconds))
+    return pd.DataFrame(rows, columns=["open_time", "open", "high", "low", "close", "volume"])

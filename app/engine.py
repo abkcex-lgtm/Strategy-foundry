@@ -4,11 +4,12 @@ from dataclasses import dataclass, asdict, replace
 from typing import Any
 import numpy as np
 import pandas as pd
-from .data import validate_ohlcv, sha256_bytes, DataIntegrityError
+from .data import validate_ohlcv, sha256_bytes, DataIntegrityError, download_binance_execution_window
 
 # Preset only: every field is user-configurable through Settings/API.
 CONTRACT = {
     "profile_name": "ETHUSDT fixed-risk 3.5R (editable preset)",
+    "symbol": "ETHUSDT",
     "initial_balance": 1000.0,
     "risk_mode": "fixed_usd",  # fixed_usd | percent_initial | percent_equity
     "risk_usd": 10.0,
@@ -57,6 +58,8 @@ def normalize_contract(overrides: dict[str, Any] | None = None) -> dict[str, Any
         cfg[key] = bool(cfg[key])
     if cfg["initial_balance"] <= 0: raise ValueError("Initial balance must be positive")
     if cfg["risk_mode"] not in SUPPORTED_RISK_MODES: raise ValueError("Unsupported risk_mode")
+    if not str(cfg.get("symbol", "ETHUSDT")).isalnum(): raise ValueError("symbol must be alphanumeric")
+    cfg["symbol"] = str(cfg.get("symbol", "ETHUSDT")).upper()
     if cfg["risk_usd"] <= 0 or cfg["risk_pct"] <= 0 or cfg["risk_pct"] > 100: raise ValueError("Risk must be positive; risk_pct must be <= 100")
     if cfg["reward_risk"] <= 0 or cfg["reward_risk"] > 100: raise ValueError("reward_risk must be in (0,100]")
     if min(cfg["commission_pct_per_side"], cfg["slippage_pct_per_side"]) < 0: raise ValueError("Costs cannot be negative")
@@ -435,6 +438,7 @@ def backtest(frame, spec=None, contract=None, execution_frame=None):
     data_hash=sha256_bytes(df.to_csv(index=False,float_format="%.12g").encode())
     execution_hash=None
     exec_df=None
+    execution_frames_used=[]
     if execution_frame is not None:
         exec_df=execution_frame.copy().reset_index(drop=True)
         validate_ohlcv(exec_df,1000,strict_gaps=False)
@@ -488,8 +492,18 @@ def backtest(frame, spec=None, contract=None, execution_frame=None):
                 try:
                     resolution=_resolve_bar_exit(side,float(open_values[j]),float(high_values[j]),float(low_values[j]),stop,target)
                 except DataIntegrityError as exc:
-                    # OHLC cannot reveal which barrier was hit first; do not score this run.
-                    raise DataIntegrityError(f"Execution preflight failed at {int(open_times[j])}: {exc}") from exc
+                    if "Unresolved same-candle SL/TP ambiguity" not in str(exc):
+                        raise DataIntegrityError(f"Execution preflight failed at {int(open_times[j])}: {exc}") from exc
+                    try:
+                        seconds=download_binance_execution_window(cfg.get("symbol","ETHUSDT"),int(open_times[j]),base_interval)
+                    except Exception as fetch_exc:
+                        raise DataIntegrityError(f"Unresolved same-candle SL/TP ambiguity at {int(open_times[j])}; automatic 1-second resolution failed: {fetch_exc}") from fetch_exc
+                    execution_frames_used.append(seconds)
+                    resolution=_resolve_execution_interval(side,seconds,int(open_times[j]),base_interval,stop,target)
+                    if resolution is not None:
+                        reason,exit_price,exit_time=resolution; exit_i=j
+                        resolution_status="resolved_1s_ohlc_auto"
+                        break
                 if resolution is not None:
                     reason,exit_price=resolution; exit_i=j; exit_time=int(open_times[j])
                     resolution_status="resolved_base_ohlc"
@@ -507,8 +521,12 @@ def backtest(frame, spec=None, contract=None, execution_frame=None):
     span_days=max((int(df.open_time.iloc[-1])-int(df.open_time.iloc[0]))/86400000,1/1440)
     wr=100*len(wins)/len(ledger) if ledger else 0.0; pf=gp/gl if gl else (math.inf if gp else 0.0); tp_day=len(wins)/span_days
     passes=(not cfg["use_min_win_rate"] or wr>cfg["min_win_rate_pct"]) and (not cfg["use_min_profit_factor"] or pf>cfg["min_profit_factor"]) and (not cfg["use_min_tp_per_day"] or tp_day>=cfg["min_tp_per_day"]) and (not cfg["use_max_consecutive_losses"] or max_streak<=cfg["max_consecutive_losses"])
-    metrics={"trades":len(ledger),"wins":len(wins),"losses":sum(t["net_pnl"]<=0 for t in ledger),"win_rate_pct":wr,"profit_factor":pf if math.isfinite(pf) else None,"avg_net_tp_per_day":tp_day,"max_consecutive_losses":max_streak,"net_pnl":sum(t["net_pnl"] for t in ledger),"final_balance":balance,"total_costs":sum(t["fees_slippage"] for t in ledger),"data_hash_sha256":data_hash,"execution_data_hash_sha256":execution_hash,"execution_resolution":"1s_ohlc" if exec_df is not None else "base_ohlc_only","unresolved_as_loss_count":sum(t.get("execution_ambiguity",False) for t in ledger),"rows":len(df),"span_days":span_days,"passes_all_targets":bool(passes)}
-    run_hash=sha256_bytes(json.dumps({"spec":asdict(spec),"contract":cfg,"data_hash":data_hash,"execution_data_hash":execution_hash,"execution_resolution":"1s_ohlc" if exec_df is not None else "base_ohlc_only"},sort_keys=True).encode())
+    if execution_frames_used:
+        combined_execution=pd.concat(execution_frames_used,ignore_index=True).drop_duplicates(subset=["open_time"]).sort_values("open_time").reset_index(drop=True)
+        execution_hash=sha256_bytes(combined_execution.to_csv(index=False,float_format="%.12g").encode())
+    execution_resolution="1s_ohlc" if exec_df is not None else ("1s_ohlc_auto" if execution_frames_used else "base_ohlc_only")
+    metrics={"trades":len(ledger),"wins":len(wins),"losses":sum(t["net_pnl"]<=0 for t in ledger),"win_rate_pct":wr,"profit_factor":pf if math.isfinite(pf) else None,"avg_net_tp_per_day":tp_day,"max_consecutive_losses":max_streak,"net_pnl":sum(t["net_pnl"] for t in ledger),"final_balance":balance,"total_costs":sum(t["fees_slippage"] for t in ledger),"data_hash_sha256":data_hash,"execution_data_hash_sha256":execution_hash,"execution_resolution":execution_resolution,"unresolved_as_loss_count":sum(t.get("execution_ambiguity",False) for t in ledger),"rows":len(df),"span_days":span_days,"passes_all_targets":bool(passes)}
+    run_hash=sha256_bytes(json.dumps({"spec":asdict(spec),"contract":cfg,"data_hash":data_hash,"execution_data_hash":execution_hash,"execution_resolution":execution_resolution},sort_keys=True).encode())
     return {"strategy":asdict(spec),"contract":cfg,"metrics":metrics,"ledger":ledger,"data_report":report,"run_hash_sha256":run_hash}
 
 def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[float, list[str], dict[str, float]]:

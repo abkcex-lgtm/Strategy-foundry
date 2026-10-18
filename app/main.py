@@ -15,6 +15,16 @@ from .persistence import load_datasets,load_dataset_metadata,load_runs,save_data
 
 ROOT=Path(__file__).resolve().parent
 
+def _contract_for_dataset(dataset_id:str, overrides:dict[str,Any]|None=None) -> dict[str,Any]:
+    cfg=dict(overrides or {})
+    metadata=DATASET_METADATA.get(dataset_id,{})
+    symbol=metadata.get('symbol')
+    if not symbol:
+        symbol=dataset_id.split('-',1)[0] if '-' in dataset_id else 'ETHUSDT'
+    cfg.setdefault('symbol',symbol)
+    return cfg
+
+
 def _period_label(frame:pd.DataFrame, note:str='') -> str:
     if frame.empty:
         return 'empty split'
@@ -194,7 +204,7 @@ def run_backtest(dataset_id:str,req:BacktestRequest):
     df=DATASETS.get(dataset_id)
     if df is None: raise HTTPException(404,'Dataset پیدا نشد؛ ابتدا داده را دریافت کنید.')
     try:
-        result=backtest(df,req.strategy or None,req.contract or None); run_id=_store_result(result,dataset_id)
+        result=backtest(df,req.strategy or None,_contract_for_dataset(dataset_id,req.contract)); run_id=_store_result(result,dataset_id)
         return {'run_id':run_id,**result}
     except Exception as exc: raise HTTPException(422,f'اجرای بک‌تست رد شد: {exc}') from exc
 
@@ -250,7 +260,8 @@ def _perform_search(dataset_id:str,req:SearchRequest,progress_callback=None,excl
     if df is None: raise ValueError('ابتدا داده را دریافت کنید.')
     splits=split_reference_period(df); train=splits['train']
     if len(train)<100: raise ValueError('دادهٔ Train برای بازهٔ Apr-Jun 2026 کافی نیست؛ جست‌وجو آغاز نشد.')
-    result=search_candidates(train,req.candidates,req.seed,req.contract,req.algorithm,req.search_space,progress_callback,excluded_genome_hashes)
+    effective_contract=_contract_for_dataset(dataset_id,req.contract)
+    result=search_candidates(train,req.candidates,req.seed,effective_contract,req.algorithm,req.search_space,progress_callback,excluded_genome_hashes)
     _rank_near_misses_on_development(result,splits,req)
     train_hash=hashlib.sha256(train.to_csv(index=False,float_format='%.12g').encode()).hexdigest()
     development_hash=hashlib.sha256(splits['development'].to_csv(index=False,float_format='%.12g').encode()).hexdigest()
@@ -529,7 +540,7 @@ def evaluate_strategy(dataset_id:str,req:BacktestRequest):
         # OOS results are reported after freezing; they never feed selection logic.
         spec=StrategySpec(**req.strategy) if req.strategy else StrategySpec()
         spec.validate()
-        cfg=normalize_contract(req.contract)
+        cfg=normalize_contract(_contract_for_dataset(dataset_id,req.contract))
         full_hash=hashlib.sha256(df.to_csv(index=False,float_format='%.12g').encode()).hexdigest()
         split_manifest={}
         for key,part in splits.items():

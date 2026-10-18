@@ -4,6 +4,7 @@ import math
 from typing import Any
 import numpy as np
 import pandas as pd
+from .data import download_binance_execution_window
 
 FIELDS = ("trade_id","signal_time","entry_time","exit_time","direction","signal_price",
           "entry_price","stop_loss","take_profit","exit_price","exit_reason","quantity",
@@ -337,8 +338,15 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
                 try:
                     resolution=_resolve_bar_exit_independent(side,float(bar.open),float(bar.high),float(bar.low),stop,target)
                 except ValueError as exc:
-                    # Independent replay must reject unresolved execution; never manufacture a stop fill.
-                    raise ValueError(f"EXECUTION_PREFLIGHT_FAILED at {int(d.open_time.iloc[j])}: {exc}") from exc
+                    if "UNRESOLVED_AMBIGUITY" not in str(exc):
+                        raise ValueError(f"EXECUTION_PREFLIGHT_FAILED at {int(d.open_time.iloc[j])}: {exc}") from exc
+                    try:
+                        seconds=download_binance_execution_window(str(cfg.get("symbol","ETHUSDT")),int(d.open_time.iloc[j]),base_interval)
+                    except Exception as fetch_exc:
+                        raise ValueError(f"UNRESOLVED_AMBIGUITY at {int(d.open_time.iloc[j])}; automatic 1-second resolution failed: {fetch_exc}") from fetch_exc
+                    resolution=_resolve_execution_interval_independent(side,seconds,int(d.open_time.iloc[j]),base_interval,stop,target)
+                    if resolution is not None:
+                        reason,px,exit_time=resolution; ex=j; resolution_status="resolved_1s_ohlc_auto"; break
                 if resolution is not None:
                     reason,px=resolution; ex=j; exit_time=int(d.open_time.iloc[j]); resolution_status="resolved_base_ohlc"; break
         if ex is None: break
