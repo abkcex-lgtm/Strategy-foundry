@@ -118,3 +118,12 @@ A watchdog must distinguish a genuinely stale heartbeat from a long but active c
 3. Add strategy primitives in audited batches, each with primary/independent parity tests and coverage metrics.
 4. Add/verify a compositional genome/grammar that can explore far more combinations than the number of hand-coded families.
 5. Re-run validation, then staged real-data searches with clear progress artifacts. Full 500k research remains unverified until a full run actually completes.
+
+## Historical result isolation (2026-10-20)
+
+- Historical research report/progress pairs have been copied into `research-results/archive/` and annotated with their original source commit and a `LEGACY_RESULT_NOT_VALID_FOR_CURRENT_SOURCE` classification. Nothing was permanently deleted.
+- Archived runs inspected: source `4a33354d92d2c38c571ca30b3296dd4a24f63fbb` (1,000/1,000, completed); source `72ee70a81db0df9dd1a7b2e25f9ebf97ae9563b6` (17,000/500,000, partial); source `24b09a44a6f156721462af58d6674ec4add208cc` (250/500,000, preflight gate failed); source `5c135280040ebfd2ccdbcc4d8fcba1442bfb590d` (134,250/500,000, partial). These are historical only and must not be used to evaluate the latest 40-family source.
+- `research-results/CURRENT_EVIDENCE.json` is the current evidence pointer. It explicitly says current-source execution is not verified. The top-level report/progress files may still contain an older run until a fresh workflow result replaces them; always check the marker and report's exact `source_commit`.
+- Do not clear SQLite run/search history or publish to NetRun solely to make history appear clean. Old database entries need provenance labels or a verified backup and explicit migration plan; deployment remains blocked until current CI/research and durable storage are verified.
+- Current research trigger under investigation: `6a558b60e4366ad1c8514a75bdec3823cc16ef22`, requested 500,000 candidates, seed 42, runtime budget 19,500 seconds. The available connected GitHub tools do not expose repository-wide push workflow-run listing; no run/artifact for the current source has yet been verified.
+
