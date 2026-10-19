@@ -2,7 +2,7 @@ import math
 import pandas as pd
 import pytest
 from app.data import validate_ohlcv, DataIntegrityError
-from app.engine import backtest, indicators, StrategySpec, CONTRACT, normalize_contract, _size_and_target, _resolve_bar_exit
+from app.engine import backtest, indicators, StrategySpec, CONTRACT, normalize_contract, _size_and_target, _resolve_bar_exit, prepare_backtest_data, _first_exit_candidate
 from app.audit import independent_replay
 
 def candles(n=300):
@@ -12,6 +12,54 @@ def candles(n=300):
         p=100+0.02*i+2*math.sin(i/7)
         rows.append({'open_time':i*60000,'open':p,'high':p+0.3,'low':p-0.3,'close':p+0.05*math.sin(i),'volume':10.0})
     return pd.DataFrame(rows)
+
+
+def test_prepared_market_data_preserves_full_backtest_output_and_rejects_other_frame():
+    df=candles(800)
+    spec=StrategySpec(fast=5,slow=18,atr_period=7,stop_atr=1.5)
+    cfg=normalize_contract({"reward_risk":2.0})
+    prepared=prepare_backtest_data(df)
+    standard=backtest(df,spec,cfg)
+    optimized=backtest(df,spec,cfg,_prepared_context=prepared)
+    assert optimized==standard
+    with pytest.raises(ValueError,match="exact source DataFrame"):
+        backtest(df.copy(),spec,cfg,_prepared_context=prepared)
+
+
+@pytest.mark.parametrize("side", ["LONG", "SHORT"])
+def test_vectorized_first_exit_candidate_matches_scalar_bar_scan(side):
+    import numpy as np
+    rng=np.random.default_rng(91)
+    for _ in range(100):
+        opens=100+rng.normal(0,2,250)
+        highs=opens+rng.uniform(0,3,250)
+        lows=opens-rng.uniform(0,3,250)
+        start=17; stop=98.5; target=102.0
+        expected=None
+        for j in range(start,len(opens)):
+            try:
+                resolution=_resolve_bar_exit(side,float(opens[j]),float(highs[j]),float(lows[j]),stop,target)
+            except DataIntegrityError as exc:
+                if "ambiguity" not in str(exc).lower(): raise
+                resolution=("AMBIGUOUS",None)
+            if resolution is not None:
+                expected=j; break
+        assert _first_exit_candidate(side,opens,highs,lows,start,stop,target)==expected
+
+
+def test_search_validates_shared_market_data_once_for_all_candidates(monkeypatch):
+    import app.engine as engine_module
+    df=candles(700)
+    original=engine_module.validate_ohlcv
+    calls={"n":0}
+    def counted(*args,**kwargs):
+        calls["n"]+=1
+        return original(*args,**kwargs)
+    monkeypatch.setattr(engine_module,"validate_ohlcv",counted)
+    result=engine_module.search_candidates(df,12,seed=17,contract={"use_min_tp_per_day":False})
+    assert result["evaluated_candidates"]==12
+    assert calls["n"]==1
+
 
 def test_valid_data_report():
     r=validate_ohlcv(candles())

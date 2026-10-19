@@ -412,31 +412,63 @@ def _resolve_execution_interval(side: str, execution_frame: pd.DataFrame, start_
     return None
 
 
-def backtest(frame, spec=None, contract=None, execution_frame=None):
+class _PreparedBacktestData:
+    """One-time validated immutable market-data view shared by candidate backtests."""
+    __slots__ = ("source_frame", "frame", "base_interval", "report", "data_hash")
+    def __init__(self, frame):
+        df=frame.copy().reset_index(drop=True)
+        required=["open_time","open","high","low","close","volume"]
+        try:
+            for column in required:
+                df[column]=pd.to_numeric(df[column],errors="raise")
+        except (KeyError, TypeError, ValueError) as exc:
+            raise DataIntegrityError(f"OHLCV columns must be numeric before backtest: {exc}") from exc
+        if df["open_time"].isna().any() or not np.isfinite(df["open_time"].to_numpy(dtype=float)).all():
+            raise DataIntegrityError("open_time contains invalid timestamps")
+        if not np.equal(df["open_time"].to_numpy(dtype=float),np.floor(df["open_time"].to_numpy(dtype=float))).all():
+            raise DataIntegrityError("open_time timestamps must be integer milliseconds")
+        df["open_time"]=df["open_time"].astype("int64")
+        base_interval=None
+        if len(df)>1:
+            diffs=df.open_time.diff().dropna()
+            base_interval=int(diffs.mode().iloc[0]) if len(diffs) else None
+            report=validate_ohlcv(df,base_interval,strict_gaps=True)
+        else:
+            report=validate_ohlcv(df,None)
+        self.source_frame=frame
+        self.frame=df
+        self.base_interval=base_interval
+        self.report=report
+        self.data_hash=sha256_bytes(df.to_csv(index=False,float_format="%.12g").encode())
+
+
+def prepare_backtest_data(frame):
+    """Fully validate and fingerprint a market frame for repeated exact-data backtests."""
+    return _PreparedBacktestData(frame)
+
+
+def _first_exit_candidate(side, opens, highs, lows, start, stop, target):
+    """Vectorized first-bar scan; scalar resolver still decides fills and ambiguity."""
+    op=opens[start:]; hi=highs[start:]; lo=lows[start:]
+    if side=="LONG":
+        touched=(op<=stop)|(op>=target)|(lo<=stop)|(hi>=target)
+    else:
+        touched=(op>=stop)|(op<=target)|(hi>=stop)|(lo<=target)
+    hits=np.flatnonzero(touched)
+    return None if hits.size==0 else start+int(hits[0])
+
+
+def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_context=None):
     spec=StrategySpec(**spec) if isinstance(spec,dict) else (spec or StrategySpec()); spec.validate()
     cfg=normalize_contract(contract)
-    df=frame.copy().reset_index(drop=True)
-    # CSV/SQLite round-trips can leave OHLCV columns as strings. Validation
-    # checks a numeric copy, so normalize the actual execution frame as well
-    # before diff(), indicator arithmetic, hashing, and ledger timestamps.
-    required=["open_time","open","high","low","close","volume"]
-    try:
-        for column in required:
-            df[column]=pd.to_numeric(df[column],errors="raise")
-    except (KeyError, TypeError, ValueError) as exc:
-        raise DataIntegrityError(f"OHLCV columns must be numeric before backtest: {exc}") from exc
-    if df["open_time"].isna().any() or not np.isfinite(df["open_time"].to_numpy(dtype=float)).all():
-        raise DataIntegrityError("open_time contains invalid timestamps")
-    if not np.equal(df["open_time"].to_numpy(dtype=float),np.floor(df["open_time"].to_numpy(dtype=float))).all():
-        raise DataIntegrityError("open_time timestamps must be integer milliseconds")
-    df["open_time"]=df["open_time"].astype("int64")
-    base_interval=None
-    if len(df)>1:
-        diffs=df.open_time.diff().dropna(); base_interval=int(diffs.mode().iloc[0]) if len(diffs) else None
-        report=validate_ohlcv(df,base_interval,strict_gaps=True)
-    else: report=validate_ohlcv(df,None)
+    prepared=_prepared_context if _prepared_context is not None else prepare_backtest_data(frame)
+    if prepared.source_frame is not frame:
+        raise ValueError("Prepared market data can only be reused with its exact source DataFrame")
+    df=prepared.frame
+    base_interval=prepared.base_interval
+    report=prepared.report
     if len(df)<max(spec.slow,spec.atr_period)+3: raise DataIntegrityError("Not enough candles for warmup")
-    data_hash=sha256_bytes(df.to_csv(index=False,float_format="%.12g").encode())
+    data_hash=prepared.data_hash
     execution_hash=None
     exec_df=None
     execution_frames_used=[]
@@ -478,18 +510,21 @@ def backtest(frame, spec=None, contract=None, execution_frame=None):
         except ValueError: i+=1; continue
         if qty<=0: i+=1; continue
         exit_i=exit_price=exit_time=None; reason=None; resolution_status="resolved_base_ohlc"
-        for j in range(entry_i,len(x)):
-            if exec_df is not None:
+        if exec_df is not None:
+            for j in range(entry_i,len(x)):
                 try:
                     resolution=_resolve_execution_interval(side,exec_df,int(open_times[j]),base_interval,stop,target)
                 except DataIntegrityError as exc:
-                    # Fail closed: an unresolved execution path must never become a scored trade.
                     raise DataIntegrityError(f"Execution preflight failed at {int(open_times[j])}: {exc}") from exc
                 if resolution is not None:
                     reason,exit_price,exit_time=resolution; exit_i=j
                     resolution_status="resolved_1s_ohlc"
                     break
-            else:
+        else:
+            # Vectorized event detection; scalar resolver still enforces the
+            # exact open-gap precedence and same-candle ambiguity policy.
+            j=_first_exit_candidate(side,open_values,high_values,low_values,entry_i,stop,target)
+            if j is not None:
                 try:
                     resolution=_resolve_bar_exit(side,float(open_values[j]),float(high_values[j]),float(low_values[j]),stop,target)
                 except DataIntegrityError as exc:
@@ -503,14 +538,11 @@ def backtest(frame, spec=None, contract=None, execution_frame=None):
                     resolution=_resolve_execution_interval(side,seconds,int(open_times[j]),base_interval,stop,target)
                     if resolution is None:
                         raise DataIntegrityError(f"1-second data contradicts ambiguous base candle at {int(open_times[j])}")
-                    if resolution is not None:
-                        reason,exit_price,exit_time=resolution; exit_i=j
-                        resolution_status="resolved_1s_ohlc_auto"
-                        break
+                    reason,exit_price,exit_time=resolution; exit_i=j
+                    resolution_status="resolved_1s_ohlc_auto"
                 if resolution is not None:
                     reason,exit_price=resolution; exit_i=j; exit_time=int(open_times[j])
                     resolution_status="resolved_base_ohlc"
-                    break
         if exit_i is None:
             last_price=float(x.close.iloc[-1])
             unrealized_gross=(last_price-entry)*qty*(1 if side=="LONG" else -1)
@@ -567,7 +599,7 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
     return sum(distances.values()), failed, distances
 
 
-def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="surrogate_genetic", search_space=None, progress_callback=None, excluded_genome_hashes=None, prior_candidates=None):
+def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="surrogate_genetic", search_space=None, progress_callback=None, excluded_genome_hashes=None, prior_candidates=None, prepared_context=None):
     """Deterministic bounded evolutionary search on TRAIN only.
 
     Each invocation is bounded to 10,000 genomes. The background API orchestrates
@@ -578,6 +610,9 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     if algorithm not in {"hybrid_genetic","surrogate_genetic","stratified_random"}:
         raise ValueError("Unsupported search algorithm")
     cfg=normalize_contract(contract)
+    prepared_context=prepared_context if prepared_context is not None else prepare_backtest_data(frame)
+    if prepared_context.source_frame is not frame:
+        raise ValueError("Prepared market data can only be reused with its exact source DataFrame")
     rng=np.random.default_rng(seed)
     excluded_genome_hashes=set(excluded_genome_hashes or ())
     def genome_hash(key):
@@ -692,7 +727,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             duplicate_genomes+=1
             return None
         try:
-            r=backtest(frame,spec,cfg); m=r["metrics"]
+            r=backtest(frame,spec,cfg,_prepared_context=prepared_context); m=r["metrics"]
             dist,failed,distances=_candidate_distance(m,cfg)
             row={"strategy":r["strategy"],"contract":cfg,"metrics":m,"distance":dist,
                  "failed_conditions":failed,"criterion_distances":distances,
@@ -715,7 +750,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     # Seed later batches with audited candidates from earlier batches. Reuse
     # their metrics only when dataset and contract fingerprints match exactly.
     prior_rows=[]
-    expected_data_hash=sha256_bytes(frame.reset_index(drop=True).to_csv(index=False,float_format="%.12g").encode())
+    expected_data_hash=prepared_context.data_hash
     seen_prior=set()
     for candidate in list(prior_candidates or [])[:192]:
         try:

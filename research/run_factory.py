@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 ROOT=Path(__file__).resolve().parents[1]; sys.path.insert(0,str(ROOT))
 from app.data import download_binance_month, validate_ohlcv, split_reference_period
-from app.engine import search_candidates, backtest, normalize_contract, _candidate_distance
+from app.engine import search_candidates, backtest, normalize_contract, prepare_backtest_data, _candidate_distance
 from app.audit import independent_replay, FIELDS, open_position_matches
 SYMBOL="ETHUSDT"; YEAR=2026; MONTHS=[4,5,6,7,8,9]
 EXPECTED={4:43200,5:44640,6:43200,7:44640,8:44640,9:43200}
@@ -71,6 +71,9 @@ def run(df,data_manifest):
     splits=split_reference_period(df); train,dev,oos=splits["train"],splits["development"],splits["oos"]
     if (len(train),len(dev),len(oos))!=(131040,44640,87840): raise RuntimeError(f"Unexpected split sizes {len(train)}/{len(dev)}/{len(oos)}")
     train_hash=frame_hash(train); dev_hash=frame_hash(dev)
+    prepared_train=prepare_backtest_data(train)
+    if prepared_train.data_hash != train_hash:
+        raise RuntimeError("Prepared TRAIN data fingerprint differs from the recorded TRAIN hash")
     cfg=normalize_contract({"symbol":SYMBOL,"initial_balance":1000,"risk_mode":"fixed_usd","risk_usd":10,"compound":False,"reward_risk":3.5,"target_mode":"net_rr","commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"max_positions":1,"entry_model":"next_candle_open","exit_model":"sl_tp_only","min_win_rate_pct":40,"min_profit_factor":1,"min_tp_per_day":3,"max_consecutive_losses":13,"use_min_win_rate":True,"use_min_profit_factor":True,"use_min_tp_per_day":True,"use_max_consecutive_losses":True,"break_even_enabled":False,"trailing_stop_enabled":False,"partial_exit_enabled":False,"time_exit_enabled":False})
     start=time.monotonic(); seen=set(); train_pass=[]; train_near=[]; failed=generations=fits=0; family_counts={}; completed=batches=zero=0
     preflight_summary=None; preflight_gate_failed=False; preflight_gate_reason=None
@@ -84,7 +87,8 @@ def run(df,data_manifest):
             max(0.0,3.0-float((x.get("metrics") or {}).get("avg_net_tp_per_day",0.0))),
             float(x.get("distance",math.inf))))[:192]
         result=search_candidates(train,size,seed,cfg,ALGORITHM,progress_callback=None,
-                                 excluded_genome_hashes=seen,prior_candidates=prior_pool)
+                                 excluded_genome_hashes=seen,prior_candidates=prior_pool,
+                                 prepared_context=prepared_train)
         hashes=result.pop("evaluated_genome_hashes",[]); actual=len(hashes); seen.update(hashes); completed+=actual; batches+=1
         failed+=int(result.get("failed_candidates",0)); generations+=int(result.get("generations",0)); fits+=int(result.get("surrogate_model_fits",0))
         for fam,n in result.get("family_evaluated_counts",{}).items(): family_counts[fam]=family_counts.get(fam,0)+int(n)
