@@ -979,10 +979,12 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             "failed_candidates":errors,"duplicate_genomes_skipped":duplicate_genomes,
             "seed":seed,"algorithm":algorithm,"generations":generation,"surrogate_model_fits":surrogate_fit_count,
             "family_evaluated_counts":family_counts,"contract":cfg,"all_passing":all_passing,
-            "prior_candidates_used":len(prior_rows),"preflight_summary":preflight_summary,            "indicator_cache_stats":{"hits":prepared_context.indicator_cache_hits,
-                                     "misses":prepared_context.indicator_cache_misses,
-                                     "entries":len(prepared_context.indicator_cache),
-                                     "limit":prepared_context.indicator_cache_limit},
+            "prior_candidates_used":len(prior_rows),"preflight_summary":preflight_summary,            "indicator_cache_stats":(
+                {"hits":prepared_context.indicator_cache_hits,
+                 "misses":prepared_context.indicator_cache_misses,
+                 "entries":len(prepared_context.indicator_cache),
+                 "limit":prepared_context.indicator_cache_limit}
+                if prepared_context is not None else {"hits":0,"misses":0,"entries":0,"limit":128}),
             "evaluated_genome_hashes":[genome_hash(key) for key in evaluated.keys()],
             "independent_audit_failures":audit_failures,
             "results":selected,"requested_near_misses":0 if all_passing else 5,

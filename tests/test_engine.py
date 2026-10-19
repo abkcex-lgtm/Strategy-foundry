@@ -69,7 +69,7 @@ def test_indicator_cache_reuses_signal_arrays_across_stop_and_direction_variants
     short_spec=StrategySpec(fast=5,slow=18,atr_period=7,stop_atr=2.5,direction="short")
     first=prepared.indicator_arrays(long_spec)
     second=prepared.indicator_arrays(short_spec)
-    assert all((a==b).all() for a,b in zip(first,second))
+    assert first is second
     assert prepared.indicator_cache_hits==1
     assert prepared.indicator_cache_misses==1
     assert prepared.indicator_cache_limit==128
