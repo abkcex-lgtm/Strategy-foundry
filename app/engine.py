@@ -696,6 +696,15 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     errors=0
     family_counts={f:0 for f in families}
     duplicate_genomes=0
+
+    def choose_family(exclude=None):
+        """Sample under-explored families more often without banning exploitation."""
+        options=[family for family in families if family!=exclude]
+        if not options:
+            options=list(families)
+        weights=np.asarray([1.0/math.sqrt(1.0+family_counts.get(family,0)) for family in options],dtype=float)
+        weights=weights/weights.sum()
+        return str(rng.choice(options,p=weights))
     started_at=time.monotonic()
     last_progress_count=-1
 
@@ -716,7 +725,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         if genes is not None:
             family,fast,slow,period,stop,direction,context_filter,confirmation_filter,secondary_family,signal_composition=genes
         else:
-            family=str(family or rng.choice(families))
+            family=str(family or choose_family())
             fast=int(rng.choice(fast_values))
             slow=int(rng.choice(slow_values))
             if slow<=fast: slow=int(min(500,fast+max(2,int(rng.choice([4,8,12,16,24,32,48])))))
@@ -857,7 +866,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                     contestants=[elites[int(rng.integers(0,len(elites)))] for _ in range(k)]
                     return min(contestants,key=lambda pair:fitness(pair[1]))[0]
                 a=parent(); b=parent()
-                family=str(rng.choice([a.family,b.family])) if rng.random()<0.55 else str(rng.choice(families))
+                family=str(rng.choice([a.family,b.family])) if rng.random()<0.45 else choose_family()
                 fast=int(a.fast if rng.random()<0.5 else b.fast)
                 slow=int(a.slow if rng.random()<0.5 else b.slow)
                 period=int(a.atr_period if rng.random()<0.5 else b.atr_period)
@@ -874,7 +883,8 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 if rng.random()<0.25: period=int(rng.choice(periods))
                 if rng.random()<0.25: stop=float(rng.choice(stops))
                 if rng.random()<0.18: direction=str(rng.choice(directions))
-                if rng.random()<0.12: family=str(rng.choice(families))
+                # Stronger family mutation counters early genetic convergence.
+                if rng.random()<0.28: family=choose_family()
                 if rng.random()<0.25: context_filter=str(rng.choice(context_filters))
                 if rng.random()<0.20: confirmation_filter=str(rng.choice(confirmation_filters))
                 spec=make_spec(genes=(family,fast,slow,period,stop,direction,context_filter,confirmation_filter,secondary_family,signal_composition))
