@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "status": "CURRENT_SOURCE_RUN_NOT_YET_VERIFIED",
-  "current_main_source_commit": "7a636bb384cedfa8dd583cd465be02e16b11b2f0",
+  "status": "CURRENT_SOURCE_RESEARCH_RUNNING",
+  "current_main_source_commit": "31759ed3886a73da63ba14c8365c86b816748ada",
   "requested_full_research_trigger_commit": "6a558b60e4366ad1c8514a75bdec3823cc16ef22",
   "requested_candidates": 500000,
   "seed": 42,
@@ -10,7 +10,7 @@
   "legacy_progress_archive": "research-results/archive/legacy-source-4a33354d92d2c38c571ca30b3296dd4a24f63fbb/progress.json",
   "legacy_source_commit": "4a33354d92d2c38c571ca30b3296dd4a24f63fbb",
   "current_source_result_verified": false,
-  "note": "The top-level report.json and progress.json are historical/mixed-run artifacts and are not evidence for the current 40-family source. Several prior research commits were inspected; all reported source commits differ from the current requested source. Copies of the readable historical report/progress pairs are preserved under archive/. Do not clear or overwrite live SQLite history. A fresh result must prove its exact source_commit, requested/evaluated counts, test gate, and terminal status before certification.",
+  "note": "Historical runs are archived and top-level report/progress are placeholders until a fresh report is committed. Canonical run is the 500,000-candidate research run at the current source commit. Do not treat any other run's metrics as current-source evidence. Full search must report actual evaluated count and terminal status; if runtime-limited, report incomplete and do not certify.",
   "historical_runs_archived": [
     {
       "archive": "research-results/archive/legacy-source-4a33354d92d2c38c571ca30b3296dd4a24f63fbb/",
@@ -44,5 +44,26 @@
       "status": "partial_search_reported",
       "valid_for_current_source": false
     }
-  ]
+  ],
+  "canonical_workflow_run": {
+    "run_id": 39335957241,
+    "url": "https://github.com/abkcex-lgtm/Strategy-foundry/actions/runs/39335957241",
+    "status": "in_progress",
+    "source_commit": "31759ed3886a73da63ba14c8365c86b816748ada",
+    "requested_candidates": 500000,
+    "seed": 42
+  },
+  "prior_stalled_run": {
+    "run_id": 39327307739,
+    "status": "cancelled",
+    "source_commit": "de1cbc7f15a155f4bb5d36745e5adc90ca546c2d",
+    "evaluated_unique_candidates_at_last_heartbeat": 27750
+  },
+  "duplicate_older_run": {
+    "run_id": 39335918450,
+    "url": "https://github.com/abkcex-lgtm/Strategy-foundry/actions/runs/39335918450",
+    "status": "in_progress",
+    "source_commit": "1a065dcb7ed20a748500eae53520aa5375f16f26",
+    "note": "Redundant full-search attempt; source code is materially the same, but canonical evidence will be taken from the latest source run only."
+  }
 }
