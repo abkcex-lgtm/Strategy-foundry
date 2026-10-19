@@ -255,11 +255,14 @@ def _rank_near_misses_on_development(result:dict[str,Any],splits:dict[str,pd.Dat
             item['distance']=1e30
             item['development_evaluation_status']='PREFLIGHT_FAILED'
             item['development_evaluation_reason']=str(exc)
+    from app.engine import _goal_activity_evidence
     def key(item):
         metrics=item.get('metrics',{})
         pf=metrics.get('profit_factor')
+        cfg=normalize_contract(item.get('contract') or result.get('contract') or req.contract)
         return (
             0 if item.get('development_evaluation_status')=='COMPLETED' else 1,
+            0 if _goal_activity_evidence(metrics,cfg) else 1,
             float(item.get('distance',1e30)),
             int(metrics.get('max_consecutive_losses',10**9)),
             -float(metrics.get('win_rate_pct',0)),
