@@ -1,14 +1,11 @@
 {
   "candidate_search_complete": false,
-  "evaluated_unique_candidates": 250,
-  "preflight_summary": {
-    "best_tp_per_day": 1.000007631315868,
-    "best_trade_count": 496,
-    "candidates_tp_per_day_ge_0_5": 69,
-    "evaluated_candidates": 250,
-    "promising_candidates": 0
-  },
+  "evaluated_unique_candidates": 134250,
+  "outcome": "INCOMPLETE_SEARCH_NO_CERTIFIED_STRATEGY",
   "report": "research-results/report.json",
   "requested_candidates": 500000,
-  "status": "preflight_gate_failed"
+  "returned_candidate_count": 5,
+  "status": "partial_search_reported",
+  "strategy_zip": "research-results/validated_strategies.zip",
+  "validated_strategy_count": 0
 }
