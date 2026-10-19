@@ -18,7 +18,7 @@ permissions:
   contents: write
 concurrency:
   group: ethusdt-strategy-factory-research-v097-observable
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   research:
     runs-on: ubuntu-latest
