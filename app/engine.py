@@ -890,7 +890,8 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     audit_pool=passing+[row for row in results if id(row) not in passing_ids]
     for audit_index,row in enumerate(audit_pool):
         try:
-            primary=backtest(frame,StrategySpec(**row["strategy"]),cfg)
+            primary=(backtest(frame,StrategySpec(**row["strategy"]),cfg,_prepared_context=prepared_context)
+                     if prepared_context is not None else backtest(frame,StrategySpec(**row["strategy"]),cfg))
             second=independent_replay(frame,row["strategy"],cfg)
             a=primary["ledger"]; b=second["ledger"]
             matched=len(a)==len(b)
