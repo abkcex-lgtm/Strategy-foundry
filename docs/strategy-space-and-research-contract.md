@@ -2,6 +2,14 @@
 
 Status: **target architecture / acceptance contract**, not a claim that every item below is already implemented. The current engine only implements the family IDs explicitly listed in `app/engine.py`; any family shown here must not be exposed as runnable until its signal logic, causal tests, independent replay, and UI wiring are implemented.
 
+## Equal-weight objective and evidence eligibility (release 0.9.9)
+
+For the four user-selectable performance criteria—win rate, profit factor, average net full TPs/day, and maximum consecutive losses—calculate each enabled criterion's normalized distance to its threshold, then use the arithmetic mean. Each active criterion therefore contributes exactly 1/N to the score. Disabled criteria contribute neither distance nor pass/fail requirements. Do not add hidden bonuses or tie-break preferences for any one of the four metrics in the genetic fitness, surrogate target, API ordering, or research-runner ordering.
+
+Separate eligibility gates do not change the four equal weights: input/data integrity, no open position at end, independent trade-by-trade ledger parity, and sufficient evidence. Evidence requires at least 100 closed trades. If TP/day is active, trade count must also be compatible with the requested TP/day rate and observed win rate; if TP/day is disabled, that target must not be used to steer or block selection beyond the minimum sample floor. Insufficient evidence means the candidate is not certified even if its point estimates happen to cross the four thresholds.
+
+Required lifecycle: generate diverse causal candidates on Train; rank using equal-weight active-target distance and evidence eligibility; freeze the candidate pool; audit and compare on Development; evaluate untouched OOS only after selection freezes. A green CI or successful deployment is not proof of a profitable strategy, and no real-data outcome may be reported unless the actual search and its independent audit complete.
+
 ## Product principle
 
 The factory searches a broad, compositional hypothesis space. It must not equate "500,000 strategies" with 500,000 random parameter variations of a few indicators. A strategy identity includes its entry logic, optional context/regime filters, direction, exit/risk model, timeframe/data contract, and all parameters. Candidates that are syntactic variations but produce identical signals/trades should be deduplicated and counted as equivalent, not advertised as meaningful diversity.
