@@ -108,6 +108,14 @@ class StrategySpec:
         if self.confirmation_filter not in {"none","candle_direction","momentum","rsi_midline"}:
             raise ValueError("Unsupported confirmation filter")
 
+def _cancel_conflicting_signals(long_signal, short_signal):
+    """Cancel bars where a strategy emits both directions without an explicit priority."""
+    long_signal=long_signal.fillna(False).astype(bool)
+    short_signal=short_signal.fillna(False).astype(bool)
+    conflict=long_signal & short_signal
+    return long_signal & ~conflict, short_signal & ~conflict
+
+
 def indicators(df, spec):
     x=df.copy(); c=x.close.astype(float); prev=c.shift(1)
     x["ema_fast"]=c.ewm(span=spec.fast,adjust=False,min_periods=spec.fast).mean()
@@ -339,11 +347,9 @@ def indicators(df, spec):
     # candle. The backtester previously resolved that silently as LONG because
     # it checks long_signal first. With no explicit priority in the strategy
     # contract, a contradictory bar must be a no-trade bar.
-    conflict=(long_signal.fillna(False) & short_signal.fillna(False))
-    long_signal=long_signal.fillna(False) & ~conflict
-    short_signal=short_signal.fillna(False) & ~conflict
-    x["long_signal"]=long_signal.astype(bool)
-    x["short_signal"]=short_signal.astype(bool)
+    long_signal,short_signal=_cancel_conflicting_signals(long_signal,short_signal)
+    x["long_signal"]=long_signal
+    x["short_signal"]=short_signal
     return x
 
 def _risk_budget(cfg: dict[str, Any], balance: float) -> float:
