@@ -143,3 +143,21 @@ def test_new_family_signal_arrays_match_independent_replay():
         np.testing.assert_array_equal(primary["long_signal"].fillna(False).to_numpy(), long_.fillna(False).to_numpy())
         np.testing.assert_array_equal(primary["short_signal"].fillna(False).to_numpy(), short_.fillna(False).to_numpy())
         np.testing.assert_allclose(primary["atr"].to_numpy(), atr.to_numpy(), rtol=1e-12, atol=1e-12, equal_nan=True)
+
+
+def test_chunked_first_exit_scan_matches_full_vector_scan():
+    rng = np.random.default_rng(42)
+    n = 12_500
+    opens = 100.0 + rng.normal(0.0, 2.0, n)
+    highs = opens + rng.uniform(0.0, 4.0, n)
+    lows = opens - rng.uniform(0.0, 4.0, n)
+    for side in ("LONG", "SHORT"):
+        for start in (0, 1, 4095, 4096, 4097, 8191, 12000, n):
+            stop, target = (98.5, 103.0) if side == "LONG" else (103.0, 98.5)
+            op, hi, lo = opens[start:], highs[start:], lows[start:]
+            touched = ((op <= stop) | (op >= target) | (lo <= stop) | (hi >= target)
+                       if side == "LONG" else
+                       (op >= stop) | (op <= target) | (hi >= stop) | (lo <= target))
+            hits = np.flatnonzero(touched)
+            expected = None if not hits.size else start + int(hits[0])
+            assert engine._first_exit_candidate(side, opens, highs, lows, start, stop, target) == expected
