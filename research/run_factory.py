@@ -162,7 +162,35 @@ def run(df,data_manifest):
             -float((x.get("metrics") or {}).get("profit_factor") or 0.0),
             -float((x.get("metrics") or {}).get("win_rate_pct",0.0)),
             max(0.0,3.0-float((x.get("metrics") or {}).get("avg_net_tp_per_day",0.0)))))[:192]
-        result=search_candidates(train,size,seed,cfg,ALGORITHM,progress_callback=None,
+        batch_started=time.monotonic()
+        def heartbeat(batch_state):
+            # Live observability: publish frequent log heartbeats while a batch is
+            # still evaluating, not only after the whole batch returns.
+            local_done=int(batch_state.get("evaluated_candidates",0))
+            global_done=completed+local_done
+            state={
+                "status":"searching",
+                "requested_candidates":REQUESTED,
+                "evaluated_unique_candidates":global_done,
+                "completed_batches":batches,
+                "current_batch":batches+1,
+                "current_batch_target":size,
+                "current_batch_evaluated":local_done,
+                "failed_candidate_evaluations":failed+int(batch_state.get("failed_candidates",0)),
+                "duplicate_genomes_skipped":int(batch_state.get("duplicate_genomes_skipped",0)),
+                "elapsed_seconds":round(time.monotonic()-start,2),
+                "batch_elapsed_seconds":round(time.monotonic()-batch_started,2),
+                "candidates_per_second":round(local_done/max(time.monotonic()-batch_started,1e-9),3),
+                "seed":SEED,
+                "algorithm":ALGORITHM,
+                "train_sha256":train_hash,
+                "development_sha256":dev_hash,
+                "family_evaluated_counts":{family:family_counts.get(family,0)+int(batch_state.get("family_evaluated_counts",{}).get(family,0)) for family in set(family_counts)|set(batch_state.get("family_evaluated_counts",{}))},
+                "heartbeat":"candidate-evaluation",
+            }
+            write(PROGRESS,state)
+            print("SEARCH_HEARTBEAT "+json.dumps(state,sort_keys=True),flush=True)
+        result=search_candidates(train,size,seed,cfg,ALGORITHM,progress_callback=heartbeat,
                                  excluded_genome_hashes=seen,prior_candidates=prior_pool,
                                  prepared_context=prepared_train)
         hashes=result.pop("evaluated_genome_hashes",[]); actual=len(hashes); seen.update(hashes); completed+=actual; batches+=1
