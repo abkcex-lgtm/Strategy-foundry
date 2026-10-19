@@ -49,12 +49,13 @@ def test_search_explores_all_supported_families_and_returns_five_near_misses(mon
     assert len(result["results"]) == 5
     assert "TRAIN" in result["warning"]
     assert set(result["results"][0]["failed_conditions"]) == {
-        "win_rate_pct", "profit_factor", "avg_net_tp_per_day"
+        "win_rate_pct", "profit_factor", "avg_net_tp_per_day",
+        "insufficient_activity_evidence"
     }
     assert "criterion_distances" in result["results"][0]
 
 
-def test_infinite_profit_factor_is_not_ranked_as_zero(monkeypatch):
+def test_disabled_profit_factor_does_not_affect_candidate_distance(monkeypatch):
     def fake_backtest(frame, spec, contract):
         metrics = {
             "trades": 10, "wins": 2, "losses": 8, "win_rate_pct": 20.0,
@@ -74,7 +75,8 @@ def test_infinite_profit_factor_is_not_ranked_as_zero(monkeypatch):
     monkeypatch.setattr(audit, "independent_replay", lambda frame, spec, cfg: {"ledger": []})
     cfg = normalize_contract({"use_min_profit_factor": False})
     result = search_candidates(pd.DataFrame(), max_candidates=60, seed=42, contract=cfg)
-    assert result["results"][0]["metrics"]["profit_factor"] is None
+    assert "profit_factor" not in result["results"][0]["criterion_distances"]
+    assert len(result["results"]) == 5
 
 
 def test_search_space_restricts_families_and_composition_filters(monkeypatch):
