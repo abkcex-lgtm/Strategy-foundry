@@ -525,6 +525,7 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
             # exact open-gap precedence and same-candle ambiguity policy.
             j=_first_exit_candidate(side,open_values,high_values,low_values,entry_i,stop,target)
             if j is not None:
+                auto_resolved=False
                 try:
                     resolution=_resolve_bar_exit(side,float(open_values[j]),float(high_values[j]),float(low_values[j]),stop,target)
                 except DataIntegrityError as exc:
@@ -540,7 +541,8 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
                         raise DataIntegrityError(f"1-second data contradicts ambiguous base candle at {int(open_times[j])}")
                     reason,exit_price,exit_time=resolution; exit_i=j
                     resolution_status="resolved_1s_ohlc_auto"
-                if resolution is not None:
+                    auto_resolved=True
+                if resolution is not None and not auto_resolved:
                     reason,exit_price=resolution; exit_i=j; exit_time=int(open_times[j])
                     resolution_status="resolved_base_ohlc"
         if exit_i is None:
