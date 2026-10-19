@@ -10,7 +10,9 @@ pinned: false
 
 # Strategy Foundry
 
-Current source version: 0.9.9
+Application release: 0.9.7
+
+Research-engine line: 0.9.9 (engine-generation line; not the API/UI release version)
 
 **Canonical handoff / project status:** read [PROJECT_STATE.md](PROJECT_STATE.md) first when continuing work in a new ChatGPT conversation. It records the authoritative branch, current run status, non-negotiable research contract, and next engineering priorities.
 
