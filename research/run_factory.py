@@ -146,8 +146,6 @@ def benchmark_exit_scan(frame, sample_count=512):
             touched=(op>=stop)|(op<=target)|(hi>=stop)|(lo<=target)
         hits=np.flatnonzero(touched)
         return None if hits.size==0 else start_idx+int(hits[0])
-    expected=[reference_scan(*case) for case in cases]
-    actual=[_first_exit_candidate(*case[:2],opens,highs,lows,case[1],case[2],case[3]) for case in []]
     # Keep call order explicit so both implementations receive identical arguments.
     started=time.perf_counter()
     expected=[reference_scan(*case) for case in cases]
