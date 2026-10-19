@@ -4,9 +4,10 @@ from collections import Counter
 from statistics import median
 from pathlib import Path
 import pandas as pd
+import numpy as np
 ROOT=Path(__file__).resolve().parents[1]; sys.path.insert(0,str(ROOT))
 from app.data import download_binance_month, validate_ohlcv, split_reference_period
-from app.engine import search_candidates, backtest, normalize_contract, prepare_backtest_data, _candidate_distance, _capability_evidence, _goal_activity_evidence
+from app.engine import search_candidates, backtest, normalize_contract, prepare_backtest_data, _candidate_distance, _capability_evidence, _goal_activity_evidence, _first_exit_candidate
 from app.audit import independent_replay, FIELDS, open_position_matches
 SYMBOL="ETHUSDT"; YEAR=2026; MONTHS=[4,5,6,7,8,9]
 EXPECTED={4:43200,5:44640,6:43200,7:44640,8:44640,9:43200}
@@ -120,6 +121,58 @@ def trade_diagnostics(ledger, span_days):
                                 "max":max(durations,default=0.0)},
             "trade_ledger_sha256":digest(json.dumps(rows,sort_keys=True,separators=(",",":"),allow_nan=False).encode())}
 
+def benchmark_exit_scan(frame, sample_count=512):
+    """Compare the bounded-memory scanner with the pre-optimization reference on TRAIN OHLCV."""
+    opens=frame["open"].to_numpy(dtype=float)
+    highs=frame["high"].to_numpy(dtype=float)
+    lows=frame["low"].to_numpy(dtype=float)
+    closes=frame["close"].to_numpy(dtype=float)
+    if len(frame)<10:
+        raise RuntimeError("Not enough TRAIN rows for exit-scan benchmark")
+    starts=np.linspace(0,len(frame)-2,min(int(sample_count),len(frame)-1),dtype=int)
+    cases=[]
+    for k,start_idx in enumerate(starts):
+        anchor=float(closes[start_idx])
+        # Benchmark-only levels anchored to observed TRAIN prices; no trade metrics are produced.
+        distance=max(anchor*0.0008,0.01)
+        side="LONG" if k%2==0 else "SHORT"
+        stop,target=(anchor-distance,anchor+distance) if side=="LONG" else (anchor+distance,anchor-distance)
+        cases.append((side,int(start_idx),stop,target))
+    def reference_scan(side,start_idx,stop,target):
+        op=opens[start_idx:]; hi=highs[start_idx:]; lo=lows[start_idx:]
+        if side=="LONG":
+            touched=(op<=stop)|(op>=target)|(lo<=stop)|(hi>=target)
+        else:
+            touched=(op>=stop)|(op<=target)|(hi>=stop)|(lo<=target)
+        hits=np.flatnonzero(touched)
+        return None if hits.size==0 else start_idx+int(hits[0])
+    expected=[reference_scan(*case) for case in cases]
+    actual=[_first_exit_candidate(*case[:2],opens,highs,lows,case[1],case[2],case[3]) for case in []]
+    # Keep call order explicit so both implementations receive identical arguments.
+    started=time.perf_counter()
+    expected=[reference_scan(*case) for case in cases]
+    reference_seconds=time.perf_counter()-started
+    started=time.perf_counter()
+    actual=[_first_exit_candidate(case[0],opens,highs,lows,case[1],case[2],case[3]) for case in cases]
+    chunked_seconds=time.perf_counter()-started
+    if actual!=expected:
+        first=next(i for i,(left,right) in enumerate(zip(expected,actual)) if left!=right)
+        raise RuntimeError(f"Chunked exit scan mismatch at benchmark case {first}: reference={expected[first]} optimized={actual[first]}")
+    return {
+        "status":"PASS",
+        "dataset_scope":"TRAIN only",
+        "train_rows":len(frame),
+        "train_sha256":frame_hash(frame),
+        "cases":len(cases),
+        "reference_full_tail_seconds":round(reference_seconds,6),
+        "chunked_scan_seconds":round(chunked_seconds,6),
+        "measured_speedup":round(reference_seconds/max(chunked_seconds,1e-9),3),
+        "first_hit_results_match":True,
+        "chunk_size":4096,
+        "note":"Component microbenchmark on real TRAIN OHLCV; not a full-candidate throughput benchmark.",
+    }
+
+
 def append_unique(dst,src):
     keys={json.dumps(x.get("strategy",{}),sort_keys=True,separators=(",",":")) for x in dst}
     for x in src:
@@ -152,6 +205,8 @@ def run(df,data_manifest):
     if (len(train),len(dev),len(oos))!=(131040,44640,87840): raise RuntimeError(f"Unexpected split sizes {len(train)}/{len(dev)}/{len(oos)}")
     train_hash=frame_hash(train); dev_hash=frame_hash(dev)
     prepared_train=prepare_backtest_data(train)
+    speed_benchmark=benchmark_exit_scan(train)
+    print("EXIT_SCAN_BENCHMARK "+json.dumps(speed_benchmark,sort_keys=True),flush=True)
     prepared_dev=prepare_backtest_data(dev)
     train_backtest_hash=prepared_train.data_hash
     dev_backtest_hash=prepared_dev.data_hash
@@ -304,7 +359,7 @@ def run(df,data_manifest):
     results=[]
     for item in delivery:
         results.append({k:v for k,v in item.items() if not k.startswith("_")})
-    report={"schema_version":1,"outcome":outcome,"source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"candidate_search_complete":search_complete,"failed_candidate_evaluations":failed,"completed_batches":batches,"surrogate_model_fits":fits,"generations":generations,"family_evaluated_counts":family_counts,"indicator_cache_stats":{"hits":prepared_train.indicator_cache_hits,"misses":prepared_train.indicator_cache_misses,"entries":len(prepared_train.indicator_cache),"limit":prepared_train.indicator_cache_limit},"seed":SEED,"algorithm":ALGORITHM,"preflight_summary":preflight_summary,"preflight_warning":preflight_gate_warning,"capability_gate":{"min_avg_tp_per_day":0.5,"min_trades":50,"min_win_rate_pct":25,"min_profit_factor":0.5,"blocking":False,"policy":"advisory only; all candidate families remain eligible and pilot results never terminate the requested search"},"contract":cfg,"target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,"avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":13,"risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5,"commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"entry_model":"next_candle_open","exit_model":"SL/TP only","max_positions":1,"loss_streak_resets_only_on_full_TP":True},"data":data_manifest,"splits":{"train":{"rows":len(train),"sha256":train_hash,"backtest_sha256":train_backtest_hash,"used_for_candidate_generation":True},"development":{"rows":len(dev),"sha256":dev_hash,"backtest_sha256":dev_backtest_hash,"used_for_selection_and_near_miss_ranking":True},"oos":{"rows":len(oos),"sha256":oos_hash,"backtest_sha256":oos_backtest_hash,"used_only_after_selection_frozen":True}},"development_passing_count":len(dev_pass),"development_near_miss_count":len(dev_near),"oos_evaluated_count":len(oos_results),"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"near_miss_shortfall":max(0,5-len(delivery)) if not validated else 0,"development_audit_failures":audit_failures,"exports":exports,"results":results,"selection_policy":"Train creates candidates; four active performance criteria have equal-weight normalized distance; minimum activity evidence and independent ledger match are separate eligibility gates; Development freezes selection and ranks by the same policy; OOS is only evaluated after selection is frozen and never used to rank/select.","reproducibility":"Primary and independent ledgers compared field-by-field at rel_tol=1e-10 and abs_tol=1e-8; standalone exports include exact hashes and auto-fetch 1-second windows only for ambiguous candles."}
+    report={"schema_version":1,"outcome":outcome,"source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"candidate_search_complete":search_complete,"failed_candidate_evaluations":failed,"completed_batches":batches,"surrogate_model_fits":fits,"generations":generations,"family_evaluated_counts":family_counts,"speed_benchmark":speed_benchmark,"indicator_cache_stats":{"hits":prepared_train.indicator_cache_hits,"misses":prepared_train.indicator_cache_misses,"entries":len(prepared_train.indicator_cache),"limit":prepared_train.indicator_cache_limit},"seed":SEED,"algorithm":ALGORITHM,"preflight_summary":preflight_summary,"preflight_warning":preflight_gate_warning,"capability_gate":{"min_avg_tp_per_day":0.5,"min_trades":50,"min_win_rate_pct":25,"min_profit_factor":0.5,"blocking":False,"policy":"advisory only; all candidate families remain eligible and pilot results never terminate the requested search"},"contract":cfg,"target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,"avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":13,"risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5,"commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"entry_model":"next_candle_open","exit_model":"SL/TP only","max_positions":1,"loss_streak_resets_only_on_full_TP":True},"data":data_manifest,"splits":{"train":{"rows":len(train),"sha256":train_hash,"backtest_sha256":train_backtest_hash,"used_for_candidate_generation":True},"development":{"rows":len(dev),"sha256":dev_hash,"backtest_sha256":dev_backtest_hash,"used_for_selection_and_near_miss_ranking":True},"oos":{"rows":len(oos),"sha256":oos_hash,"backtest_sha256":oos_backtest_hash,"used_only_after_selection_frozen":True}},"development_passing_count":len(dev_pass),"development_near_miss_count":len(dev_near),"oos_evaluated_count":len(oos_results),"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"near_miss_shortfall":max(0,5-len(delivery)) if not validated else 0,"development_audit_failures":audit_failures,"exports":exports,"results":results,"selection_policy":"Train creates candidates; four active performance criteria have equal-weight normalized distance; minimum activity evidence and independent ledger match are separate eligibility gates; Development freezes selection and ranks by the same policy; OOS is only evaluated after selection is frozen and never used to rank/select.","reproducibility":"Primary and independent ledgers compared field-by-field at rel_tol=1e-10 and abs_tol=1e-8; standalone exports include exact hashes and auto-fetch 1-second windows only for ambiguous candles."}
     write(OUT/"report.json",report); write(PROGRESS,{"status":"completed" if search_complete else "partial_search_reported","candidate_search_complete":search_complete,"outcome":outcome,"candidate_search_complete":search_complete,"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"report":"research-results/report.json","strategy_zip":"research-results/validated_strategies.zip"})
     print("FINAL_REPORT "+json.dumps({"outcome":outcome,"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"full_dataset_sha256":full_hash,"train_sha256":train_hash,"development_sha256":dev_hash,"oos_sha256":oos_hash,"report_path":"research-results/report.json","zip_path":"research-results/validated_strategies.zip"},sort_keys=True),flush=True)
 def main():
