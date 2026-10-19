@@ -32,6 +32,7 @@ jobs:
       # Latest smoke includes standalone-template parity tests for all 40 families.
       # UI family controls are checked against the engine family registry by tests.
       # app.js family labels and displayed counts are included in the same regression suite.
+      # Canonical smoke source is pinned to the triggering commit SHA.
       # The research runner emits SEARCH_HEARTBEAT every 25 unique candidate evaluations
       # so operators can see continuous progress instead of waiting for a whole batch.
       FOUNDRY_CANDIDATES: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '500000' || github.event_name == 'push' && '1000' || github.event.inputs.candidates || '500000' }}
