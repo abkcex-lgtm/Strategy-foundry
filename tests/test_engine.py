@@ -206,11 +206,12 @@ def test_surrogate_genetic_search_fits_ml_model(monkeypatch):
     import app.engine as engine
     import app.audit as audit
     def fake_backtest(frame, spec, contract):
+        data_hash = engine.sha256_bytes(frame.reset_index(drop=True).to_csv(index=False, float_format="%.12g").encode())
         metrics = {"trades": 12, "wins": 3, "losses": 9, "win_rate_pct": 25.0,
                    "profit_factor": 0.6, "avg_net_tp_per_day": 0.2,
                    "max_consecutive_losses": 7, "net_pnl": -30.0,
                    "final_balance": 970.0, "total_costs": 1.0,
-                   "data_hash_sha256": "a" * 64, "rows": 300, "span_days": 1.0,
+                   "data_hash_sha256": data_hash, "rows": 300, "span_days": 1.0,
                    "passes_all_targets": False}
         return {"strategy": engine.asdict(spec), "contract": contract, "metrics": metrics,
                 "run_hash_sha256": hashlib.sha256(repr(spec).encode()).hexdigest(), "ledger": []}
@@ -221,7 +222,16 @@ def test_surrogate_genetic_search_fits_ml_model(monkeypatch):
     assert result["algorithm"] == "surrogate_genetic"
     assert result["surrogate_model_fits"] >= 1
     assert result["evaluated_candidates"] == 80
+    assert result["preflight_summary"]["evaluated_candidates"] == 80
+    assert result["preflight_summary"]["promising_candidates"] == 0
     assert "ExtraTrees" in result["warning"]
+
+    second = engine.search_candidates(
+        pd.DataFrame(), max_candidates=30, seed=20, algorithm="surrogate_genetic",
+        excluded_genome_hashes=set(result["evaluated_genome_hashes"]),
+        prior_candidates=result["results"])
+    assert second["prior_candidates_used"] == len(result["results"])
+    assert second["evaluated_candidates"] == 30
 
 
 @pytest.mark.parametrize("operation", ["and", "or", "xor"])

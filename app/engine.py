@@ -567,7 +567,7 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
     return sum(distances.values()), failed, distances
 
 
-def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="surrogate_genetic", search_space=None, progress_callback=None, excluded_genome_hashes=None):
+def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="surrogate_genetic", search_space=None, progress_callback=None, excluded_genome_hashes=None, prior_candidates=None):
     """Deterministic bounded evolutionary search on TRAIN only.
 
     Each invocation is bounded to 10,000 genomes. The background API orchestrates
@@ -650,10 +650,14 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction,spec.context_filter,spec.confirmation_filter,spec.secondary_family,spec.signal_composition)
 
     def fitness(row):
+        # TP frequency is the binding requirement. Do not let a low-trade,
+        # high-PF candidate outrank a materially more frequent candidate.
         m=row["metrics"]; pf=math.inf if m["profit_factor"] is None else float(m["profit_factor"])
-        return (not m["passes_all_targets"],row["distance"],int(m["max_consecutive_losses"]),
-                -min(float(m["win_rate_pct"]),100.0),-min(float(m["avg_net_tp_per_day"]),1000.0),
-                -min(pf,1000.0),-int(m["trades"]))
+        tp_day=float(m["avg_net_tp_per_day"])
+        tp_gap=max(0.0,cfg["min_tp_per_day"]-tp_day)/max(cfg["min_tp_per_day"],1.0) if cfg["use_min_tp_per_day"] else 0.0
+        return (not m["passes_all_targets"],tp_gap,row["distance"],
+                -min(tp_day,1000.0),int(m["max_consecutive_losses"]),
+                -min(float(m["win_rate_pct"]),100.0),-min(pf,1000.0),-int(m["trades"]))
 
     def feature_vector(spec):
         vals=[1.0 if spec.family==f else 0.0 for f in all_families]
@@ -668,10 +672,12 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     def surrogate_target(row):
         m=row["metrics"]
         pf=10.0 if m["profit_factor"] is None else min(10.0,float(m["profit_factor"]))
+        tp_gap=max(0.0,cfg["min_tp_per_day"]-float(m["avg_net_tp_per_day"]))/max(cfg["min_tp_per_day"],1.0) if cfg["use_min_tp_per_day"] else 0.0
         return (float(row["distance"])+(0.0 if m["passes_all_targets"] else 1.0)
+                +2.0*tp_gap
                 +min(float(m["max_consecutive_losses"]),100.0)*0.01
                 -min(float(m["win_rate_pct"]),100.0)*0.001
-                -min(float(m["avg_net_tp_per_day"]),100.0)*0.002-pf*0.01)
+                -min(float(m["avg_net_tp_per_day"]),100.0)*0.01-pf*0.01)
 
     last_model_fit_at=-1
     surrogate_fit_count=0
@@ -706,6 +712,27 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     while len(initial)<min(max_candidates,64):
         initial.append(make_spec())
     population=[]
+    # Seed later batches with audited candidates from earlier batches. Reuse
+    # their metrics only when dataset and contract fingerprints match exactly.
+    prior_rows=[]
+    expected_data_hash=sha256_bytes(frame.reset_index(drop=True).to_csv(index=False,float_format="%.12g").encode())
+    seen_prior=set()
+    for candidate in list(prior_candidates or [])[:192]:
+        try:
+            if not isinstance(candidate,dict) or not isinstance(candidate.get("strategy"),dict): continue
+            if candidate.get("contract",cfg)!=cfg: continue
+            metrics=candidate.get("metrics") or {}
+            if metrics.get("data_hash_sha256")!=expected_data_hash: continue
+            prior_spec=StrategySpec(**candidate["strategy"]); prior_spec.validate()
+            key=genome(prior_spec); key_hash=genome_hash(key)
+            if key_hash in seen_prior or key_hash not in excluded_genome_hashes: continue
+            dist,miss,distances=_candidate_distance(metrics,cfg)
+            row={"strategy":asdict(prior_spec),"contract":cfg,"metrics":metrics,"distance":dist,
+                 "failed_conditions":miss,"criterion_distances":distances,
+                 "run_hash_sha256":candidate.get("run_hash_sha256"),"_genome":key}
+            population.append((prior_spec,row)); prior_rows.append(row); seen_prior.add(key_hash)
+        except (TypeError,ValueError,KeyError):
+            continue
     for spec in initial:
         if len(evaluated)>=max_candidates: break
         row=evaluate(spec)
@@ -753,7 +780,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         if algorithm=="surrogate_genetic" and len(evaluated)>=32 and (last_model_fit_at<0 or len(evaluated)-last_model_fit_at>=256):
             try:
                 from sklearn.ensemble import ExtraTreesRegressor
-                training_rows=list(evaluated.values())
+                training_rows=(prior_rows+list(evaluated.values()))[-2000:]
                 if len(training_rows)>2000: training_rows=training_rows[-2000:]
                 X=[]; y=[]
                 for training_row in training_rows:
@@ -858,11 +885,25 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         selected=[r for r in audited if not r["metrics"]["passes_all_targets"]][:5]
         all_passing=False
     near_miss_shortfall=max(0,5-len(selected)) if not all_passing else 0
+    preflight_summary={
+        "evaluated_candidates":len(results),
+        "best_tp_per_day":max((float(r["metrics"].get("avg_net_tp_per_day",0.0)) for r in results),default=0.0),
+        "best_trade_count":max((int(r["metrics"].get("trades",0)) for r in results),default=0),
+        "candidates_tp_per_day_ge_0_5":sum(float(r["metrics"].get("avg_net_tp_per_day",0.0))>=0.5 for r in results),
+        "promising_candidates":sum(
+            float(r["metrics"].get("avg_net_tp_per_day",0.0))>=0.5
+            and float(r["metrics"].get("win_rate_pct",0.0))>=30.0
+            and (math.inf if r["metrics"].get("profit_factor") is None else float(r["metrics"]["profit_factor"]))>=0.7
+            and int(r["metrics"].get("trades",0))>=50
+            for r in results
+        ),
+    }
     for row in results: row.pop("_genome",None)
     return {"requested_candidates":max_candidates,"evaluated_candidates":len(results),
             "failed_candidates":errors,"duplicate_genomes_skipped":duplicate_genomes,
             "seed":seed,"algorithm":algorithm,"generations":generation,"surrogate_model_fits":surrogate_fit_count,
             "family_evaluated_counts":family_counts,"contract":cfg,"all_passing":all_passing,
+            "prior_candidates_used":len(prior_rows),"preflight_summary":preflight_summary,
             "evaluated_genome_hashes":[genome_hash(key) for key in evaluated.keys()],
             "independent_audit_failures":audit_failures,
             "results":selected,"requested_near_misses":0 if all_passing else 5,

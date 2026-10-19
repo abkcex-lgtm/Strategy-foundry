@@ -34,9 +34,12 @@ def brief(m):
     return {k:m.get(k) for k in keys}
 def near_key(x):
     m=x.get("development_metrics") or x.get("metrics") or {}; pf=m.get("profit_factor")
-    return (0 if x.get("development_audit_status")=="MATCH" else 1,float(x.get("development_distance",x.get("distance",math.inf))),
-            int(m.get("max_consecutive_losses",10**9)),-float(m.get("win_rate_pct",0)),
-            -float(m.get("avg_net_tp_per_day",0)),-float(pf if pf is not None else 1e9))
+    tp_day=float(m.get("avg_net_tp_per_day",0))
+    tp_gap=max(0.0,3.0-tp_day)/3.0
+    return (0 if x.get("development_audit_status")=="MATCH" else 1,tp_gap,
+            float(x.get("development_distance",x.get("distance",math.inf))),
+            -tp_day,int(m.get("max_consecutive_losses",10**9)),-float(m.get("win_rate_pct",0)),
+            -float(pf if pf is not None else 1e9))
 def append_unique(dst,src):
     keys={json.dumps(x.get("strategy",{}),sort_keys=True,separators=(",",":")) for x in dst}
     for x in src:
@@ -70,23 +73,77 @@ def run(df,data_manifest):
     train_hash=frame_hash(train); dev_hash=frame_hash(dev)
     cfg=normalize_contract({"symbol":SYMBOL,"initial_balance":1000,"risk_mode":"fixed_usd","risk_usd":10,"compound":False,"reward_risk":3.5,"target_mode":"net_rr","commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"max_positions":1,"entry_model":"next_candle_open","exit_model":"sl_tp_only","min_win_rate_pct":40,"min_profit_factor":1,"min_tp_per_day":3,"max_consecutive_losses":13,"use_min_win_rate":True,"use_min_profit_factor":True,"use_min_tp_per_day":True,"use_max_consecutive_losses":True,"break_even_enabled":False,"trailing_stop_enabled":False,"partial_exit_enabled":False,"time_exit_enabled":False})
     start=time.monotonic(); seen=set(); train_pass=[]; train_near=[]; failed=generations=fits=0; family_counts={}; completed=batches=zero=0
+    preflight_summary=None; preflight_gate_failed=False; preflight_gate_reason=None
     max_batches=max(5,math.ceil(REQUESTED/1000)*5)
     print(f"SEARCH_START requested={REQUESTED} seed={SEED} algorithm={ALGORITHM} train_rows={len(train)} train_sha256={train_hash}",flush=True)
     while completed<REQUESTED and batches<max_batches and time.monotonic()-start<MAX_SECONDS:
-        size=min(1000,REQUESTED-completed); seed=SEED+batches*1000003
-        result=search_candidates(train,size,seed,cfg,ALGORITHM,progress_callback=None,excluded_genome_hashes=seen)
+        # Start with a small representative pilot; later batches learn from
+        # prior audited candidates instead of restarting an isolated population.
+        size=min(250 if batches==0 else 1000,REQUESTED-completed); seed=SEED+batches*1000003
+        prior_pool=sorted(train_pass+train_near,key=lambda x:(
+            max(0.0,3.0-float((x.get("metrics") or {}).get("avg_net_tp_per_day",0.0))),
+            float(x.get("distance",math.inf))))[:192]
+        result=search_candidates(train,size,seed,cfg,ALGORITHM,progress_callback=None,
+                                 excluded_genome_hashes=seen,prior_candidates=prior_pool)
         hashes=result.pop("evaluated_genome_hashes",[]); actual=len(hashes); seen.update(hashes); completed+=actual; batches+=1
         failed+=int(result.get("failed_candidates",0)); generations+=int(result.get("generations",0)); fits+=int(result.get("surrogate_model_fits",0))
         for fam,n in result.get("family_evaluated_counts",{}).items(): family_counts[fam]=family_counts.get(fam,0)+int(n)
         if result.get("all_passing"): append_unique(train_pass,result.get("results",[]))
         else:
             append_unique(train_near,result.get("results",[]))
-            train_near=sorted(train_near,key=lambda x:(float(x.get("distance",math.inf)),int(x.get("metrics",{}).get("max_consecutive_losses",10**9)),-float(x.get("metrics",{}).get("win_rate_pct",0)),-float(x.get("metrics",{}).get("avg_net_tp_per_day",0))))[:max(5,min(500,batches*5))]
+            train_near=sorted(train_near,key=lambda x:(
+                max(0.0,3.0-float(x.get("metrics",{}).get("avg_net_tp_per_day",0.0))),
+                float(x.get("distance",math.inf)),
+                int(x.get("metrics",{}).get("max_consecutive_losses",10**9)),
+                -float(x.get("metrics",{}).get("win_rate_pct",0))))[:max(5,min(500,batches*5))]
         zero=zero+1 if actual==0 else 0
-        p={"status":"searching","requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"completed_batches":batches,"failed_candidate_evaluations":failed,"elapsed_seconds":round(time.monotonic()-start,2),"seed":SEED,"algorithm":ALGORITHM,"train_sha256":train_hash,"development_sha256":dev_hash,"train_passing_pool":len(train_pass),"train_near_pool":len(train_near),"last_batch_unique":actual}
+        if batches==1:
+            preflight_summary=result.get("preflight_summary",{})
+            promising=int(preflight_summary.get("promising_candidates",0))
+            preflight_gate_failed=promising==0 and REQUESTED>=250
+            preflight_gate_reason=("The 250-candidate pilot found no candidate with at least 0.5 net TP/day, "
+                                   "30% win rate, PF >= 0.7, and at least 50 trades. This is a fail-fast "
+                                   "capability warning, not proof that no strategy exists.")
+            print("PREFLIGHT_GATE "+json.dumps({"passed":not preflight_gate_failed,
+                                                "summary":preflight_summary,
+                                                "reason":None if not preflight_gate_failed else preflight_gate_reason},
+                                               sort_keys=True),flush=True)
+        p={"status":"preflight_gate_failed" if preflight_gate_failed else "searching","requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"completed_batches":batches,"failed_candidate_evaluations":failed,"elapsed_seconds":round(time.monotonic()-start,2),"seed":SEED,"algorithm":ALGORITHM,"train_sha256":train_hash,"development_sha256":dev_hash,"train_passing_pool":len(train_pass),"train_near_pool":len(train_near),"last_batch_unique":actual,"preflight_summary":preflight_summary,"prior_candidates_used":result.get("prior_candidates_used",0)}
         write(PROGRESS,p); print("SEARCH_PROGRESS "+json.dumps(p,sort_keys=True),flush=True)
-        if zero>=5: break
+        if preflight_gate_failed or zero>=5: break
     search_complete=completed>=REQUESTED
+    if preflight_gate_failed:
+        report={"schema_version":1,"outcome":"PREFLIGHT_GATE_FAILED_NO_PROMISING_CANDIDATE",
+                "source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
+                "requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,
+                "candidate_search_complete":False,"failed_candidate_evaluations":failed,
+                "completed_batches":batches,"surrogate_model_fits":fits,"generations":generations,
+                "family_evaluated_counts":family_counts,"seed":SEED,"algorithm":ALGORITHM,"contract":cfg,
+                "target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,
+                    "avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":13,
+                    "risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5,
+                    "commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,
+                    "entry_model":"next_candle_open","exit_model":"SL/TP only","max_positions":1},
+                "data":data_manifest,
+                "splits":{"train":{"rows":len(train),"sha256":train_hash,"used_for_candidate_generation":True},
+                          "development":{"rows":len(dev),"sha256":dev_hash,"used_for_candidate_generation":False},
+                          "oos":{"rows":len(oos),"sha256":frame_hash(oos),"used_for_candidate_generation":False}},
+                "preflight_gate":{"passed":False,"pilot_candidates":completed,
+                    "summary":preflight_summary,"reason":preflight_gate_reason,
+                    "interpretation":"Fail-fast evidence threshold only; not a proof of impossibility and not a strategy certificate."},
+                "development_passing_count":0,"development_near_miss_count":0,"oos_evaluated_count":0,
+                "validated_strategy_count":0,"returned_candidate_count":0,"near_miss_shortfall":5,
+                "development_audit_failures":[],"exports":[],"results":[],
+                "selection_policy":"No long search or OOS selection was performed because the representative pilot failed the predeclared capability gate.",
+                "reproducibility":"Data and split hashes are recorded; pilot candidates are scored on TRAIN only; no strategy is certified."}
+        write(OUT/"report.json",report)
+        write(PROGRESS,{"status":"preflight_gate_failed","candidate_search_complete":False,
+                        "requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,
+                        "preflight_summary":preflight_summary,"report":"research-results/report.json"})
+        print("FINAL_REPORT "+json.dumps({"outcome":report["outcome"],"requested_candidates":REQUESTED,
+              "evaluated_unique_candidates":completed,"validated_strategy_count":0,
+              "returned_candidate_count":0,"train_sha256":train_hash,"report_path":"research-results/report.json"},sort_keys=True),flush=True)
+        return
     if not search_complete:
         write(PROGRESS,{"status":"partial_search_reported","requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"completed_batches":batches,"failed_candidate_evaluations":failed,"reason":"Runtime budget or candidate-space exhaustion; any result will be explicitly marked incomplete."})
         print(f"SEARCH_PARTIAL evaluated={completed} requested={REQUESTED}; evaluating auditable candidates found so far without claiming exhaustive search",flush=True)
