@@ -10,6 +10,10 @@ on:
         description: "Unique candidate count"
         required: false
         default: "500000"
+      runtime_seconds:
+        description: "Maximum research search time in seconds"
+        required: false
+        default: "19500"
 permissions:
   contents: write
 concurrency:
@@ -20,10 +24,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     env:
-      FOUNDRY_CANDIDATES: ${{ github.event.inputs.candidates || '500000' }}
+      # A workflow-file push runs a bounded real-data smoke test. Manual dispatch
+      # keeps the requested 500k / 5h25m defaults, with runtime override available.
+      FOUNDRY_CANDIDATES: ${{ github.event_name == 'push' && '1000' || github.event.inputs.candidates || '500000' }}
       FOUNDRY_SEED: "42"
       FOUNDRY_ALGORITHM: "surrogate_genetic"
-      FOUNDRY_MAX_RUNTIME_SECONDS: "19500"
+      FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
     steps:
       - uses: actions/checkout@v4
         with:
