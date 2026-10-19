@@ -10,7 +10,9 @@ pinned: false
 
 # Strategy Foundry
 
-Current source version: 0.9.6
+Current source version: 0.9.9
+
+**Canonical handoff / project status:** read [PROJECT_STATE.md](PROJECT_STATE.md) first when continuing work in a new ChatGPT conversation. It records the authoritative branch, current run status, non-negotiable research contract, and next engineering priorities.
 
 A server-side, simulation-only strategy research foundation. It never sends live exchange orders. Passing unit tests do not imply profitability or full validation.
 
