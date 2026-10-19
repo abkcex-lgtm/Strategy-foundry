@@ -73,63 +73,17 @@ Configure provider keys as host-side secret environment variables, never in fron
 
 The router does not create API access or credits. Unconfigured providers are skipped, and when no key is configured the API reports that clearly. The assistant is not yet an autonomous source-code repair agent; ordinary chat must not be described as code changes or tests being executed.
 
-## V0.7.4 release notes
+## Current implementation and verification status
 
-- Search now handles incomplete terminal status correctly and the dashboard reflects all 30 implemented strategy families.
-- The exact Apr–Sep 2026 reference split remains in place when available; arbitrary dataset date ranges use chronological 60/20/20 train/dev/OOS partitions. Search manifests show the actual split timestamps.
-- Regression coverage added for chronological split ordering. Runtime tests and live deployment remain unverified.
-
-## V0.7.3 release notes
-
-- Improved duplicate avoidance in surrogate proposal pools and mutation retries so prior-batch genomes are filtered before expensive evaluation.
-- Runtime verification is still pending: this environment cannot reach GitHub from the local container, and the latest repository test suite has not been confirmed by CI.
-
-## V0.7.1 release notes
-
-- Added a recovery panel to find queued, running, interrupted, or failed background searches after reopening the app; interrupted jobs can resume from the last atomically completed batch.
-- Updated the candidate-count input to allow up to 500,000 and extended client polling for long background jobs. The full 500k run remains unmeasured in production.
-
-## V0.7.0 release notes
-
-- Search can generate structurally compositional strategy genomes: two distinct strategy families combined with AND, OR, or XOR logic. Composition is part of the genome hash, crossover/mutation, ML feature representation, manual backtest settings, and independent audit replay.
-- Background search accepts up to 500,000 candidates in 10,000-candidate batches, persists each completed batch atomically, globally deduplicates genome fingerprints, and exposes resume after interruption. The synchronous endpoint remains capped at 10,000.
-- Added tests for composition ledger parity, global genome deduplication, 500k request validation, and atomic checkpoint persistence. A full 500k production-scale run is not yet measured or certified.
-
-## V0.6.0 release notes
-
-- Added 12 independently replayable price-action/regime families: swing-structure break, failed-breakout reversal, wick rejection, range expansion, three-bar momentum, volatility-regime breakout, trend-exhaustion reversal, volume-climax reversal, range-compression breakout, support/resistance rejection, micro double bottom, and micro double top. The engine and independent audit implement separate signal calculations; UI exposes them in manual and search family controls.
-- Added signal-generation coverage for all 30 families. The background search endpoint accepts up to 500,000 candidates in 10,000-candidate batches, persists each completed batch atomically, deduplicates genome fingerprints globally, and offers resume after interruption. The synchronous endpoint remains capped at 10,000. A full 500k production run has not yet been performance-tested or certified.
-
-## V0.6.0 release notes
-
-- Added 12 independently replayable price-action/regime families: swing-structure break, failed-breakout reversal, wick rejection, range expansion, three-bar momentum, volatility-regime breakout, trend-exhaustion reversal, volume-climax reversal, range-compression breakout, support/resistance rejection, micro double bottom, and micro double top. The engine and independent audit implement separate signal calculations; UI exposes them in manual and search family controls.
-- Added signal-generation coverage for all 30 families. This expands structural diversity but is **not** yet the promised 500,000-candidate resumable search: the API remains capped at 10,000 until durable batch checkpoints, bounded-memory result storage, cancellation/resume, and full-run validation are implemented.
-
-## V0.5.1 release notes
-
-- Search and Binance-download job status/progress are written to SQLite as jobs advance, so the latest visible state remains available after a process restart on hosts with a durable SQLite volume.
-- If a process restarts while a job was queued or running, the job is restored as **interrupted** instead of falsely appearing active. This is status persistence, **not** resumable execution; the computation itself must be started again.
-- `/api/health` reports `persistent_job_status: true`, and the API/UI version is `0.5.1`.
-- Historical note for v0.5.1: the search ceiling was 10,000, without resumable checkpoints.
-
-## V0.5.0 release notes
-
-- The API version and health endpoint now report **0.5.0**.
-- Selecting a row in the canonical trade ledger requests a server-side chart window centered on that trade's entry, highlights its entry/exit and SL/TP levels, and scrolls the chart into view. Keyboard Enter/Space selection and previous/next trade navigation are supported.
-- Added a distinct **TP-only** ledger filter; it filters by actual `exit_reason == TP` rather than assuming every profitable trade was a TP.
-- Versioned frontend asset URLs (`?v=0.5.0`) reduce stale browser-cache confusion.
-- This release does **not** claim 500,000-candidate search, durable pause/resume checkpoints, a completed full strategy catalogue, or verified NetRun deployment. Search remains capped at 10,000 until bounded, checkpointed search is implemented and tested.
-
-## Status
-
-Current API/workspace version: **0.7.3**. The header reports the live API version; verify `/api/health` returns `0.7.3` to confirm the server update. The workspace header reads the running server version from `/api/health`.
-
-Implemented in this foundation: server-side API, OHLCV checks, Binance archive download path, tracked download and asynchronous search jobs with status polling, TRAIN-only search selection, persisted source provenance and data SHA-256 fingerprints, live dashboard summary of data/risk/filters/fees, editable settings/profile validation, SQLite dataset/run/profile/search-result persistence with saved search manifests and reopenable result history, risk/cost-aware ledger, deterministic genetic search with crossover/mutation/stratified seeds/immigrant exploration, an ExtraTrees surrogate-guided proposal mode, a stratified-random baseline, user-selectable family/context/confirmation search space, and 18 causal signal families (EMA crossover, channel breakout, RSI reversion, volume breakout, EMA pullback, MACD crossover, Bollinger reversion, inside-bar breakout, engulfing reversal, momentum breakout, stochastic reversion, ROC momentum, ADX/DMI trend, Keltner breakout, volatility squeeze breakout, OBV trend, VWAP reclaim, and support/resistance pivot reversal). Reported search results are independently replayed against a separate ledger engine; UI exposes search mode and family labels. Other implemented elements include per-filter failures/distances, OHLC candlestick view with trade overlays, paging/zoom presets, clickable/keyboard-selectable ledger rows that focus a selected trade on the chart, TP-only/winner/loser filters, CSV and standalone Python replay export, run history and reproducibility manifests.
-
-Not yet complete/certified: 500k+ candidate capacity (current hard limit remains 10,000 until resumable resource-bounded batches/checkpoints are built), full typed genetic-programming grammar and predictive ML signal models (the current ML component is a search-space surrogate, not a market-direction predictor), the full 17-group strategy catalogue in docs/strategy-space-and-research-contract.md, 1-second ambiguity resolution, standalone-export execution and exact ledger equality on real market data, full replay-causal audit, multi-user authentication/isolation, complete AI/voice/files engineer workflow, long-run benchmarks, and deployment smoke test. Eighteen families now have primary signal logic and independent replay logic with synthetic causal/reconciliation tests; this is not a market-data profitability certificate. See app/ACCEPTANCE_GATES.md.
-
-Backtests can overfit and do not guarantee future returns. Never add exchange API keys with trading permissions.
-
+- Current research-engine line: **v0.9.9**. The canonical handoff is [PROJECT_STATE.md](PROJECT_STATE.md); read it first when continuing in a new chat.
+- The main branch has 35 executable strategy signal families, compositional two-family genomes (AND/OR/XOR), genetic/surrogate-guided search, duplicate avoidance, family-aware sampling, checkpointed batch orchestration, progress heartbeats, and an independently implemented trade-ledger replay.
+- Search can be configured up to 500,000 candidates through bounded batches, but this is a **requested capacity**, not proof that a full 500,000-candidate run has completed within the runtime budget.
+- Latest verified research run: [GitHub Actions run 39277059928](https://github.com/abkcex-lgtm/Strategy-foundry/actions/runs/39277059928), a 1,000-candidate real-data smoke test. It completed successfully, passed data preflight, and found **zero strategies passing every required split**; five near-misses were returned. The full 500k search is not yet verified.
+- The reference data split is Train Apr–Jun 2026, Development Jul 2026, and untouched OOS Aug–Sep 2026. OOS must not guide candidate generation, ranking, or selection.
+- A successful CI run means the checks completed; it does not certify profitability, validate a near-miss, or prove a production-scale search has finished.
+- Current non-negotiable acceptance criteria, audit requirements, measured-speed plan, progress requirements, and repository/branch hygiene rules are maintained in [PROJECT_STATE.md](PROJECT_STATE.md).
+- The assistant/provider router is not an autonomous code-repair agent. Do not claim that ordinary chat has modified code, executed tests, or repaired a deployment unless those actions were actually performed and verified.
+- Backtests can overfit and do not guarantee future returns. This application is simulation-only; never add exchange API keys with trading permissions.
 
 ## Free public hosting path (Docker Space)
 
