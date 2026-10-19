@@ -1,5 +1,5 @@
 
-name: ETHUSDT Strategy Factory research v0.9.6 checkpointed batches
+name: ETHUSDT Strategy Factory research v0.9.7 optimized checkpointed batches
 on:
   push:
     paths:
