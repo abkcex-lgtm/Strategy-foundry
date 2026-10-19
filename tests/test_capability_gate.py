@@ -67,7 +67,7 @@ def test_goal_activity_evidence_rejects_sparse_sample():
 def test_goal_activity_evidence_scales_to_target_and_observed_win_rate():
     cfg = normalize_contract()
     sufficient = {
-        "span_days": 10, "trades": 80, "wins": 40,
+        "span_days": 10, "trades": 120, "wins": 60,
         "win_rate_pct": 50.0, "avg_net_tp_per_day": 4.0,
     }
     assert _goal_activity_evidence(sufficient, cfg) is True
