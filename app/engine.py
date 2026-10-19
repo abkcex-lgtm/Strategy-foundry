@@ -465,6 +465,22 @@ def _resolve_execution_interval(side: str, execution_frame: pd.DataFrame, start_
     return None
 
 
+# Cache only the compact immutable indicator arrays, and bound their estimated
+# memory footprint independently of dataset length. Each entry stores one float64
+# ATR array plus two boolean signal arrays (approximately 10 bytes per candle).
+# This matters on NetRun's 256 MiB instance: a fixed 128-entry cache on a full
+# 263k-candle dataset could otherwise retain roughly 336 MiB before other state.
+INDICATOR_CACHE_BUDGET_BYTES = 16 * 1024 * 1024
+INDICATOR_CACHE_MAX_ENTRIES = 128
+INDICATOR_BYTES_PER_CANDLE = 8 + 1 + 1
+
+
+def _indicator_cache_limit_for_rows(row_count: int) -> int:
+    rows = max(1, int(row_count))
+    by_memory = INDICATOR_CACHE_BUDGET_BYTES // (rows * INDICATOR_BYTES_PER_CANDLE)
+    return max(1, min(INDICATOR_CACHE_MAX_ENTRIES, int(by_memory)))
+
+
 class _PreparedBacktestData:
     """One-time validated immutable market-data view shared by candidate backtests."""
     __slots__ = ("source_frame", "frame", "base_interval", "report", "data_hash",
@@ -500,7 +516,7 @@ class _PreparedBacktestData:
         self.indicator_cache=OrderedDict()
         self.indicator_cache_hits=0
         self.indicator_cache_misses=0
-        self.indicator_cache_limit=128
+        self.indicator_cache_limit=_indicator_cache_limit_for_rows(len(df))
 
     def indicator_arrays(self, spec):
         key=(spec.fast,spec.slow,spec.atr_period,spec.family,spec.context_filter,
