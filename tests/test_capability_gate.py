@@ -50,3 +50,40 @@ def test_capability_pilot_is_advisory_and_never_blocks_requested_search():
         "capability_evidence_candidates": 0,
         "promising_candidates": 0,
     }, 100) is None
+
+
+from app.engine import _goal_activity_evidence, _candidate_distance, normalize_contract
+
+
+def test_goal_activity_evidence_rejects_sparse_sample():
+    cfg = normalize_contract()
+    sparse = {
+        "span_days": 91, "trades": 20, "wins": 15,
+        "win_rate_pct": 75.0, "avg_net_tp_per_day": 0.16,
+    }
+    assert _goal_activity_evidence(sparse, cfg) is False
+
+
+def test_goal_activity_evidence_scales_to_target_and_observed_win_rate():
+    cfg = normalize_contract()
+    sufficient = {
+        "span_days": 10, "trades": 80, "wins": 40,
+        "win_rate_pct": 50.0, "avg_net_tp_per_day": 4.0,
+    }
+    assert _goal_activity_evidence(sufficient, cfg) is True
+
+
+def test_candidate_distance_normalizes_profit_factor_like_other_targets():
+    cfg = normalize_contract()
+    metrics = {
+        "win_rate_pct": 30.0, "profit_factor": 0.5,
+        "avg_net_tp_per_day": 1.5, "max_consecutive_losses": 16,
+        "open_positions_at_end": 0,
+    }
+    distance, failed, distances = _candidate_distance(metrics, cfg)
+    assert set(distances) == {
+        "win_rate_pct", "profit_factor", "avg_net_tp_per_day",
+        "max_consecutive_losses",
+    }
+    assert "profit_factor" in failed
+    assert distance == sum(distances.values())
