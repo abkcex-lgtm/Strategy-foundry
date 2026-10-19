@@ -961,15 +961,30 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         selected=[r for r in audited if not r["metrics"]["passes_all_targets"]][:5]
         all_passing=False
     near_miss_shortfall=max(0,5-len(selected)) if not all_passing else 0
+    def _pilot_pf(metrics):
+        return math.inf if metrics.get("profit_factor") is None else float(metrics["profit_factor"])
     preflight_summary={
         "evaluated_candidates":len(results),
         "best_tp_per_day":max((float(r["metrics"].get("avg_net_tp_per_day",0.0)) for r in results),default=0.0),
         "best_trade_count":max((int(r["metrics"].get("trades",0)) for r in results),default=0),
         "candidates_tp_per_day_ge_0_5":sum(float(r["metrics"].get("avg_net_tp_per_day",0.0))>=0.5 for r in results),
+        "candidates_trades_ge_50":sum(int(r["metrics"].get("trades",0))>=50 for r in results),
+        "candidates_win_rate_ge_30":sum(float(r["metrics"].get("win_rate_pct",0.0))>=30.0 for r in results),
+        "candidates_pf_ge_0_7":sum(_pilot_pf(r["metrics"])>=0.7 for r in results),
+        "candidates_frequency_and_trade_count":sum(
+            float(r["metrics"].get("avg_net_tp_per_day",0.0))>=0.5 and int(r["metrics"].get("trades",0))>=50
+            for r in results
+        ),
+        "capability_evidence_candidates":sum(
+            float(r["metrics"].get("avg_net_tp_per_day",0.0))>=0.5
+            and int(r["metrics"].get("trades",0))>=50
+            and (float(r["metrics"].get("win_rate_pct",0.0))>=25.0 or _pilot_pf(r["metrics"])>=0.5)
+            for r in results
+        ),
         "promising_candidates":sum(
             float(r["metrics"].get("avg_net_tp_per_day",0.0))>=0.5
             and float(r["metrics"].get("win_rate_pct",0.0))>=30.0
-            and (math.inf if r["metrics"].get("profit_factor") is None else float(r["metrics"]["profit_factor"]))>=0.7
+            and _pilot_pf(r["metrics"])>=0.7
             and int(r["metrics"].get("trades",0))>=50
             for r in results
         ),

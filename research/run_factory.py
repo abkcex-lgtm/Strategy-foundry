@@ -105,11 +105,14 @@ def run(df,data_manifest):
         if batches==1:
             preflight_summary=result.get("preflight_summary",{})
             promising=int(preflight_summary.get("promising_candidates",0))
-            preflight_gate_failed=promising==0 and REQUESTED>=250
-            preflight_gate_reason=("The 250-candidate pilot found no candidate with at least 0.5 net TP/day, "
-                                   "30% win rate, PF >= 0.7, and at least 50 trades. This is a fail-fast "
+            capability=int(preflight_summary.get("capability_evidence_candidates",0))
+            preflight_gate_failed=capability==0 and REQUESTED>=250
+            preflight_gate_reason=("The 250-candidate pilot found no candidate with >=0.5 net TP/day, "
+                                   ">=50 trades, and either >=25% win rate or PF >=0.5. This is a fail-fast "
                                    "capability warning, not proof that no strategy exists.")
             print("PREFLIGHT_GATE "+json.dumps({"passed":not preflight_gate_failed,
+                                                "capability_evidence_candidates":capability,
+                                                "strictly_promising_candidates":promising,
                                                 "summary":preflight_summary,
                                                 "reason":None if not preflight_gate_failed else preflight_gate_reason},
                                                sort_keys=True),flush=True)
@@ -118,7 +121,11 @@ def run(df,data_manifest):
         if preflight_gate_failed or zero>=5: break
     search_complete=completed>=REQUESTED
     if preflight_gate_failed:
-        report={"schema_version":1,"outcome":"PREFLIGHT_GATE_FAILED_NO_PROMISING_CANDIDATE",
+        pilot_near_misses=[{"strategy":x.get("strategy"),"metrics":brief(x.get("metrics") or {}),
+                            "distance":x.get("distance"),"failed_conditions":x.get("failed_conditions"),
+                            "independent_audit":x.get("independent_audit")}
+                           for x in (result.get("results") or [])[:5]]
+        report={"schema_version":1,"outcome":"PREFLIGHT_GATE_FAILED_NO_CAPABILITY_EVIDENCE",
                 "source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
                 "requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,
                 "candidate_search_complete":False,"failed_candidate_evaluations":failed,
@@ -134,8 +141,11 @@ def run(df,data_manifest):
                           "development":{"rows":len(dev),"sha256":dev_hash,"backtest_sha256":dev_backtest_hash,"used_for_candidate_generation":False},
                           "oos":{"rows":len(oos),"sha256":frame_hash(oos),"used_for_candidate_generation":False}},
                 "preflight_gate":{"passed":False,"pilot_candidates":completed,
+                    "capability_evidence_candidates":int((preflight_summary or {}).get("capability_evidence_candidates",0)),
+                    "strictly_promising_candidates":int((preflight_summary or {}).get("promising_candidates",0)),
                     "summary":preflight_summary,"reason":preflight_gate_reason,
                     "interpretation":"Fail-fast evidence threshold only; not a proof of impossibility and not a strategy certificate."},
+                "preflight_diagnostics":{"pilot_near_misses":pilot_near_misses},
                 "development_passing_count":0,"development_near_miss_count":0,"oos_evaluated_count":0,
                 "validated_strategy_count":0,"returned_candidate_count":0,"near_miss_shortfall":5,
                 "development_audit_failures":[],"exports":[],"results":[],

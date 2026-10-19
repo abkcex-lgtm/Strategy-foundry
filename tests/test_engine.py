@@ -75,6 +75,31 @@ def test_indicator_cache_reuses_signal_arrays_across_stop_and_direction_variants
     assert prepared.indicator_cache_limit==128
 
 
+
+def test_preflight_capability_evidence_is_weaker_than_final_acceptance(monkeypatch):
+    import hashlib
+    import app.engine as engine
+    import app.audit as audit
+    frame=pd.DataFrame()
+    def fake_backtest(frame,spec,contract):
+        data_hash=engine.sha256_bytes(frame.reset_index(drop=True).to_csv(index=False,float_format="%.12g").encode())
+        metrics={"trades":60,"wins":17,"losses":43,"win_rate_pct":28.3,
+                 "profit_factor":0.6,"avg_net_tp_per_day":0.6,"max_consecutive_losses":8,
+                 "net_pnl":-3.0,"final_balance":997.0,"total_costs":1.0,
+                 "data_hash_sha256":data_hash,"rows":500,"span_days":30.0,
+                 "passes_all_targets":False}
+        return {"strategy":engine.asdict(spec),"contract":contract,"metrics":metrics,
+                "run_hash_sha256":hashlib.sha256(repr(spec).encode()).hexdigest(),
+                "ledger":[],"open_position":None}
+    monkeypatch.setattr(engine,"backtest",fake_backtest)
+    monkeypatch.setattr(audit,"independent_replay",lambda frame,spec,cfg:{"ledger":[],"open_position":None})
+    result=engine.search_candidates(frame,max_candidates=1,seed=31,algorithm="stratified_random")
+    summary=result["preflight_summary"]
+    assert summary["capability_evidence_candidates"]==1
+    assert summary["promising_candidates"]==0
+    assert result["all_passing"] is False
+
+
 def test_valid_data_report():
     r=validate_ohlcv(candles())
     assert r['rows']==300 and r['gap_count']==0
