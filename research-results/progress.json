@@ -1,11 +1,13 @@
 {
-  "candidate_search_complete": true,
-  "evaluated_unique_candidates": 1000,
-  "outcome": "NO_STRATEGY_PASSED_ALL_REQUIRED_SPLITS",
-  "report": "research-results/report.json",
-  "requested_candidates": 1000,
-  "returned_candidate_count": 5,
-  "status": "completed",
-  "strategy_zip": "research-results/validated_strategies.zip",
-  "validated_strategy_count": 0
+  "schema_version": 1,
+  "status": "awaiting_current_source_run_result",
+  "requested_candidates": 500000,
+  "evaluated_unique_candidates": 0,
+  "source_commit": "31759ed3886a73da63ba14c8365c86b816748ada",
+  "workflow_run_id": 39335957241,
+  "seed": 42,
+  "outcome": "NOT_YET_EVALUATED",
+  "current_source_result_verified": false,
+  "historical_results_archived": true,
+  "note": "This is a status pointer, not a search result. Do not interpret any metrics from prior runs as current-source metrics."
 }
