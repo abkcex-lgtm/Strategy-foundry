@@ -208,6 +208,31 @@ def _independent_signals(d: pd.DataFrame, spec: dict[str, Any]):
         ratio=positive.rolling(fast,min_periods=fast).sum()/negative.rolling(fast,min_periods=fast).sum().replace(0,np.nan)
         mfi=100-100/(1+ratio)
         long=(mfi.shift(1)<=20)&(mfi>20); short=(mfi.shift(1)>=80)&(mfi<80)
+    elif family=="atr_trend_pullback":
+        trend_up=ef>es; trend_down=ef<es
+        long=trend_up&(d.low<=ef+0.1*atr)&(close>ef)&(close>d.open)
+        short=trend_down&(d.high>=ef-0.1*atr)&(close<ef)&(close<d.open)
+    elif family=="volume_weighted_breakout":
+        upper=d.high.rolling(slow,min_periods=slow).max().shift(1)
+        lower=d.low.rolling(slow,min_periods=slow).min().shift(1)
+        baseline=d.volume.rolling(fast,min_periods=fast).median().shift(1)
+        active=d.volume>baseline*1.5
+        long=active&(close>upper)&(close.shift(1)<=upper.shift(1))
+        short=active&(close<lower)&(close.shift(1)>=lower.shift(1))
+    elif family=="range_midpoint_reversion":
+        support=d.low.rolling(slow,min_periods=slow).min().shift(1)
+        resistance=d.high.rolling(slow,min_periods=slow).max().shift(1)
+        width=(resistance-support).replace(0,np.nan)
+        long=(d.low<=support+0.15*width)&(close>=support+0.35*width)&(close>d.open)
+        short=(d.high>=resistance-0.15*width)&(close<=resistance-0.35*width)&(close<d.open)
+    elif family=="roc_acceleration":
+        roc=close.pct_change(periods=fast)*100
+        long=(roc>0)&(roc>roc.shift(1))&(close>es)
+        short=(roc<0)&(roc<roc.shift(1))&(close<es)
+    elif family=="atr_normalized_momentum":
+        normalized=(close-close.shift(fast))/atr.replace(0,np.nan)
+        long=(normalized>=1.0)&(close>es)
+        short=(normalized<=-1.0)&(close<es)
     context_filter=spec.get("context_filter","none")
     confirmation_filter=spec.get("confirmation_filter","none")
     if context_filter=="ema_trend":
