@@ -10,7 +10,7 @@
   "legacy_progress_archive": "research-results/archive/legacy-source-4a33354d92d2c38c571ca30b3296dd4a24f63fbb/progress.json",
   "legacy_source_commit": "4a33354d92d2c38c571ca30b3296dd4a24f63fbb",
   "current_source_result_verified": false,
-  "note": "Historical runs are archived and top-level report/progress are placeholders until a fresh report is committed. Canonical run is the 500,000-candidate research run at the current source commit. Do not treat any other run's metrics as current-source evidence. Full search must report actual evaluated count and terminal status; if runtime-limited, report incomplete and do not certify.",
+  "note": "The main branch includes evidence-pointer commits after the canonical workflow checkout; engine/research source is pinned to current_engine_source_commit. The workflow may be unable to push its final results directly because main advanced after checkout, so retrieve the run artifact and merge its report/progress manually after completion. Do not treat other run metrics as current-source evidence.",
   "historical_runs_archived": [
     {
       "archive": "research-results/archive/legacy-source-4a33354d92d2c38c571ca30b3296dd4a24f63fbb/",
@@ -65,5 +65,7 @@
     "status": "in_progress",
     "source_commit": "1a065dcb7ed20a748500eae53520aa5375f16f26",
     "note": "Redundant full-search attempt; source code is materially the same, but canonical evidence will be taken from the latest source run only."
-  }
+  },
+  "current_main_commit": "d48c2dab335170c3a2bfe1f531db0d72a67c47a8",
+  "current_engine_source_commit": "31759ed3886a73da63ba14c8365c86b816748ada"
 }
