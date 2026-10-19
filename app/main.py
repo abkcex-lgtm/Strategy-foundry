@@ -45,7 +45,7 @@ def _period_label(frame:pd.DataFrame, note:str='') -> str:
     suffix=f' ({note})' if note else ''
     return f'{first} to {last}{suffix}'
 
-app=FastAPI(title='Strategy Foundry API',version='0.9.8',description='Server-side strategy research and simulation only; never sends live orders.')
+app=FastAPI(title='Strategy Foundry API',version='0.9.9',description='Server-side strategy research and simulation only; never sends live orders.')
 app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')
 DATASETS:dict[str,pd.DataFrame]=load_datasets()
 DATASET_METADATA:dict[str,dict[str,Any]]=load_dataset_metadata()
@@ -79,7 +79,7 @@ class AIChatRequest(BaseModel):
 @app.get('/',response_class=HTMLResponse)
 def home(): return HTMLResponse((ROOT/'static'/'index.html').read_text(encoding='utf-8'), headers={'Cache-Control':'no-store, no-cache, must-revalidate, max-age=0','Pragma':'no-cache','Expires':'0'})
 @app.get('/api/health')
-def health(): return {'status':'ok','service':'strategy-foundry','version':'0.9.8','execution':'server-side','live_trading':False,'persistent_store':'sqlite','storage':storage_status(),'loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'persistent_search_history':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','search_history_endpoint':'/api/search-history','persistent_job_status':True,'batch_search_max_candidates':500000,'global_genome_deduplication':True,'batch_checkpoint_resume':True,'question_first_assistant_routing':True,'automatic_1s_ambiguity_resolution':True,'fail_closed_execution_ambiguity':True}}
+def health(): return {'status':'ok','service':'strategy-foundry','version':'0.9.9','execution':'server-side','live_trading':False,'persistent_store':'sqlite','storage':storage_status(),'loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'persistent_search_history':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','search_history_endpoint':'/api/search-history','persistent_job_status':True,'batch_search_max_candidates':500000,'global_genome_deduplication':True,'batch_checkpoint_resume':True,'question_first_assistant_routing':True,'automatic_1s_ambiguity_resolution':True,'fail_closed_execution_ambiguity':True}}
 @app.get('/api/contract')
 def contract():
     from .engine import normalize_contract
@@ -264,13 +264,10 @@ def _rank_near_misses_on_development(result:dict[str,Any],splits:dict[str,pd.Dat
             0 if item.get('development_evaluation_status')=='COMPLETED' else 1,
             0 if _goal_activity_evidence(metrics,cfg) else 1,
             float(item.get('distance',1e30)),
-            int(metrics.get('max_consecutive_losses',10**9)),
-            -float(metrics.get('win_rate_pct',0)),
-            -float(metrics.get('avg_net_tp_per_day',0)),
-            -float(pf if pf is not None else 1e9),
+            -int(metrics.get('trades',0)),
         )
     result['results']=sorted(result['results'],key=key)[:5]
-    result['near_miss_ranking_policy']='Candidate generation and pass detection use TRAIN; when no TRAIN candidate passes, near misses are ranked on DEVELOPMENT after the pool is frozen. OOS is not read.'
+    result['near_miss_ranking_policy']='TRAIN freezes the candidate pool; independent ledger match and minimum activity evidence are separate eligibility gates; active performance criteria use equal-weight normalized distance; near misses are ranked on DEVELOPMENT. OOS is not read.'
 
 
 def _perform_search(dataset_id:str,req:SearchRequest,progress_callback=None,excluded_genome_hashes=None,include_genome_hashes=False,save_result=True):
