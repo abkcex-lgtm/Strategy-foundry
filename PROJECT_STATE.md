@@ -2,7 +2,7 @@
 
 > This file is the single handoff source for any new ChatGPT conversation, contributor, or coding agent. Read this before changing code. The `main` branch is the canonical product line; old feature/research branches are historical work unless explicitly reopened by a current issue or pull request.
 
-## Release 0.9.9 objective policy (2026-10-19)
+## Release 0.9.9 objective policy and follow-up engineering (2026-10-20)
 
 - Latest engineering intent: each active performance criterion (WR, PF, net full TPs/day, maximum consecutive losses) has equal weight via the arithmetic mean of normalized target distances. There are no per-metric hidden ranking bonuses or tie-break preferences.
 - Separate eligibility gates: independent ledger match, data integrity, no open position at end, and sufficient sample evidence. Minimum evidence is 100 closed trades; with TP/day enabled, observed trade count must also support the configured TP/day goal at the observed win rate. When TP/day is disabled, it must not steer/block selection beyond the 100-trade floor.
@@ -20,6 +20,14 @@
 - User-facing API/application: `app/main.py` and the surrounding `app/` package
 - Latest merged engine expansion: PR #30 (heartbeat, family balancing, five new strategy families, independent replay parity tests).
 - Live-trading orders are not allowed; the app is for research/simulation only.
+
+## Follow-up engineering changes (2026-10-20)
+
+- Five additional causal strategy families were added to the primary signal engine, the separately implemented independent replay, the search grammar, and the family-coverage regression fixture: ATR-aware trend pullback, volume-weighted range breakout, range-midpoint reversion, ROC acceleration, and ATR-normalized momentum. The grammar now contains 40 executable signal families. The family definitions use only current/past data; rolling breakout reference levels and volume baselines are shifted to exclude the current candle where required.
+- Added a parity regression test comparing primary and independent signals/ATR arrays for those five families. This test must pass before the families are considered verified.
+- Changed the first-exit search from allocating boolean masks over the entire remaining dataset for every trade to scanning 4,096-candle vectorized chunks. This is a bounded-temporary-memory optimization intended to reduce memory pressure on long histories; do not claim a measured speedup until benchmarked against the prior implementation on the same dataset and seed.
+- Added workflow commit `de1cbc7f15a155f4bb5d36745e5adc90ca546c2d` with commit message `[full-research]`; this should trigger the 500,000-candidate research workflow after its test gate. Confirm the actual workflow outcome/artifacts before calling the search complete. If the run fails, preserve the logs and report the exact failure rather than relaxing thresholds.
+- Source changes above are in GitHub `main`; they have not yet been verified in the live NetRun deployment. Do not publish over the existing instance until the latest CI passes and the database persistence/backup path is confirmed.
 
 ## Latest verified CI/research state (2026-10-19)
 
