@@ -1,11 +1,6 @@
 {
-  "candidate_search_complete": false,
-  "evaluated_unique_candidates": 17000,
-  "outcome": "INCOMPLETE_SEARCH_NO_CERTIFIED_STRATEGY",
-  "report": "research-results/report.json",
+  "dataset_sha256": "f2c0bc9ba360a319f8b475322e111b1cbd9d1696183ed38d416e52b266cb22bb",
   "requested_candidates": 500000,
-  "returned_candidate_count": 5,
-  "status": "partial_search_reported",
-  "strategy_zip": "research-results/validated_strategies.zip",
-  "validated_strategy_count": 0
+  "rows": 263520,
+  "status": "data_validated"
 }
