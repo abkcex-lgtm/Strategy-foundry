@@ -86,4 +86,5 @@ def test_candidate_distance_normalizes_profit_factor_like_other_targets():
         "max_consecutive_losses",
     }
     assert "profit_factor" in failed
-    assert distance == sum(distances.values())
+    assert distance == sum(distances.values()) / len(distances)
+    assert "insufficient_activity_evidence" in failed
