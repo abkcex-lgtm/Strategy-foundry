@@ -1,5 +1,12 @@
 # Changelog
 
+## V0.9.9 — 2026-10-19
+
+- Equal-weight scoring for active performance targets: normalized win-rate, profit-factor, TP/day, and loss-streak distances contribute equally; no hidden per-metric ranking bonuses remain in search fitness or the surrogate target.
+- Minimum activity evidence and independent ledger audit are separate eligibility gates; sparse samples cannot be certified as passing, and the gate respects the TP/day filter being disabled.
+- Aligned API and research-runner near-miss ranking with the same equal-weight policy and published release identifier 0.9.9.
+- This is code/CI validation only until the deployed site's health endpoint reports 0.9.9; no new real-data search result is implied by the release itself.
+
 ## V0.7.5 — 2026-10-17
 
 - Fixed an invalid `elif` placement in the independent audit signal engine that prevented the server from importing.
