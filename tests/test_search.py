@@ -248,3 +248,7 @@ def test_persian_ui_exposes_all_40_searchable_families():
     assert len(dropdown_values) == 40
     assert set(dropdown_values) == expected
     assert "۴۰ خانوادهٔ اجرایی" in html
+    script = (html_path.parent / "app.js").read_text(encoding="utf-8")
+    assert all(family in script for family in expected)
+    assert "۴۰ خانوادهٔ اجرایی" in script
+    assert "۳۰ خانوادهٔ اجرایی" not in script
