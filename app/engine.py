@@ -96,9 +96,9 @@ class StrategySpec:
         if not (2 <= self.atr_period <= 200): raise ValueError("atr_period must be 2..200")
         if not (0.2 <= self.stop_atr <= 10): raise ValueError("stop_atr must be 0.2..10")
         if self.direction not in {"both","long","short"}: raise ValueError("Invalid direction")
-        if self.family not in {"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top"}:
+        if self.family not in {"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top","williams_r_reversion","donchian_midline_trend","dual_thrust_breakout","chaikin_money_flow","money_flow_index_reversion"}:
             raise ValueError("Unsupported strategy family")
-        valid_families={"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top"}
+        valid_families={"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top","williams_r_reversion","donchian_midline_trend","dual_thrust_breakout","chaikin_money_flow","money_flow_index_reversion"}
         if self.secondary_family not in valid_families | {"none"}: raise ValueError("Unsupported secondary strategy family")
         if self.signal_composition not in {"single","and","or","xor"}: raise ValueError("Unsupported signal composition")
         if self.signal_composition=="single" and self.secondary_family!="none": raise ValueError("Single-family strategy cannot set secondary_family")
@@ -299,6 +299,42 @@ def indicators(df, spec):
         current_high=x.high.rolling(spec.fast,min_periods=spec.fast).max(); prior_high=x.high.shift(spec.fast).rolling(spec.fast,min_periods=spec.fast).max()
         trigger=x.low.shift(1).rolling(spec.fast,min_periods=spec.fast).min()
         short_signal=((current_high-prior_high).abs()<=x.atr*0.35)&(x.high>=current_high-x.atr*0.1)&(c<trigger)&(c<x.open); long_signal=pd.Series(False,index=x.index)
+    elif spec.family=="williams_r_reversion":
+        highest=x.high.rolling(spec.fast,min_periods=spec.fast).max()
+        lowest=x.low.rolling(spec.fast,min_periods=spec.fast).min()
+        williams=-100*(highest-c)/(highest-lowest).replace(0,np.nan)
+        long_signal=(williams.shift(1)<=-80)&(williams>-80)
+        short_signal=(williams.shift(1)>=-20)&(williams<-20)
+    elif spec.family=="donchian_midline_trend":
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        midpoint=(upper+lower)/2
+        long_signal=(c>midpoint)&(c.shift(1)<=midpoint.shift(1))
+        short_signal=(c<midpoint)&(c.shift(1)>=midpoint.shift(1))
+    elif spec.family=="dual_thrust_breakout":
+        range_up=(x.high-c).rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        range_down=(c-x.low).rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        thrust=np.maximum(range_up,range_down)*0.5
+        upper=x.open.shift(1)+thrust
+        lower=x.open.shift(1)-thrust
+        long_signal=(c>upper)&(c.shift(1)<=upper.shift(1))
+        short_signal=(c<lower)&(c.shift(1)>=lower.shift(1))
+    elif spec.family=="chaikin_money_flow":
+        spread=(x.high-x.low).replace(0,np.nan)
+        multiplier=((c-x.low)-(x.high-c))/spread
+        flow=multiplier*x.volume.astype(float)
+        cmf=flow.rolling(spec.slow,min_periods=spec.slow).sum()/x.volume.astype(float).rolling(spec.slow,min_periods=spec.slow).sum().replace(0,np.nan)
+        long_signal=(cmf>0)&(cmf.shift(1)<=0)&(c>x.ema_fast)
+        short_signal=(cmf<0)&(cmf.shift(1)>=0)&(c<x.ema_fast)
+    elif spec.family=="money_flow_index_reversion":
+        typical=(x.high+x.low+c)/3
+        raw_flow=typical*x.volume.astype(float)
+        positive=raw_flow.where(typical>typical.shift(1),0.0)
+        negative=raw_flow.where(typical<typical.shift(1),0.0)
+        ratio=positive.rolling(spec.fast,min_periods=spec.fast).sum()/negative.rolling(spec.fast,min_periods=spec.fast).sum().replace(0,np.nan)
+        mfi=100-100/(1+ratio)
+        long_signal=(mfi.shift(1)<=20)&(mfi>20)
+        short_signal=(mfi.shift(1)>=80)&(mfi<80)
     if spec.context_filter=="ema_trend":
         long_signal=long_signal&(x.ema_fast>x.ema_slow)
         short_signal=short_signal&(x.ema_fast<x.ema_slow)
@@ -666,7 +702,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     excluded_genome_hashes=set(excluded_genome_hashes or ())
     def genome_hash(key):
         return hashlib.sha256(json.dumps(list(key),separators=(",",":"),ensure_ascii=False).encode()).hexdigest()
-    all_families=("ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top")
+    all_families=("ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top","williams_r_reversion","donchian_midline_trend","dual_thrust_breakout","chaikin_money_flow","money_flow_index_reversion")
     all_context_filters=("none","ema_trend","adx_strength","volume_confirm","vwap_side","low_volatility")
     all_confirmation_filters=("none","candle_direction","momentum","rsi_midline")
     space=dict(search_space or {})
@@ -686,7 +722,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             prepared_context=prepare_backtest_data(frame)
     if prepared_context is not None and prepared_context.source_frame is not frame:
         raise ValueError("Prepared market data can only be reused with its exact source DataFrame")
-    names={"ema_crossover":"EMA crossover","channel_breakout":"Price channel breakout","rsi_reversion":"RSI reversion","volume_breakout":"Volume-confirmed breakout","ema_pullback":"EMA trend pullback","macd_crossover":"MACD crossover","bollinger_reversion":"Bollinger mean reversion","inside_bar_breakout":"Inside-bar breakout","engulfing_reversal":"Engulfing candle reversal","momentum_breakout":"Momentum-confirmed breakout","stochastic_reversion":"Stochastic reversion","roc_momentum":"Rate-of-change momentum","adx_trend":"ADX directional trend","keltner_breakout":"Keltner channel breakout","atr_squeeze_breakout":"Volatility squeeze breakout","obv_trend":"OBV volume trend","vwap_reclaim":"VWAP reclaim","pivot_reversal":"Support/resistance pivot reversal","swing_structure_break":"شکست ساختار سوئینگ","failed_breakout_reversal":"برگشت شکست ناموفق","wick_rejection":"رد قیمت با سایه کندل","range_expansion_breakout":"شکست با انبساط دامنه","three_bar_momentum":"مومنتوم سه‌کندلی","volatility_regime_breakout":"شکست در رژیم نوسان","trend_exhaustion_reversal":"برگشت فرسودگی روند","volume_climax_reversal":"برگشت اوج حجم","range_compression_breakout":"شکست پس از فشردگی دامنه","support_resistance_rejection":"رد قیمت حمایت/مقاومت","micro_double_bottom":"کف دوقلوی کوتاه‌مدت","micro_double_top":"سقف دوقلوی کوتاه‌مدت"}
+    names={"ema_crossover":"EMA crossover","channel_breakout":"Price channel breakout","rsi_reversion":"RSI reversion","volume_breakout":"Volume-confirmed breakout","ema_pullback":"EMA trend pullback","macd_crossover":"MACD crossover","bollinger_reversion":"Bollinger mean reversion","inside_bar_breakout":"Inside-bar breakout","engulfing_reversal":"Engulfing candle reversal","momentum_breakout":"Momentum-confirmed breakout","stochastic_reversion":"Stochastic reversion","roc_momentum":"Rate-of-change momentum","adx_trend":"ADX directional trend","keltner_breakout":"Keltner channel breakout","atr_squeeze_breakout":"Volatility squeeze breakout","obv_trend":"OBV volume trend","vwap_reclaim":"VWAP reclaim","pivot_reversal":"Support/resistance pivot reversal","swing_structure_break":"شکست ساختار سوئینگ","failed_breakout_reversal":"برگشت شکست ناموفق","wick_rejection":"رد قیمت با سایه کندل","range_expansion_breakout":"شکست با انبساط دامنه","three_bar_momentum":"مومنتوم سه‌کندلی","volatility_regime_breakout":"شکست در رژیم نوسان","trend_exhaustion_reversal":"برگشت فرسودگی روند","volume_climax_reversal":"برگشت اوج حجم","range_compression_breakout":"شکست پس از فشردگی دامنه","support_resistance_rejection":"رد قیمت حمایت/مقاومت","micro_double_bottom":"کف دوقلوی کوتاه‌مدت","micro_double_top":"سقف دوقلوی کوتاه‌مدت","williams_r_reversion":"Williams %R reversion","donchian_midline_trend":"Donchian midline trend","dual_thrust_breakout":"Dual Thrust breakout","chaikin_money_flow":"Chaikin money-flow trend","money_flow_index_reversion":"Money Flow Index reversion"}
     fast_values=np.array([3,4,5,6,8,9,10,12,14,16,18,21,24,28,32,36,40,48,55,64,72,89],dtype=int)
     slow_values=np.array([12,16,18,20,24,28,32,36,40,48,55,64,72,89,100,120,144,180,200,240,300,400,500],dtype=int)
     periods=np.array([5,7,9,10,12,14,16,18,21,24,28,30,40,50],dtype=int)
