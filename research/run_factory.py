@@ -185,7 +185,7 @@ def run(df,data_manifest):
                 "algorithm":ALGORITHM,
                 "train_sha256":train_hash,
                 "development_sha256":dev_hash,
-                "family_evaluated_counts":{**family_counts,**batch_state.get("family_evaluated_counts",{})},
+                "family_evaluated_counts":{family:family_counts.get(family,0)+int(batch_state.get("family_evaluated_counts",{}).get(family,0)) for family in set(family_counts)|set(batch_state.get("family_evaluated_counts",{}))},
                 "heartbeat":"candidate-evaluation",
             }
             write(PROGRESS,state)
