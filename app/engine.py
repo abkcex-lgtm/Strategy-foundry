@@ -714,8 +714,10 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
         if tp_day<cfg["min_tp_per_day"]: failed.append("avg_net_tp_per_day")
     if cfg["use_max_consecutive_losses"]:
         streak=int(metrics["max_consecutive_losses"])
-        gap=max(0.0,streak-int(cfg["max_consecutive_losses"]))
-        distances["max_consecutive_losses"]=gap/max(int(cfg["max_consecutive_losses"]),1)
+        limit=max(int(cfg["max_consecutive_losses"]),1)
+        # Keep the hard pass/fail boundary, but also prefer lower streak risk
+        # among candidates already under the limit.
+        distances["max_consecutive_losses"]=max(0.0,streak)/limit
         if streak>int(cfg["max_consecutive_losses"]): failed.append("max_consecutive_losses")
     if int(metrics.get("open_positions_at_end",0))>0:
         distances["open_positions_at_end"]=1.0
