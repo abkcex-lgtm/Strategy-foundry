@@ -117,7 +117,10 @@ def _cancel_conflicting_signals(long_signal, short_signal):
 
 
 def indicators(df, spec):
-    x=df.copy(); c=x.close.astype(float); prev=c.shift(1)
+    # Signal construction only adds/replaces derived columns; OHLCV inputs are
+    # read-only. A shallow frame copy avoids duplicating the entire 1m dataset
+    # for every genome while keeping derived columns isolated from the caller.
+    x=df.copy(deep=False); c=x.close.astype(float); prev=c.shift(1)
     x["ema_fast"]=c.ewm(span=spec.fast,adjust=False,min_periods=spec.fast).mean()
     x["ema_slow"]=c.ewm(span=spec.slow,adjust=False,min_periods=spec.slow).mean()
     tr=pd.concat([x.high-x.low,(x.high-prev).abs(),(x.low-prev).abs()],axis=1).max(axis=1)
