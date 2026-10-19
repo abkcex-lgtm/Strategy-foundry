@@ -41,7 +41,9 @@ def test_expanded_family_is_valid_and_primary_matches_independent_signal_engine(
                         stop_atr=1.5, direction="both")
     spec.validate()
 
+    original_columns = list(frame.columns)
     primary = indicators(frame, spec)
+    assert list(frame.columns) == original_columns, "indicator construction must not mutate caller data"
     independent_long, independent_short, *_ = _independent_signals(frame, {
         "family": family,
         "fast": spec.fast,
