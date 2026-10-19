@@ -29,6 +29,16 @@
 - Added workflow commit `de1cbc7f15a155f4bb5d36745e5adc90ca546c2d` with commit message `[full-research]`; this should trigger the 500,000-candidate research workflow after its test gate. Confirm the actual workflow outcome/artifacts before calling the search complete. If the run fails, preserve the logs and report the exact failure rather than relaxing thresholds.
 - Source changes above are in GitHub `main`; they have not yet been verified in the live NetRun deployment. Do not publish over the existing instance until the latest CI passes and the database persistence/backup path is confirmed.
 
+## Latest engineering/run state (2026-10-20)
+
+- Strategy-family count is now 40 in the primary engine, search grammar, and independent replay. Five new families have a dedicated primary-vs-independent signal parity test in `tests/test_search.py`.
+- The first-exit scan now uses 4,096-candle chunks. A regression test compares it with the previous full-tail mask behavior across both directions and chunk boundaries.
+- `research/run_factory.py` now benchmarks the old full-tail scanner against the chunked scanner on the actual TRAIN split, asserts exact first-hit parity, and records measured seconds/speedup plus the TRAIN data hash in the report. This is a component microbenchmark, not proof of whole-search throughput.
+- Full-search trigger commit: `de1cbc7f15a155f4bb5d36745e5adc90ca546c2d` (`[full-research]`, requested 500,000 candidates, 19,500-second search budget). Its final status and artifact are not yet confirmed through the available tool responses.
+- Smoke/benchmark trigger commit: `b3c437a41b6df7e6fc0379c99a053c04af7b0301`; this uses the pinned triggering commit SHA and requests the normal 1,000-candidate smoke path. Verify its test gate, benchmark result, and research artifact before treating it as successful.
+- Research workflow checkout is now pinned to `${{ github.sha }}` so a run is reproducible against the commit that triggered it rather than whatever happens to be at `main` when the runner starts.
+- These GitHub changes are not yet deployed to NetRun. Keep the live database untouched until the latest source checks pass and a backup/persistence path is verified.
+
 ## Latest verified CI/research state (2026-10-19)
 
 - Main commit `c28e7c43bf153cf6ebfc8d7fd6a562731eb767ff` completed unit tests and fast validation successfully.
