@@ -569,14 +569,28 @@ def prepare_backtest_data(frame):
 
 
 def _first_exit_candidate(side, opens, highs, lows, start, stop, target):
-    """Vectorized first-bar scan; scalar resolver still decides fills and ambiguity."""
-    op=opens[start:]; hi=highs[start:]; lo=lows[start:]
-    if side=="LONG":
-        touched=(op<=stop)|(op>=target)|(lo<=stop)|(hi>=target)
-    else:
-        touched=(op>=stop)|(op<=target)|(hi>=stop)|(lo<=target)
-    hits=np.flatnonzero(touched)
-    return None if hits.size==0 else start+int(hits[0])
+    """Return the first touched bar using bounded-memory vectorized chunks.
+
+    A full-tail boolean mask for every trade creates large temporary arrays on
+    multi-month 1m data. Scan in bounded chunks instead; this preserves the
+    exact first-hit order and leaves gap/SL-TP ambiguity resolution to the
+    scalar reference resolver.
+    """
+    n=len(opens)
+    chunk_size=4096
+    for chunk_start in range(int(start),n,chunk_size):
+        chunk_end=min(chunk_start+chunk_size,n)
+        op=opens[chunk_start:chunk_end]
+        hi=highs[chunk_start:chunk_end]
+        lo=lows[chunk_start:chunk_end]
+        if side=="LONG":
+            touched=(op<=stop)|(op>=target)|(lo<=stop)|(hi>=target)
+        else:
+            touched=(op>=stop)|(op<=target)|(hi>=stop)|(lo<=target)
+        hits=np.flatnonzero(touched)
+        if hits.size:
+            return chunk_start+int(hits[0])
+    return None
 
 
 def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_context=None):
