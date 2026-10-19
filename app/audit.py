@@ -182,6 +182,32 @@ def _independent_signals(d: pd.DataFrame, spec: dict[str, Any]):
         current_high=d.high.rolling(fast,min_periods=fast).max(); prior_high=d.high.shift(fast).rolling(fast,min_periods=fast).max()
         trigger=d.low.shift(1).rolling(fast,min_periods=fast).min()
         short=((current_high-prior_high).abs()<=atr*0.35)&(d.high>=current_high-atr*0.1)&(close<trigger)&(close<d.open); long=pd.Series(False,index=d.index)
+    elif family=="williams_r_reversion":
+        highest=d.high.rolling(fast,min_periods=fast).max(); lowest=d.low.rolling(fast,min_periods=fast).min()
+        williams=-100*(highest-close)/(highest-lowest).replace(0,np.nan)
+        long=(williams.shift(1)<=-80)&(williams>-80); short=(williams.shift(1)>=-20)&(williams<-20)
+    elif family=="donchian_midline_trend":
+        upper=d.high.rolling(slow,min_periods=slow).max().shift(1); lower=d.low.rolling(slow,min_periods=slow).min().shift(1)
+        midpoint=(upper+lower)/2
+        long=(close>midpoint)&(close.shift(1)<=midpoint.shift(1)); short=(close<midpoint)&(close.shift(1)>=midpoint.shift(1))
+    elif family=="dual_thrust_breakout":
+        range_up=(d.high-close).rolling(slow,min_periods=slow).max().shift(1)
+        range_down=(close-d.low).rolling(slow,min_periods=slow).max().shift(1)
+        thrust=np.maximum(range_up,range_down)*0.5
+        upper=d.open.shift(1)+thrust; lower=d.open.shift(1)-thrust
+        long=(close>upper)&(close.shift(1)<=upper.shift(1)); short=(close<lower)&(close.shift(1)>=lower.shift(1))
+    elif family=="chaikin_money_flow":
+        spread=(d.high-d.low).replace(0,np.nan)
+        multiplier=((close-d.low)-(d.high-close))/spread
+        flow=multiplier*d.volume.astype(float)
+        cmf=flow.rolling(slow,min_periods=slow).sum()/d.volume.astype(float).rolling(slow,min_periods=slow).sum().replace(0,np.nan)
+        long=(cmf>0)&(cmf.shift(1)<=0)&(close>ef); short=(cmf<0)&(cmf.shift(1)>=0)&(close<ef)
+    elif family=="money_flow_index_reversion":
+        typical=(d.high+d.low+close)/3; raw_flow=typical*d.volume.astype(float)
+        positive=raw_flow.where(typical>typical.shift(1),0.0); negative=raw_flow.where(typical<typical.shift(1),0.0)
+        ratio=positive.rolling(fast,min_periods=fast).sum()/negative.rolling(fast,min_periods=fast).sum().replace(0,np.nan)
+        mfi=100-100/(1+ratio)
+        long=(mfi.shift(1)<=20)&(mfi>20); short=(mfi.shift(1)>=80)&(mfi<80)
     context_filter=spec.get("context_filter","none")
     confirmation_filter=spec.get("confirmation_filter","none")
     if context_filter=="ema_trend":
