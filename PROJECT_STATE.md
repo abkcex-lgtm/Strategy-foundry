@@ -18,7 +18,7 @@
 - Primary strategy generation/backtest engine: `app/engine.py`
 - Independent audit/replay engine: `app/audit.py`
 - User-facing API/application: `app/main.py` and the surrounding `app/` package
-- Latest merged engine expansion: PR #30 (heartbeat, family balancing, five new strategy families, independent replay parity tests).
+- Latest family expansion is recorded directly on `main` after PR #30: five more causal families, for 40 total, with primary/independent/standalone parity coverage and Persian UI controls.
 - Live-trading orders are not allowed; the app is for research/simulation only.
 
 ## Follow-up engineering changes (2026-10-20)
