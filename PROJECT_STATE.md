@@ -33,6 +33,7 @@
 
 - Strategy-family count is now 40 in the primary engine, search grammar, and independent replay. Five new families have a dedicated primary-vs-independent signal parity test in `tests/test_search.py`.
 - The first-exit scan now uses 4,096-candle chunks. A regression test compares it with the previous full-tail mask behavior across both directions and chunk boundaries.
+- The standalone export template was also brought up to all 40 families; a regression test loads the actual template and compares signal/ATR arrays against the primary engine for every family. This test is part of the latest test suite, but its post-change CI result still needs confirmation.
 - `research/run_factory.py` now benchmarks the old full-tail scanner against the chunked scanner on the actual TRAIN split, asserts exact first-hit parity, and records measured seconds/speedup plus the TRAIN data hash in the report. This is a component microbenchmark, not proof of whole-search throughput.
 - Full-search trigger commit: `de1cbc7f15a155f4bb5d36745e5adc90ca546c2d` (`[full-research]`, requested 500,000 candidates, 19,500-second search budget). Its final status and artifact are not yet confirmed through the available tool responses.
 - Smoke/benchmark trigger commit: `b3c437a41b6df7e6fc0379c99a053c04af7b0301`; this uses the pinned triggering commit SHA and requests the normal 1,000-candidate smoke path. Verify its test gate, benchmark result, and research artifact before treating it as successful.
