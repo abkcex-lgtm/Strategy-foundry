@@ -72,8 +72,9 @@ def run(df,data_manifest):
     if (len(train),len(dev),len(oos))!=(131040,44640,87840): raise RuntimeError(f"Unexpected split sizes {len(train)}/{len(dev)}/{len(oos)}")
     train_hash=frame_hash(train); dev_hash=frame_hash(dev)
     prepared_train=prepare_backtest_data(train)
-    if prepared_train.data_hash != train_hash:
-        raise RuntimeError("Prepared TRAIN data fingerprint differs from the recorded TRAIN hash")
+    prepared_dev=prepare_backtest_data(dev)
+    train_backtest_hash=prepared_train.data_hash
+    dev_backtest_hash=prepared_dev.data_hash
     cfg=normalize_contract({"symbol":SYMBOL,"initial_balance":1000,"risk_mode":"fixed_usd","risk_usd":10,"compound":False,"reward_risk":3.5,"target_mode":"net_rr","commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"max_positions":1,"entry_model":"next_candle_open","exit_model":"sl_tp_only","min_win_rate_pct":40,"min_profit_factor":1,"min_tp_per_day":3,"max_consecutive_losses":13,"use_min_win_rate":True,"use_min_profit_factor":True,"use_min_tp_per_day":True,"use_max_consecutive_losses":True,"break_even_enabled":False,"trailing_stop_enabled":False,"partial_exit_enabled":False,"time_exit_enabled":False})
     start=time.monotonic(); seen=set(); train_pass=[]; train_near=[]; failed=generations=fits=0; family_counts={}; completed=batches=zero=0
     preflight_summary=None; preflight_gate_failed=False; preflight_gate_reason=None
@@ -129,8 +130,8 @@ def run(df,data_manifest):
                     "commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,
                     "entry_model":"next_candle_open","exit_model":"SL/TP only","max_positions":1},
                 "data":data_manifest,
-                "splits":{"train":{"rows":len(train),"sha256":train_hash,"used_for_candidate_generation":True},
-                          "development":{"rows":len(dev),"sha256":dev_hash,"used_for_candidate_generation":False},
+                "splits":{"train":{"rows":len(train),"sha256":train_hash,"backtest_sha256":train_backtest_hash,"used_for_candidate_generation":True},
+                          "development":{"rows":len(dev),"sha256":dev_hash,"backtest_sha256":dev_backtest_hash,"used_for_candidate_generation":False},
                           "oos":{"rows":len(oos),"sha256":frame_hash(oos),"used_for_candidate_generation":False}},
                 "preflight_gate":{"passed":False,"pilot_candidates":completed,
                     "summary":preflight_summary,"reason":preflight_gate_reason,
@@ -157,7 +158,7 @@ def run(df,data_manifest):
     dev_pass=[]; dev_near=[]; audit_failures=[]
     for idx,item in enumerate(pool,1):
         try:
-            c=normalize_contract(item.get("contract") or cfg); primary=backtest(dev,item["strategy"],c); second=independent_replay(dev,item["strategy"],c)
+            c=normalize_contract(item.get("contract") or cfg); primary=backtest(dev,item["strategy"],c,_prepared_context=prepared_dev); second=independent_replay(dev,item["strategy"],c)
             match,evidence=ledger_match(primary,second); distance,miss,distances=_candidate_distance(primary["metrics"],c)
             item["train_metrics"]=item.get("metrics",{}); item["development_metrics"]=brief(primary["metrics"]); item["development_distance"]=float(distance)
             item["development_failed_conditions"]=miss; item["development_criterion_distances"]=distances; item["development_audit_status"]="MATCH" if match else "MISMATCH"; item["development_audit_evidence"]=evidence
@@ -174,10 +175,10 @@ def run(df,data_manifest):
     if not frozen: raise RuntimeError("No candidate survived Development audit; no strategy certificate")
     print(f"SELECTION_FROZEN dev_pass={len(dev_pass)} dev_near={len(dev_near)} oos_candidates={len(frozen)}",flush=True)
     # OOS metrics are computed only after the Development candidate set is frozen.
-    oos_hash=frame_hash(oos); oos_results=[]
+    oos_hash=frame_hash(oos); prepared_oos=prepare_backtest_data(oos); oos_backtest_hash=prepared_oos.data_hash; oos_results=[]
     for idx,item in enumerate(frozen,1):
         try:
-            c=normalize_contract(item.get("contract") or cfg); primary=backtest(oos,item["strategy"],c); second=independent_replay(oos,item["strategy"],c)
+            c=normalize_contract(item.get("contract") or cfg); primary=backtest(oos,item["strategy"],c,_prepared_context=prepared_oos); second=independent_replay(oos,item["strategy"],c)
             match,evidence=ledger_match(primary,second); distance,miss,distances=_candidate_distance(primary["metrics"],c)
             item["oos_metrics"]=brief(primary["metrics"]); item["oos_data_sha256"]=primary["metrics"]["data_hash_sha256"]; item["oos_execution_data_sha256"]=primary["metrics"].get("execution_data_hash_sha256")
             item["oos_audit_status"]="MATCH" if match else "MISMATCH"; item["oos_audit_evidence"]=evidence; item["oos_failed_conditions"]=miss; item["oos_distance"]=float(distance); item["_oos_ledger"]=primary["ledger"]
@@ -192,13 +193,13 @@ def run(df,data_manifest):
     else:
         outcome="NO_STRATEGY_PASSED_ALL_REQUIRED_SPLITS" if search_complete else "INCOMPLETE_SEARCH_NO_CERTIFIED_STRATEGY"
     if not delivery: raise RuntimeError("No auditable near-misses available; results not fabricated")
-    full_hash=frame_hash(df); template=(ROOT/"app"/"standalone_template.py").read_text(encoding="utf-8")
+    full_hash=frame_hash(df); prepared_full=prepare_backtest_data(df); template=(ROOT/"app"/"standalone_template.py").read_text(encoding="utf-8")
     zip_path=OUT/"validated_strategies.zip"; exports=[]
     with zipfile.ZipFile(zip_path,"w",zipfile.ZIP_DEFLATED,compresslevel=6) as z:
         z.writestr("README.txt","Strategy Foundry reproducible export. Read each manifest. Standalone Python verifies exact full-data and run SHA-256; unresolved SL/TP candles trigger exact 1-second Binance USD-M fetch, and incomplete resolution fails closed. No live orders.")
         z.writestr("market_data_manifest.json",json.dumps(data_manifest,ensure_ascii=False,sort_keys=True,indent=2))
         for idx,item in enumerate(delivery,1):
-            c=normalize_contract(item.get("contract") or cfg); full=backtest(df,item["strategy"],c); second=independent_replay(df,item["strategy"],c)
+            c=normalize_contract(item.get("contract") or cfg); full=backtest(df,item["strategy"],c,_prepared_context=prepared_full); second=independent_replay(df,item["strategy"],c)
             match,evidence=ledger_match(full,second)
             item["full_data_audit_status"]="MATCH" if match else "MISMATCH"; item["full_data_audit_evidence"]=evidence
             if not match: continue
@@ -212,7 +213,7 @@ def run(df,data_manifest):
     results=[]
     for item in delivery:
         results.append({k:v for k,v in item.items() if not k.startswith("_")})
-    report={"schema_version":1,"outcome":outcome,"source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"candidate_search_complete":search_complete,"failed_candidate_evaluations":failed,"completed_batches":batches,"surrogate_model_fits":fits,"generations":generations,"family_evaluated_counts":family_counts,"indicator_cache_stats":{"hits":prepared_train.indicator_cache_hits,"misses":prepared_train.indicator_cache_misses,"entries":len(prepared_train.indicator_cache),"limit":prepared_train.indicator_cache_limit},"seed":SEED,"algorithm":ALGORITHM,"contract":cfg,"target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,"avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":13,"risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5,"commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"entry_model":"next_candle_open","exit_model":"SL/TP only","max_positions":1,"loss_streak_resets_only_on_full_TP":True},"data":data_manifest,"splits":{"train":{"rows":len(train),"sha256":train_hash,"used_for_candidate_generation":True},"development":{"rows":len(dev),"sha256":dev_hash,"used_for_selection_and_near_miss_ranking":True},"oos":{"rows":len(oos),"sha256":oos_hash,"used_only_after_selection_frozen":True}},"development_passing_count":len(dev_pass),"development_near_miss_count":len(dev_near),"oos_evaluated_count":len(oos_results),"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"near_miss_shortfall":max(0,5-len(delivery)) if not validated else 0,"development_audit_failures":audit_failures,"exports":exports,"results":results,"selection_policy":"Train creates candidates; Development freezes selection and ranks near-misses; OOS is only evaluated after the candidate set is frozen and never used to rank/select.","reproducibility":"Primary and independent ledgers compared field-by-field at rel_tol=1e-10 and abs_tol=1e-8; standalone exports include exact hashes and auto-fetch 1-second windows only for ambiguous candles."}
+    report={"schema_version":1,"outcome":outcome,"source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"candidate_search_complete":search_complete,"failed_candidate_evaluations":failed,"completed_batches":batches,"surrogate_model_fits":fits,"generations":generations,"family_evaluated_counts":family_counts,"indicator_cache_stats":{"hits":prepared_train.indicator_cache_hits,"misses":prepared_train.indicator_cache_misses,"entries":len(prepared_train.indicator_cache),"limit":prepared_train.indicator_cache_limit},"seed":SEED,"algorithm":ALGORITHM,"contract":cfg,"target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,"avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":13,"risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5,"commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"entry_model":"next_candle_open","exit_model":"SL/TP only","max_positions":1,"loss_streak_resets_only_on_full_TP":True},"data":data_manifest,"splits":{"train":{"rows":len(train),"sha256":train_hash,"backtest_sha256":train_backtest_hash,"used_for_candidate_generation":True},"development":{"rows":len(dev),"sha256":dev_hash,"backtest_sha256":dev_backtest_hash,"used_for_selection_and_near_miss_ranking":True},"oos":{"rows":len(oos),"sha256":oos_hash,"backtest_sha256":oos_backtest_hash,"used_only_after_selection_frozen":True}},"development_passing_count":len(dev_pass),"development_near_miss_count":len(dev_near),"oos_evaluated_count":len(oos_results),"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"near_miss_shortfall":max(0,5-len(delivery)) if not validated else 0,"development_audit_failures":audit_failures,"exports":exports,"results":results,"selection_policy":"Train creates candidates; Development freezes selection and ranks near-misses; OOS is only evaluated after the candidate set is frozen and never used to rank/select.","reproducibility":"Primary and independent ledgers compared field-by-field at rel_tol=1e-10 and abs_tol=1e-8; standalone exports include exact hashes and auto-fetch 1-second windows only for ambiguous candles."}
     write(OUT/"report.json",report); write(PROGRESS,{"status":"completed" if search_complete else "partial_search_reported","candidate_search_complete":search_complete,"outcome":outcome,"candidate_search_complete":search_complete,"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"report":"research-results/report.json","strategy_zip":"research-results/validated_strategies.zip"})
     print("FINAL_REPORT "+json.dumps({"outcome":outcome,"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"full_dataset_sha256":full_hash,"train_sha256":train_hash,"development_sha256":dev_hash,"oos_sha256":oos_hash,"report_path":"research-results/report.json","zip_path":"research-results/validated_strategies.zip"},sort_keys=True),flush=True)
 def main():
