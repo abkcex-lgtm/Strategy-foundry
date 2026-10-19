@@ -27,6 +27,8 @@ jobs:
       # Pushes normally run a bounded real-data smoke test. A commit message containing
       # [full-research] intentionally launches the full 500k search. Manual dispatch
       # retains the 500k / 5h25m defaults and exposes a runtime override.
+      # The research runner emits SEARCH_HEARTBEAT every 25 unique candidate evaluations
+      # so operators can see continuous progress instead of waiting for a whole batch.
       FOUNDRY_CANDIDATES: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '500000' || github.event_name == 'push' && '1000' || github.event.inputs.candidates || '500000' }}
       FOUNDRY_SEED: "42"
       FOUNDRY_ALGORITHM: "surrogate_genetic"
