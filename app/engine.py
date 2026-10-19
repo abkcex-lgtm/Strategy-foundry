@@ -108,6 +108,14 @@ class StrategySpec:
         if self.confirmation_filter not in {"none","candle_direction","momentum","rsi_midline"}:
             raise ValueError("Unsupported confirmation filter")
 
+def _cancel_conflicting_signals(long_signal, short_signal):
+    """Cancel bars where a strategy emits both directions without an explicit priority."""
+    long_signal=long_signal.fillna(False).astype(bool)
+    short_signal=short_signal.fillna(False).astype(bool)
+    conflict=long_signal & short_signal
+    return long_signal & ~conflict, short_signal & ~conflict
+
+
 def indicators(df, spec):
     x=df.copy(); c=x.close.astype(float); prev=c.shift(1)
     x["ema_fast"]=c.ewm(span=spec.fast,adjust=False,min_periods=spec.fast).mean()
@@ -335,8 +343,13 @@ def indicators(df, spec):
             long_signal=long_signal|sec_long; short_signal=short_signal|sec_short
         elif spec.signal_composition=="xor":
             long_signal=long_signal^sec_long; short_signal=short_signal^sec_short
-    x["long_signal"]=long_signal.fillna(False)
-    x["short_signal"]=short_signal.fillna(False)
+    # Composite OR/XOR rules can otherwise emit LONG and SHORT on the same
+    # candle. The backtester previously resolved that silently as LONG because
+    # it checks long_signal first. With no explicit priority in the strategy
+    # contract, a contradictory bar must be a no-trade bar.
+    long_signal,short_signal=_cancel_conflicting_signals(long_signal,short_signal)
+    x["long_signal"]=long_signal
+    x["short_signal"]=short_signal
     return x
 
 def _risk_budget(cfg: dict[str, Any], balance: float) -> float:
@@ -723,14 +736,15 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction,spec.context_filter,spec.confirmation_filter,spec.secondary_family,spec.signal_composition)
 
     def fitness(row):
-        # TP frequency is the binding requirement. Do not let a low-trade,
-        # high-PF candidate outrank a materially more frequent candidate.
+        # Minimize normalized distance to every hard criterion first. TP/day
+        # is already represented in distance; making it the first tie-breaker
+        # systematically favored high-frequency losers over balanced candidates.
         m=row["metrics"]; pf=math.inf if m["profit_factor"] is None else float(m["profit_factor"])
         tp_day=float(m["avg_net_tp_per_day"])
         tp_gap=max(0.0,cfg["min_tp_per_day"]-tp_day)/max(cfg["min_tp_per_day"],1.0) if cfg["use_min_tp_per_day"] else 0.0
-        return (not m["passes_all_targets"],tp_gap,row["distance"],
-                -min(tp_day,1000.0),int(m["max_consecutive_losses"]),
-                -min(float(m["win_rate_pct"]),100.0),-min(pf,1000.0),-int(m["trades"]))
+        return (not m["passes_all_targets"],row["distance"],-min(pf,1000.0),
+                -min(float(m["win_rate_pct"]),100.0),int(m["max_consecutive_losses"]),
+                tp_gap,-min(tp_day,1000.0),-int(m["trades"]))
 
     def feature_vector(spec):
         vals=[1.0 if spec.family==f else 0.0 for f in all_families]
@@ -746,11 +760,13 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         m=row["metrics"]
         pf=10.0 if m["profit_factor"] is None else min(10.0,float(m["profit_factor"]))
         tp_gap=max(0.0,cfg["min_tp_per_day"]-float(m["avg_net_tp_per_day"]))/max(cfg["min_tp_per_day"],1.0) if cfg["use_min_tp_per_day"] else 0.0
+        # distance already includes TP/day shortfall. Keep its extra weight small
+        # so the surrogate cannot trade away expectancy just to chase frequency.
         return (float(row["distance"])+(0.0 if m["passes_all_targets"] else 1.0)
-                +2.0*tp_gap
+                +0.10*tp_gap
                 +min(float(m["max_consecutive_losses"]),100.0)*0.01
                 -min(float(m["win_rate_pct"]),100.0)*0.001
-                -min(float(m["avg_net_tp_per_day"]),100.0)*0.01-pf*0.01)
+                -min(float(m["avg_net_tp_per_day"]),100.0)*0.001-pf*0.01)
 
     last_model_fit_at=-1
     surrogate_fit_count=0

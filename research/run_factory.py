@@ -1,5 +1,7 @@
 from __future__ import annotations
 import asyncio, hashlib, json, math, os, sys, time, zipfile, gzip, subprocess
+from collections import Counter
+from statistics import median
 from pathlib import Path
 import pandas as pd
 ROOT=Path(__file__).resolve().parents[1]; sys.path.insert(0,str(ROOT))
@@ -28,18 +30,87 @@ def ledger_match(primary,other):
                 if not math.isclose(float(p),float(q),rel_tol=1e-10,abs_tol=1e-8): return False,{"trade_id":i,"field":field,"primary":p,"independent":q}
             elif p!=q: return False,{"trade_id":i,"field":field,"primary":p,"independent":q}
     if not open_position_matches(primary,other): return False,{"mismatch":"open_position","primary":primary.get("open_position"),"independent":other.get("open_position")}
-    return True,{"primary_trades":len(a),"independent_trades":len(b),"ledger_fields_checked":len(FIELDS),"open_position_checked":True}
+    metrics=primary.get("metrics") or {}; contract=primary.get("contract") or {}
+    net_values=[float(t.get("net_pnl",0.0)) for t in b]
+    gross_profit=sum(max(0.0,v) for v in net_values); gross_loss=abs(sum(min(0.0,v) for v in net_values))
+    pf=(gross_profit/gross_loss) if gross_loss else (None if gross_profit else 0.0)
+    wins=sum(t.get("exit_reason")=="TP" and float(t.get("net_pnl",0.0))>0 for t in b)
+    losses=sum(v<=0 for v in net_values); net_pnl=sum(net_values)
+    span_days=float(metrics.get("span_days",0.0) or 0.0)
+    independent_streak=max([int(t.get("loss_streak_after",0)) for t in b]+[0])
+    other_streak=int(other.get("max_consecutive_losses",independent_streak))
+    open_pos=other.get("open_position")
+    expected_metrics={
+        "trades":len(b),"wins":wins,"losses":losses,
+        "win_rate_pct":100.0*wins/len(b) if b else 0.0,
+        "profit_factor":pf,"avg_net_tp_per_day":wins/span_days if span_days>0 else 0.0,
+        "max_consecutive_losses":other_streak,"net_pnl":net_pnl,
+        "final_balance":float(contract.get("initial_balance",0.0))+net_pnl,
+        "total_costs":sum(float(t.get("fees_slippage",0.0)) for t in b),
+        "unresolved_as_loss_count":sum(bool(t.get("execution_ambiguity",False)) for t in b),
+        "open_positions_at_end":1 if open_pos else 0,
+        "open_position_unrealized_net_pnl":float(open_pos.get("unrealized_net_pnl",0.0)) if open_pos else 0.0,
+    }
+    for field,expected in expected_metrics.items():
+        actual=metrics.get(field)
+        if expected is None:
+            if actual is not None: return False,{"mismatch":"aggregate_metric","field":field,"primary":actual,"independent":None}
+        elif actual is None or not math.isclose(float(actual),float(expected),rel_tol=1e-10,abs_tol=1e-8):
+            return False,{"mismatch":"aggregate_metric","field":field,"primary":actual,"independent":expected}
+    if int(metrics.get("max_consecutive_losses",0))!=independent_streak:
+        return False,{"mismatch":"ledger_loss_streak","metric":metrics.get("max_consecutive_losses"),"ledger_max":independent_streak}
+    return True,{"primary_trades":len(a),"independent_trades":len(b),"ledger_fields_checked":len(FIELDS),"open_position_checked":True,"aggregate_metrics_checked":list(expected_metrics)}
 def brief(m):
-    keys=("trades","wins","losses","win_rate_pct","profit_factor","avg_net_tp_per_day","max_consecutive_losses","net_pnl","final_balance","total_costs","passes_all_targets","data_hash_sha256","execution_data_hash_sha256","execution_resolution","unresolved_as_loss_count","open_positions_at_end","open_position_unrealized_net_pnl")
+    keys=("trades","wins","losses","win_rate_pct","profit_factor","avg_net_tp_per_day","max_consecutive_losses","net_pnl","final_balance","total_costs","passes_all_targets","data_hash_sha256","execution_data_hash_sha256","execution_resolution","unresolved_as_loss_count","open_positions_at_end","open_position_unrealized_net_pnl","span_days","rows")
     return {k:m.get(k) for k in keys}
 def near_key(x):
     m=x.get("development_metrics") or x.get("metrics") or {}; pf=m.get("profit_factor")
     tp_day=float(m.get("avg_net_tp_per_day",0))
     tp_gap=max(0.0,3.0-tp_day)/3.0
-    return (0 if x.get("development_audit_status")=="MATCH" else 1,tp_gap,
+    # Rank near-misses by the complete normalized acceptance distance first.
+    # TP frequency alone is not a proxy for expectancy or robustness.
+    return (0 if x.get("development_audit_status")=="MATCH" else 1,
             float(x.get("development_distance",x.get("distance",math.inf))),
-            -tp_day,int(m.get("max_consecutive_losses",10**9)),-float(m.get("win_rate_pct",0)),
-            -float(pf if pf is not None else 1e9))
+            -float(pf if pf is not None else 1e9), -float(m.get("win_rate_pct",0)),
+            int(m.get("max_consecutive_losses",10**9)), tp_gap, -tp_day)
+def trade_diagnostics(ledger, span_days):
+    """Compact diagnostics derived from closed trades; ledger remains the source of truth."""
+    rows=list(ledger or [])
+    span_days=max(float(span_days or 0.0),1.0/1440.0)
+    reasons=Counter(str(t.get("exit_reason","UNKNOWN")) for t in rows)
+    streak_lengths=[]; current_streak=0
+    for trade in rows:
+        if trade.get("exit_reason")=="TP" and float(trade.get("net_pnl",0.0))>0:
+            if current_streak: streak_lengths.append(current_streak)
+            current_streak=0
+        else:
+            current_streak+=1
+    if current_streak: streak_lengths.append(current_streak)
+    durations=sorted(max(0.0,(int(t.get("exit_time",0))-int(t.get("entry_time",0)))/60000.0) for t in rows)
+    def side_summary(side_rows):
+        values=[float(t.get("net_pnl",0.0)) for t in side_rows]
+        wins=sum(t.get("exit_reason")=="TP" and float(t.get("net_pnl",0.0))>0 for t in side_rows)
+        gp=sum(max(0.0,v) for v in values); gl=abs(sum(min(0.0,v) for v in values))
+        pf=gp/gl if gl else (None if gp else 0.0)
+        return {"trades":len(side_rows),"wins":wins,"losses":sum(v<=0 for v in values),
+                "win_rate_pct":100.0*wins/len(side_rows) if side_rows else 0.0,
+                "profit_factor":pf,"net_pnl":sum(values)}
+    loss_hist=Counter(streak_lengths)
+    wins=sum(t.get("exit_reason")=="TP" and float(t.get("net_pnl",0.0))>0 for t in rows)
+    return {"closed_trades":len(rows),"exit_reason_counts":dict(sorted(reasons.items())),
+            "direction_breakdown":{side:side_summary([t for t in rows if t.get("direction")==side]) for side in ("LONG","SHORT")},
+            "wins":wins,"losses":sum(float(t.get("net_pnl",0.0))<=0 for t in rows),
+            "net_pnl":sum(float(t.get("net_pnl",0.0)) for t in rows),
+            "total_costs":sum(float(t.get("fees_slippage",0.0)) for t in rows),
+            "avg_tp_per_day":wins/span_days,"max_consecutive_losses":max(streak_lengths,default=0),
+            "loss_streak_run_count":len(streak_lengths),
+            "loss_streak_length_histogram":{str(k):v for k,v in sorted(loss_hist.items())},
+            "holding_minutes":{"mean":sum(durations)/len(durations) if durations else 0.0,
+                                "median":median(durations) if durations else 0.0,
+                                "p95":durations[min(len(durations)-1,int(math.ceil(0.95*len(durations))-1))] if durations else 0.0,
+                                "max":max(durations,default=0.0)},
+            "trade_ledger_sha256":digest(json.dumps(rows,sort_keys=True,separators=(",",":"),allow_nan=False).encode())}
+
 def append_unique(dst,src):
     keys={json.dumps(x.get("strategy",{}),sort_keys=True,separators=(",",":")) for x in dst}
     for x in src:
@@ -85,8 +156,10 @@ def run(df,data_manifest):
         # prior audited candidates instead of restarting an isolated population.
         size=min(250 if batches==0 else 1000,REQUESTED-completed); seed=SEED+batches*1000003
         prior_pool=sorted(train_pass+train_near,key=lambda x:(
-            max(0.0,3.0-float((x.get("metrics") or {}).get("avg_net_tp_per_day",0.0))),
-            float(x.get("distance",math.inf))))[:192]
+            float(x.get("distance",math.inf)),
+            -float((x.get("metrics") or {}).get("profit_factor") or 0.0),
+            -float((x.get("metrics") or {}).get("win_rate_pct",0.0)),
+            max(0.0,3.0-float((x.get("metrics") or {}).get("avg_net_tp_per_day",0.0)))))[:192]
         result=search_candidates(train,size,seed,cfg,ALGORITHM,progress_callback=None,
                                  excluded_genome_hashes=seen,prior_candidates=prior_pool,
                                  prepared_context=prepared_train)
@@ -97,10 +170,11 @@ def run(df,data_manifest):
         else:
             append_unique(train_near,result.get("results",[]))
             train_near=sorted(train_near,key=lambda x:(
-                max(0.0,3.0-float(x.get("metrics",{}).get("avg_net_tp_per_day",0.0))),
                 float(x.get("distance",math.inf)),
+                -float(x.get("metrics",{}).get("profit_factor") or 0.0),
+                -float(x.get("metrics",{}).get("win_rate_pct",0.0)),
                 int(x.get("metrics",{}).get("max_consecutive_losses",10**9)),
-                -float(x.get("metrics",{}).get("win_rate_pct",0))))[:max(5,min(500,batches*5))]
+                max(0.0,3.0-float(x.get("metrics",{}).get("avg_net_tp_per_day",0.0)))))[:max(5,min(500,batches*5))]
         zero=zero+1 if actual==0 else 0
         if batches==1:
             preflight_summary=result.get("preflight_summary",{})
@@ -173,7 +247,7 @@ def run(df,data_manifest):
             item["train_metrics"]=item.get("metrics",{}); item["development_metrics"]=brief(primary["metrics"]); item["development_distance"]=float(distance)
             item["development_failed_conditions"]=miss; item["development_criterion_distances"]=distances; item["development_audit_status"]="MATCH" if match else "MISMATCH"; item["development_audit_evidence"]=evidence
             item["development_data_sha256"]=primary["metrics"]["data_hash_sha256"]; item["development_execution_data_sha256"]=primary["metrics"].get("execution_data_hash_sha256")
-            item["development_passes_all_targets"]=not miss and match; item["_dev_ledger"]=primary["ledger"]
+            item["development_passes_all_targets"]=not miss and match; item["_dev_ledger"]=primary["ledger"]; item["_dev_span_days"]=primary["metrics"]["span_days"]
             if not match: audit_failures.append({"split":"development","strategy":item["strategy"],"evidence":evidence})
             elif miss: dev_near.append(item)
             else: dev_pass.append(item)
@@ -191,7 +265,7 @@ def run(df,data_manifest):
             c=normalize_contract(item.get("contract") or cfg); primary=backtest(oos,item["strategy"],c,_prepared_context=prepared_oos); second=independent_replay(oos,item["strategy"],c)
             match,evidence=ledger_match(primary,second); distance,miss,distances=_candidate_distance(primary["metrics"],c)
             item["oos_metrics"]=brief(primary["metrics"]); item["oos_data_sha256"]=primary["metrics"]["data_hash_sha256"]; item["oos_execution_data_sha256"]=primary["metrics"].get("execution_data_hash_sha256")
-            item["oos_audit_status"]="MATCH" if match else "MISMATCH"; item["oos_audit_evidence"]=evidence; item["oos_failed_conditions"]=miss; item["oos_distance"]=float(distance); item["_oos_ledger"]=primary["ledger"]
+            item["oos_audit_status"]="MATCH" if match else "MISMATCH"; item["oos_audit_evidence"]=evidence; item["oos_failed_conditions"]=miss; item["oos_distance"]=float(distance); item["_oos_ledger"]=primary["ledger"]; item["_oos_span_days"]=primary["metrics"]["span_days"]
             item["oos_passes_all_targets"]=not miss and match
         except Exception as exc:
             item["oos_audit_status"]="FAILED"; item["oos_error"]=str(exc); item["oos_passes_all_targets"]=False
@@ -209,15 +283,25 @@ def run(df,data_manifest):
         z.writestr("README.txt","Strategy Foundry reproducible export. Read each manifest. Standalone Python verifies exact full-data and run SHA-256; unresolved SL/TP candles trigger exact 1-second Binance USD-M fetch, and incomplete resolution fails closed. No live orders.")
         z.writestr("market_data_manifest.json",json.dumps(data_manifest,ensure_ascii=False,sort_keys=True,indent=2))
         for idx,item in enumerate(delivery,1):
-            c=normalize_contract(item.get("contract") or cfg); full=backtest(df,item["strategy"],c,_prepared_context=prepared_full); second=independent_replay(df,item["strategy"],c)
+            c=normalize_contract(item.get("contract") or cfg)
+            train_full=backtest(train,item["strategy"],c,_prepared_context=prepared_train)
+            full=backtest(df,item["strategy"],c,_prepared_context=prepared_full); second=independent_replay(df,item["strategy"],c)
             match,evidence=ledger_match(full,second)
+            item["trade_diagnostics"]={
+                "train":trade_diagnostics(train_full["ledger"],train_full["metrics"]["span_days"]),
+                "development":trade_diagnostics(item.get("_dev_ledger",[]),item.get("_dev_span_days",0)),
+                "oos":trade_diagnostics(item.get("_oos_ledger",[]),item.get("_oos_span_days",0)),
+                "full":trade_diagnostics(full["ledger"],full["metrics"]["span_days"])
+            }
             item["full_data_audit_status"]="MATCH" if match else "MISMATCH"; item["full_data_audit_evidence"]=evidence
             if not match: continue
             source=template.replace("__SPEC__",repr(full["strategy"])).replace("__CONTRACT__",repr(full["contract"])).replace("__DATA_HASH__",full["metrics"]["data_hash_sha256"]).replace("__RUN_HASH__",full["run_hash_sha256"])
             name=f"strategy_{idx:03d}.py"; z.writestr(name,source)
+            z.writestr(f"strategy_{idx:03d}_train_ledger.json",json.dumps(train_full["ledger"],ensure_ascii=False,sort_keys=True,indent=2,allow_nan=False))
+            z.writestr(f"strategy_{idx:03d}_development_ledger.json",json.dumps(item.get("_dev_ledger",[]),ensure_ascii=False,sort_keys=True,indent=2,allow_nan=False))
             z.writestr(f"strategy_{idx:03d}_full_ledger.json",json.dumps(full["ledger"],ensure_ascii=False,sort_keys=True,indent=2,allow_nan=False))
             z.writestr(f"strategy_{idx:03d}_oos_ledger.json",json.dumps(item.get("_oos_ledger",[]),ensure_ascii=False,sort_keys=True,indent=2,allow_nan=False))
-            manifest={"strategy":item["strategy"],"contract":full["contract"],"full_dataset_sha256":full_hash,"train_sha256":train_hash,"development_sha256":dev_hash,"oos_sha256":oos_hash,"full_run_metrics":brief(full["metrics"]),"full_run_hash_sha256":full["run_hash_sha256"],"full_data_independent_audit":{"status":"MATCH",**evidence},"development_metrics":item.get("development_metrics"),"development_audit_status":item.get("development_audit_status"),"development_passes_all_targets":item.get("development_passes_all_targets"),"oos_metrics":item.get("oos_metrics"),"oos_audit_status":item.get("oos_audit_status"),"oos_passes_all_targets":item.get("oos_passes_all_targets"),"oos_failed_conditions":item.get("oos_failed_conditions",[])}
+            manifest={"strategy":item["strategy"],"contract":full["contract"],"full_dataset_sha256":full_hash,"train_sha256":train_hash,"development_sha256":dev_hash,"oos_sha256":oos_hash,"full_run_metrics":brief(full["metrics"]),"full_run_hash_sha256":full["run_hash_sha256"],"full_data_independent_audit":{"status":"MATCH",**evidence},"development_metrics":item.get("development_metrics"),"development_audit_status":item.get("development_audit_status"),"development_passes_all_targets":item.get("development_passes_all_targets"),"oos_metrics":item.get("oos_metrics"),"oos_audit_status":item.get("oos_audit_status"),"oos_passes_all_targets":item.get("oos_passes_all_targets"),"oos_failed_conditions":item.get("oos_failed_conditions",[]),"trade_diagnostics":item.get("trade_diagnostics",{})}
             z.writestr(f"strategy_{idx:03d}_manifest.json",json.dumps(manifest,ensure_ascii=False,sort_keys=True,indent=2,allow_nan=False))
             exports.append({"file":name,"strategy":item["strategy"],"full_run_metrics":brief(full["metrics"]),"full_run_hash_sha256":full["run_hash_sha256"],"full_data_audit_status":"MATCH"})
     results=[]

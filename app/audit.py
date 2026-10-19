@@ -230,9 +230,11 @@ def _independent_signals(d: pd.DataFrame, spec: dict[str, Any]):
             long=long^sec_long; short=short^sec_short
         else:
             raise ValueError("Unsupported signal composition")
-    long=long.fillna(False)
-    short=short.fillna(False)
-    return long,short,atr,fast,slow,period
+    # Mirror the primary engine's fail-safe policy for contradictory signals.
+    conflict=long.fillna(False) & short.fillna(False)
+    long=long.fillna(False) & ~conflict
+    short=short.fillna(False) & ~conflict
+    return long.astype(bool),short.astype(bool),atr,fast,slow,period
 
 
 def _resolve_bar_exit_independent(side: str, bar_open: float, bar_high: float, bar_low: float, stop: float, target: float):
