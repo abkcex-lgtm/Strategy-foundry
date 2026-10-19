@@ -17,7 +17,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: ethusdt-strategy-factory-research-${{ github.sha }}
+  group: ethusdt-strategy-factory-research-v097-observable
   cancel-in-progress: true
 jobs:
   research:
