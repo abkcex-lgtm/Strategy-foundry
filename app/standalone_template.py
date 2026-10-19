@@ -35,9 +35,9 @@ class StrategySpec:
         if not (2 <= self.atr_period <= 200): raise ValueError("atr_period must be 2..200")
         if not (0.2 <= self.stop_atr <= 10): raise ValueError("stop_atr must be 0.2..10")
         if self.direction not in {"both","long","short"}: raise ValueError("Invalid direction")
-        if self.family not in {"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top"}:
+        if self.family not in {"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top","williams_r_reversion","donchian_midline_trend","dual_thrust_breakout","chaikin_money_flow","money_flow_index_reversion","atr_trend_pullback","volume_weighted_breakout","range_midpoint_reversion","roc_acceleration","atr_normalized_momentum"}:
             raise ValueError("Unsupported strategy family")
-        valid_families={"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top"}
+        valid_families={"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top","williams_r_reversion","donchian_midline_trend","dual_thrust_breakout","chaikin_money_flow","money_flow_index_reversion","atr_trend_pullback","volume_weighted_breakout","range_midpoint_reversion","roc_acceleration","atr_normalized_momentum"}
         if self.secondary_family not in valid_families | {"none"}: raise ValueError("Unsupported secondary strategy family")
         if self.signal_composition not in {"single","and","or","xor"}: raise ValueError("Unsupported signal composition")
         if self.signal_composition=="single" and self.secondary_family!="none": raise ValueError("Single-family strategy cannot set secondary_family")
@@ -230,6 +230,67 @@ def indicators(df, spec):
         current_high=x.high.rolling(spec.fast,min_periods=spec.fast).max(); prior_high=x.high.shift(spec.fast).rolling(spec.fast,min_periods=spec.fast).max()
         trigger=x.low.shift(1).rolling(spec.fast,min_periods=spec.fast).min()
         short_signal=((current_high-prior_high).abs()<=x.atr*0.35)&(x.high>=current_high-x.atr*0.1)&(c<trigger)&(c<x.open); long_signal=pd.Series(False,index=x.index)
+    elif spec.family=="williams_r_reversion":
+        highest=x.high.rolling(spec.fast,min_periods=spec.fast).max()
+        lowest=x.low.rolling(spec.fast,min_periods=spec.fast).min()
+        williams=-100*(highest-c)/(highest-lowest).replace(0,np.nan)
+        long_signal=(williams.shift(1)<=-80)&(williams>-80)
+        short_signal=(williams.shift(1)>=-20)&(williams<-20)
+    elif spec.family=="donchian_midline_trend":
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        midpoint=(upper+lower)/2
+        long_signal=(c>midpoint)&(c.shift(1)<=midpoint.shift(1))
+        short_signal=(c<midpoint)&(c.shift(1)>=midpoint.shift(1))
+    elif spec.family=="dual_thrust_breakout":
+        range_up=(x.high-c).rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        range_down=(c-x.low).rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        thrust=np.maximum(range_up,range_down)*0.5
+        upper=x.open.shift(1)+thrust
+        lower=x.open.shift(1)-thrust
+        long_signal=(c>upper)&(c.shift(1)<=upper.shift(1))
+        short_signal=(c<lower)&(c.shift(1)>=lower.shift(1))
+    elif spec.family=="chaikin_money_flow":
+        spread=(x.high-x.low).replace(0,np.nan)
+        multiplier=((c-x.low)-(x.high-c))/spread
+        flow=multiplier*x.volume.astype(float)
+        cmf=flow.rolling(spec.slow,min_periods=spec.slow).sum()/x.volume.astype(float).rolling(spec.slow,min_periods=spec.slow).sum().replace(0,np.nan)
+        long_signal=(cmf>0)&(cmf.shift(1)<=0)&(c>x.ema_fast)
+        short_signal=(cmf<0)&(cmf.shift(1)>=0)&(c<x.ema_fast)
+    elif spec.family=="money_flow_index_reversion":
+        typical=(x.high+x.low+c)/3
+        raw_flow=typical*x.volume.astype(float)
+        positive=raw_flow.where(typical>typical.shift(1),0.0)
+        negative=raw_flow.where(typical<typical.shift(1),0.0)
+        ratio=positive.rolling(spec.fast,min_periods=spec.fast).sum()/negative.rolling(spec.fast,min_periods=spec.fast).sum().replace(0,np.nan)
+        mfi=100-100/(1+ratio)
+        long_signal=(mfi.shift(1)<=20)&(mfi>20)
+        short_signal=(mfi.shift(1)>=80)&(mfi<80)
+    elif spec.family=="atr_trend_pullback":
+        trend_up=x.ema_fast>x.ema_slow; trend_down=x.ema_fast<x.ema_slow
+        long_signal=trend_up&(x.low<=x.ema_fast+0.1*x.atr)&(c>x.ema_fast)&(c>x.open)
+        short_signal=trend_down&(x.high>=x.ema_fast-0.1*x.atr)&(c<x.ema_fast)&(c<x.open)
+    elif spec.family=="volume_weighted_breakout":
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        baseline=x.volume.rolling(spec.fast,min_periods=spec.fast).median().shift(1)
+        active=x.volume>baseline*1.5
+        long_signal=active&(c>upper)&(c.shift(1)<=upper.shift(1))
+        short_signal=active&(c<lower)&(c.shift(1)>=lower.shift(1))
+    elif spec.family=="range_midpoint_reversion":
+        support=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        resistance=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        width=(resistance-support).replace(0,np.nan)
+        long_signal=(x.low<=support+0.15*width)&(c>=support+0.35*width)&(c>x.open)
+        short_signal=(x.high>=resistance-0.15*width)&(c<=resistance-0.35*width)&(c<x.open)
+    elif spec.family=="roc_acceleration":
+        roc=c.pct_change(periods=spec.fast)*100
+        long_signal=(roc>0)&(roc>roc.shift(1))&(c>x.ema_slow)
+        short_signal=(roc<0)&(roc<roc.shift(1))&(c<x.ema_slow)
+    elif spec.family=="atr_normalized_momentum":
+        normalized=(c-c.shift(spec.fast))/x.atr.replace(0,np.nan)
+        long_signal=(normalized>=1.0)&(c>x.ema_slow)
+        short_signal=(normalized<=-1.0)&(c<x.ema_slow)
     if spec.context_filter=="ema_trend":
         long_signal=long_signal&(x.ema_fast>x.ema_slow)
         short_signal=short_signal&(x.ema_fast<x.ema_slow)
