@@ -86,8 +86,8 @@ The router does not create API access or credits. Unconfigured providers are ski
 ## Current implementation and verification status
 
 - Current research-engine line: **v0.9.9**. The canonical handoff is [PROJECT_STATE.md](PROJECT_STATE.md); read it first when continuing in a new chat.
-- The main branch has 35 executable strategy signal families, compositional two-family genomes (AND/OR/XOR), genetic/surrogate-guided search, duplicate avoidance, family-aware sampling, checkpointed batch orchestration, progress heartbeats, and an independently implemented trade-ledger replay.
-- Search can be configured up to 500,000 candidates through bounded batches, but this is a **requested capacity**, not proof that a full 500,000-candidate run has completed within the runtime budget.
+- The main branch has 40 executable strategy signal families, compositional two-family genomes (AND/OR/XOR), genetic/surrogate-guided search, duplicate avoidance, family-aware sampling, checkpointed batch orchestration, progress heartbeats, and an independently implemented trade-ledger replay.
+- Search can be configured up to 500,000 candidates through bounded batches with a chunked first-exit scan to cap per-trade temporary memory, but this is a **requested capacity**, not proof that a full 500,000-candidate run has completed within the runtime budget.
 - Latest verified research run: [GitHub Actions run 39277059928](https://github.com/abkcex-lgtm/Strategy-foundry/actions/runs/39277059928), a 1,000-candidate real-data smoke test. It completed successfully, passed data preflight, and found **zero strategies passing every required split**; five near-misses were returned. The full 500k search is not yet verified.
 - The reference data split is Train Apr–Jun 2026, Development Jul 2026, and untouched OOS Aug–Sep 2026. OOS must not guide candidate generation, ranking, or selection.
 - A successful CI run means the checks completed; it does not certify profitability, validate a near-miss, or prove a production-scale search has finished.
