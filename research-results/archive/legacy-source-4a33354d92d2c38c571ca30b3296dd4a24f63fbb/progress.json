@@ -1,0 +1,17 @@
+{
+  "candidate_search_complete": true,
+  "evaluated_unique_candidates": 1000,
+  "outcome": "NO_STRATEGY_PASSED_ALL_REQUIRED_SPLITS",
+  "report": "research-results/report.json",
+  "requested_candidates": 1000,
+  "returned_candidate_count": 5,
+  "status": "completed",
+  "strategy_zip": "research-results/validated_strategies.zip",
+  "validated_strategy_count": 0,
+  "archive_metadata": {
+    "archived_at_utc": "2026-10-20",
+    "classification": "LEGACY_PROGRESS_NOT_VALID_FOR_CURRENT_SOURCE",
+    "source_commit": "4a33354d92d2c38c571ca30b3296dd4a24f63fbb",
+    "reason": "This progress file reports a 1,000-candidate run on an older source commit. It is historical evidence only."
+  }
+}
