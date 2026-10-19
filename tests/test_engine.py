@@ -50,12 +50,12 @@ def test_vectorized_first_exit_candidate_matches_scalar_bar_scan(side):
 def test_search_validates_shared_market_data_once_for_all_candidates(monkeypatch):
     import app.engine as engine_module
     df=candles(700)
-    original=engine_module.validate_ohlcv
+    original=engine_module.prepare_backtest_data
     calls={"n":0}
     def counted(*args,**kwargs):
         calls["n"]+=1
         return original(*args,**kwargs)
-    monkeypatch.setattr(engine_module,"validate_ohlcv",counted)
+    monkeypatch.setattr(engine_module,"prepare_backtest_data",counted)
     result=engine_module.search_candidates(df,12,seed=17,contract={"use_min_tp_per_day":False})
     assert result["evaluated_candidates"]==12
     assert calls["n"]==1
@@ -386,6 +386,9 @@ def test_fixed_risk_backtest_stops_before_equity_falls_below_risk_budget(monkeyp
     monkeypatch.setattr(engine, "indicators", always_long)
     monkeypatch.setattr(engine, "_resolve_bar_exit",
                         lambda side, bar_open, bar_high, bar_low, stop, target: ("SL", stop))
+    # The scalar resolver is only called on candidate exit bars after vectorization.
+    monkeypatch.setattr(engine, "_first_exit_candidate",
+                        lambda side, opens, highs, lows, start, stop, target: start)
     cfg = normalize_contract({
         "initial_balance": 1000.0, "risk_mode": "fixed_usd", "risk_usd": 10.0,
         "commission_pct_per_side": 0.0, "slippage_pct_per_side": 0.0,

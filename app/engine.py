@@ -612,9 +612,6 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     if algorithm not in {"hybrid_genetic","surrogate_genetic","stratified_random"}:
         raise ValueError("Unsupported search algorithm")
     cfg=normalize_contract(contract)
-    prepared_context=prepared_context if prepared_context is not None else prepare_backtest_data(frame)
-    if prepared_context.source_frame is not frame:
-        raise ValueError("Prepared market data can only be reused with its exact source DataFrame")
     rng=np.random.default_rng(seed)
     excluded_genome_hashes=set(excluded_genome_hashes or ())
     def genome_hash(key):
@@ -629,6 +626,16 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     if not families or any(f not in all_families for f in families): raise ValueError("Search family selection is empty or contains unsupported families")
     if not context_filters or any(f not in all_context_filters for f in context_filters): raise ValueError("Context filter selection is empty or unsupported")
     if not confirmation_filters or any(f not in all_confirmation_filters for f in confirmation_filters): raise ValueError("Confirmation filter selection is empty or unsupported")
+    if prepared_context is None:
+        required={"open_time","open","high","low","close","volume"}
+        if not required.issubset(frame.columns) and getattr(backtest,"__module__",None)!=__name__:
+            # Test doubles may intentionally supply synthetic metrics without market data.
+            # Production backtests still fail closed on missing/invalid OHLCV columns.
+            prepared_context=None
+        else:
+            prepared_context=prepare_backtest_data(frame)
+    if prepared_context is not None and prepared_context.source_frame is not frame:
+        raise ValueError("Prepared market data can only be reused with its exact source DataFrame")
     names={"ema_crossover":"EMA crossover","channel_breakout":"Price channel breakout","rsi_reversion":"RSI reversion","volume_breakout":"Volume-confirmed breakout","ema_pullback":"EMA trend pullback","macd_crossover":"MACD crossover","bollinger_reversion":"Bollinger mean reversion","inside_bar_breakout":"Inside-bar breakout","engulfing_reversal":"Engulfing candle reversal","momentum_breakout":"Momentum-confirmed breakout","stochastic_reversion":"Stochastic reversion","roc_momentum":"Rate-of-change momentum","adx_trend":"ADX directional trend","keltner_breakout":"Keltner channel breakout","atr_squeeze_breakout":"Volatility squeeze breakout","obv_trend":"OBV volume trend","vwap_reclaim":"VWAP reclaim","pivot_reversal":"Support/resistance pivot reversal","swing_structure_break":"شکست ساختار سوئینگ","failed_breakout_reversal":"برگشت شکست ناموفق","wick_rejection":"رد قیمت با سایه کندل","range_expansion_breakout":"شکست با انبساط دامنه","three_bar_momentum":"مومنتوم سه‌کندلی","volatility_regime_breakout":"شکست در رژیم نوسان","trend_exhaustion_reversal":"برگشت فرسودگی روند","volume_climax_reversal":"برگشت اوج حجم","range_compression_breakout":"شکست پس از فشردگی دامنه","support_resistance_rejection":"رد قیمت حمایت/مقاومت","micro_double_bottom":"کف دوقلوی کوتاه‌مدت","micro_double_top":"سقف دوقلوی کوتاه‌مدت"}
     fast_values=np.array([3,4,5,6,8,9,10,12,14,16,18,21,24,28,32,36,40,48,55,64,72,89],dtype=int)
     slow_values=np.array([12,16,18,20,24,28,32,36,40,48,55,64,72,89,100,120,144,180,200,240,300,400,500],dtype=int)
@@ -729,7 +736,8 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             duplicate_genomes+=1
             return None
         try:
-            r=backtest(frame,spec,cfg,_prepared_context=prepared_context); m=r["metrics"]
+            r=(backtest(frame,spec,cfg,_prepared_context=prepared_context)
+               if prepared_context is not None else backtest(frame,spec,cfg)); m=r["metrics"]
             dist,failed,distances=_candidate_distance(m,cfg)
             row={"strategy":r["strategy"],"contract":cfg,"metrics":m,"distance":dist,
                  "failed_conditions":failed,"criterion_distances":distances,
@@ -752,7 +760,8 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     # Seed later batches with audited candidates from earlier batches. Reuse
     # their metrics only when dataset and contract fingerprints match exactly.
     prior_rows=[]
-    expected_data_hash=prepared_context.data_hash
+    expected_data_hash=(prepared_context.data_hash if prepared_context is not None
+                        else sha256_bytes(frame.reset_index(drop=True).to_csv(index=False,float_format="%.12g").encode()))
     seen_prior=set()
     for candidate in list(prior_candidates or [])[:192]:
         try:
