@@ -1,4 +1,5 @@
 import hashlib
+import re
 from pathlib import Path
 import sys
 import types
@@ -219,3 +220,31 @@ def test_standalone_template_signal_parity_for_all_families():
             np.testing.assert_allclose(primary["atr"].to_numpy(), exported["atr"].to_numpy(), rtol=1e-12, atol=1e-12, equal_nan=True, err_msg=family)
     finally:
         sys.modules.pop(module_name, None)
+
+
+def test_persian_ui_exposes_all_40_searchable_families():
+    html_path = Path(engine.__file__).parent / "static" / "index.html"
+    html = html_path.read_text(encoding="utf-8")
+    expected = {
+        "ema_crossover", "channel_breakout", "rsi_reversion", "volume_breakout",
+        "ema_pullback", "macd_crossover", "bollinger_reversion", "inside_bar_breakout",
+        "engulfing_reversal", "momentum_breakout", "stochastic_reversion", "roc_momentum",
+        "adx_trend", "keltner_breakout", "atr_squeeze_breakout", "obv_trend",
+        "vwap_reclaim", "pivot_reversal", "swing_structure_break", "failed_breakout_reversal",
+        "wick_rejection", "range_expansion_breakout", "three_bar_momentum",
+        "volatility_regime_breakout", "trend_exhaustion_reversal", "volume_climax_reversal",
+        "range_compression_breakout", "support_resistance_rejection", "micro_double_bottom",
+        "micro_double_top", "williams_r_reversion", "donchian_midline_trend",
+        "dual_thrust_breakout", "chaikin_money_flow", "money_flow_index_reversion",
+        "atr_trend_pullback", "volume_weighted_breakout", "range_midpoint_reversion",
+        "roc_acceleration", "atr_normalized_momentum",
+    }
+    checkbox_values = re.findall(r'class="search-family" value="([^"]+)"', html)
+    dropdown = html.split('<select id="family">', 1)[1].split("</select>", 1)[0]
+    dropdown_values = re.findall(r'<option value="([^"]+)"', dropdown)
+    assert len(checkbox_values) == 40
+    assert len(set(checkbox_values)) == 40
+    assert set(checkbox_values) == expected
+    assert len(dropdown_values) == 40
+    assert set(dropdown_values) == expected
+    assert "۴۰ خانوادهٔ اجرایی" in html
