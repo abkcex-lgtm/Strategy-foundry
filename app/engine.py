@@ -593,7 +593,7 @@ def _first_exit_candidate(side, opens, highs, lows, start, stop, target):
     return None
 
 
-def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_context=None):
+def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_context=None, resolve_ambiguity=True):
     spec=StrategySpec(**spec) if isinstance(spec,dict) else (spec or StrategySpec()); spec.validate()
     cfg=normalize_contract(contract)
     prepared=_prepared_context if _prepared_context is not None else prepare_backtest_data(frame)
@@ -667,6 +667,11 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
                 except DataIntegrityError as exc:
                     if "Unresolved same-candle SL/TP ambiguity" not in str(exc):
                         raise DataIntegrityError(f"Execution preflight failed at {int(open_times[j])}: {exc}") from exc
+                    if not resolve_ambiguity:
+                        raise DataIntegrityError(
+                            f"Unresolved same-candle SL/TP ambiguity at {int(open_times[j])}; "
+                            "candidate-screening policy is fail-closed and defers 1-second downloads to final verification"
+                        ) from exc
                     try:
                         seconds=download_binance_execution_window(cfg.get("symbol","ETHUSDT"),int(open_times[j]),base_interval)
                     except Exception as fetch_exc:
@@ -771,7 +776,7 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
     return (sum(distances.values()) / len(distances) if distances else 0.0), failed, distances
 
 
-def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="surrogate_genetic", search_space=None, progress_callback=None, excluded_genome_hashes=None, prior_candidates=None, prepared_context=None):
+def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="surrogate_genetic", search_space=None, progress_callback=None, excluded_genome_hashes=None, prior_candidates=None, prepared_context=None, resolve_ambiguity_during_search=True):
     """Deterministic bounded evolutionary search on TRAIN only.
 
     Each invocation is bounded to 10,000 genomes. The background API orchestrates
@@ -911,8 +916,13 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             duplicate_genomes+=1
             return None
         try:
-            r=(backtest(frame,spec,cfg,_prepared_context=prepared_context)
-               if prepared_context is not None else backtest(frame,spec,cfg)); m=r["metrics"]
+            # Full 1-second ambiguity resolution is expensive during broad search and
+            # can stall the whole run on many distinct candles. Keep the normal API
+            # default unchanged; the audited research runner may fail closed during
+            # screening and re-resolve only shortlisted candidates.
+            screening_kwargs = {} if resolve_ambiguity_during_search else {"resolve_ambiguity": False}
+            r=(backtest(frame,spec,cfg,_prepared_context=prepared_context,**screening_kwargs)
+               if prepared_context is not None else backtest(frame,spec,cfg,**screening_kwargs)); m=r["metrics"]
             dist,failed,distances=_candidate_distance(m,cfg)
             row={"strategy":r["strategy"],"contract":cfg,"metrics":m,"distance":dist,
                  "failed_conditions":failed,"criterion_distances":distances,
