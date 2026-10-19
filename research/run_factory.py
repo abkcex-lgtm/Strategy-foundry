@@ -63,6 +63,16 @@ def ledger_match(primary,other):
 def brief(m):
     keys=("trades","wins","losses","win_rate_pct","profit_factor","avg_net_tp_per_day","max_consecutive_losses","net_pnl","final_balance","total_costs","passes_all_targets","data_hash_sha256","execution_data_hash_sha256","execution_resolution","unresolved_as_loss_count","open_positions_at_end","open_position_unrealized_net_pnl","span_days","rows")
     return {k:m.get(k) for k in keys}
+def capability_pilot_warning(summary, requested):
+    """Return an advisory only; a small pilot must never stop the full search."""
+    summary = summary or {}
+    capability = int(summary.get("capability_evidence_candidates", 0) or 0)
+    if capability == 0 and int(requested) >= 250:
+        return ("The initial 250-candidate pilot found no candidate with >=0.5 net TP/day, "
+                ">=50 trades, and either >=25% win rate or PF >=0.5. This is an advisory "
+                "only: continue the requested search because the pilot cannot prove no strategy exists.")
+    return None
+
 def near_key(x):
     m=x.get("development_metrics") or x.get("metrics") or {}; pf=m.get("profit_factor")
     tp_day=float(m.get("avg_net_tp_per_day",0))
@@ -149,7 +159,7 @@ def run(df,data_manifest):
     dev_backtest_hash=prepared_dev.data_hash
     cfg=normalize_contract({"symbol":SYMBOL,"initial_balance":1000,"risk_mode":"fixed_usd","risk_usd":10,"compound":False,"reward_risk":3.5,"target_mode":"net_rr","commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"max_positions":1,"entry_model":"next_candle_open","exit_model":"sl_tp_only","min_win_rate_pct":40,"min_profit_factor":1,"min_tp_per_day":3,"max_consecutive_losses":13,"use_min_win_rate":True,"use_min_profit_factor":True,"use_min_tp_per_day":True,"use_max_consecutive_losses":True,"break_even_enabled":False,"trailing_stop_enabled":False,"partial_exit_enabled":False,"time_exit_enabled":False})
     start=time.monotonic(); seen=set(); train_pass=[]; train_near=[]; failed=generations=fits=0; family_counts={}; completed=batches=zero=0
-    preflight_summary=None; preflight_gate_failed=False; preflight_gate_reason=None
+    preflight_summary=None; preflight_gate_warning=None
     max_batches=max(5,math.ceil(REQUESTED/1000)*5)
     print(f"SEARCH_START requested={REQUESTED} seed={SEED} algorithm={ALGORITHM} train_rows={len(train)} train_sha256={train_hash}",flush=True)
     while completed<REQUESTED and batches<max_batches and time.monotonic()-start<MAX_SECONDS:
@@ -211,59 +221,17 @@ def run(df,data_manifest):
             preflight_summary=result.get("preflight_summary",{})
             promising=int(preflight_summary.get("promising_candidates",0))
             capability=int(preflight_summary.get("capability_evidence_candidates",0))
-            preflight_gate_failed=capability==0 and REQUESTED>=250
-            preflight_gate_reason=("The 250-candidate pilot found no candidate with >=0.5 net TP/day, "
-                                   ">=50 trades, and either >=25% win rate or PF >=0.5. This is a fail-fast "
-                                   "capability warning, not proof that no strategy exists.")
-            print("PREFLIGHT_GATE "+json.dumps({"passed":not preflight_gate_failed,
-                                                "capability_evidence_candidates":capability,
-                                                "strictly_promising_candidates":promising,
-                                                "summary":preflight_summary,
-                                                "reason":None if not preflight_gate_failed else preflight_gate_reason},
-                                               sort_keys=True),flush=True)
-        p={"status":"preflight_gate_failed" if preflight_gate_failed else "searching","requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"completed_batches":batches,"failed_candidate_evaluations":failed,"elapsed_seconds":round(time.monotonic()-start,2),"seed":SEED,"algorithm":ALGORITHM,"train_sha256":train_hash,"development_sha256":dev_hash,"train_passing_pool":len(train_pass),"train_near_pool":len(train_near),"last_batch_unique":actual,"preflight_summary":preflight_summary,"prior_candidates_used":result.get("prior_candidates_used",0),"indicator_cache_stats":result.get("indicator_cache_stats")}
+            preflight_gate_warning=capability_pilot_warning(preflight_summary,REQUESTED)
+            print("PREFLIGHT_WARNING "+json.dumps({"blocking":False,
+                                                  "capability_evidence_candidates":capability,
+                                                  "strictly_promising_candidates":promising,
+                                                  "summary":preflight_summary,
+                                                  "warning":preflight_gate_warning},
+                                                 sort_keys=True),flush=True)
+        p={"status":"searching","requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"completed_batches":batches,"failed_candidate_evaluations":failed,"elapsed_seconds":round(time.monotonic()-start,2),"seed":SEED,"algorithm":ALGORITHM,"train_sha256":train_hash,"development_sha256":dev_hash,"train_passing_pool":len(train_pass),"train_near_pool":len(train_near),"last_batch_unique":actual,"preflight_summary":preflight_summary,"preflight_warning":preflight_gate_warning,"prior_candidates_used":result.get("prior_candidates_used",0),"indicator_cache_stats":result.get("indicator_cache_stats")}
         write(PROGRESS,p); print("SEARCH_PROGRESS "+json.dumps(p,sort_keys=True),flush=True)
-        if preflight_gate_failed or zero>=5: break
+        if zero>=5: break
     search_complete=completed>=REQUESTED
-    if preflight_gate_failed:
-        pilot_near_misses=[{"strategy":x.get("strategy"),"metrics":brief(x.get("metrics") or {}),
-                            "distance":x.get("distance"),"failed_conditions":x.get("failed_conditions"),
-                            "independent_audit":x.get("independent_audit")}
-                           for x in (result.get("results") or [])[:5]]
-        report={"schema_version":1,"outcome":"PREFLIGHT_GATE_FAILED_NO_CAPABILITY_EVIDENCE",
-                "source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
-                "requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,
-                "candidate_search_complete":False,"failed_candidate_evaluations":failed,
-                "completed_batches":batches,"surrogate_model_fits":fits,"generations":generations,
-                "family_evaluated_counts":family_counts,"indicator_cache_stats":{"hits":prepared_train.indicator_cache_hits,"misses":prepared_train.indicator_cache_misses,"entries":len(prepared_train.indicator_cache),"limit":prepared_train.indicator_cache_limit},"seed":SEED,"algorithm":ALGORITHM,"contract":cfg,
-                "target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,
-                    "avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":13,
-                    "risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5,
-                    "commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,
-                    "entry_model":"next_candle_open","exit_model":"SL/TP only","max_positions":1},
-                "data":data_manifest,
-                "splits":{"train":{"rows":len(train),"sha256":train_hash,"backtest_sha256":train_backtest_hash,"used_for_candidate_generation":True},
-                          "development":{"rows":len(dev),"sha256":dev_hash,"backtest_sha256":dev_backtest_hash,"used_for_candidate_generation":False},
-                          "oos":{"rows":len(oos),"sha256":frame_hash(oos),"used_for_candidate_generation":False}},
-                "preflight_gate":{"passed":False,"pilot_candidates":completed,
-                    "capability_evidence_candidates":int((preflight_summary or {}).get("capability_evidence_candidates",0)),
-                    "strictly_promising_candidates":int((preflight_summary or {}).get("promising_candidates",0)),
-                    "summary":preflight_summary,"reason":preflight_gate_reason,
-                    "interpretation":"Fail-fast evidence threshold only; not a proof of impossibility and not a strategy certificate."},
-                "preflight_diagnostics":{"pilot_near_misses":pilot_near_misses},
-                "development_passing_count":0,"development_near_miss_count":0,"oos_evaluated_count":0,
-                "validated_strategy_count":0,"returned_candidate_count":0,"near_miss_shortfall":5,
-                "development_audit_failures":[],"exports":[],"results":[],
-                "selection_policy":"No long search or OOS selection was performed because the representative pilot failed the predeclared capability gate.",
-                "reproducibility":"Data and split hashes are recorded; pilot candidates are scored on TRAIN only; no strategy is certified."}
-        write(OUT/"report.json",report)
-        write(PROGRESS,{"status":"preflight_gate_failed","candidate_search_complete":False,
-                        "requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,
-                        "preflight_summary":preflight_summary,"report":"research-results/report.json"})
-        print("FINAL_REPORT "+json.dumps({"outcome":report["outcome"],"requested_candidates":REQUESTED,
-              "evaluated_unique_candidates":completed,"validated_strategy_count":0,
-              "returned_candidate_count":0,"train_sha256":train_hash,"report_path":"research-results/report.json"},sort_keys=True),flush=True)
-        return
     if not search_complete:
         write(PROGRESS,{"status":"partial_search_reported","requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"completed_batches":batches,"failed_candidate_evaluations":failed,"reason":"Runtime budget or candidate-space exhaustion; any result will be explicitly marked incomplete."})
         print(f"SEARCH_PARTIAL evaluated={completed} requested={REQUESTED}; evaluating auditable candidates found so far without claiming exhaustive search",flush=True)
@@ -338,7 +306,7 @@ def run(df,data_manifest):
     results=[]
     for item in delivery:
         results.append({k:v for k,v in item.items() if not k.startswith("_")})
-    report={"schema_version":1,"outcome":outcome,"source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"candidate_search_complete":search_complete,"failed_candidate_evaluations":failed,"completed_batches":batches,"surrogate_model_fits":fits,"generations":generations,"family_evaluated_counts":family_counts,"indicator_cache_stats":{"hits":prepared_train.indicator_cache_hits,"misses":prepared_train.indicator_cache_misses,"entries":len(prepared_train.indicator_cache),"limit":prepared_train.indicator_cache_limit},"seed":SEED,"algorithm":ALGORITHM,"preflight_summary":preflight_summary,"capability_gate":{"min_avg_tp_per_day":0.5,"min_trades":50,"min_win_rate_pct":25,"min_profit_factor":0.5},"contract":cfg,"target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,"avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":13,"risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5,"commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"entry_model":"next_candle_open","exit_model":"SL/TP only","max_positions":1,"loss_streak_resets_only_on_full_TP":True},"data":data_manifest,"splits":{"train":{"rows":len(train),"sha256":train_hash,"backtest_sha256":train_backtest_hash,"used_for_candidate_generation":True},"development":{"rows":len(dev),"sha256":dev_hash,"backtest_sha256":dev_backtest_hash,"used_for_selection_and_near_miss_ranking":True},"oos":{"rows":len(oos),"sha256":oos_hash,"backtest_sha256":oos_backtest_hash,"used_only_after_selection_frozen":True}},"development_passing_count":len(dev_pass),"development_near_miss_count":len(dev_near),"oos_evaluated_count":len(oos_results),"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"near_miss_shortfall":max(0,5-len(delivery)) if not validated else 0,"development_audit_failures":audit_failures,"exports":exports,"results":results,"selection_policy":"Train creates candidates; capability-evidence candidates (>=0.5 TP/day, >=50 trades, and WR>=25% or PF>=0.5) are prioritized for search steering; Development freezes selection and ranks by the same capability tier then full criterion distance; OOS is only evaluated after selection is frozen and never used to rank/select.","reproducibility":"Primary and independent ledgers compared field-by-field at rel_tol=1e-10 and abs_tol=1e-8; standalone exports include exact hashes and auto-fetch 1-second windows only for ambiguous candles."}
+    report={"schema_version":1,"outcome":outcome,"source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"candidate_search_complete":search_complete,"failed_candidate_evaluations":failed,"completed_batches":batches,"surrogate_model_fits":fits,"generations":generations,"family_evaluated_counts":family_counts,"indicator_cache_stats":{"hits":prepared_train.indicator_cache_hits,"misses":prepared_train.indicator_cache_misses,"entries":len(prepared_train.indicator_cache),"limit":prepared_train.indicator_cache_limit},"seed":SEED,"algorithm":ALGORITHM,"preflight_summary":preflight_summary,"preflight_warning":preflight_gate_warning,"capability_gate":{"min_avg_tp_per_day":0.5,"min_trades":50,"min_win_rate_pct":25,"min_profit_factor":0.5,"blocking":False,"policy":"advisory only; all candidate families remain eligible and pilot results never terminate the requested search"},"contract":cfg,"target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,"avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":13,"risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5,"commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"entry_model":"next_candle_open","exit_model":"SL/TP only","max_positions":1,"loss_streak_resets_only_on_full_TP":True},"data":data_manifest,"splits":{"train":{"rows":len(train),"sha256":train_hash,"backtest_sha256":train_backtest_hash,"used_for_candidate_generation":True},"development":{"rows":len(dev),"sha256":dev_hash,"backtest_sha256":dev_backtest_hash,"used_for_selection_and_near_miss_ranking":True},"oos":{"rows":len(oos),"sha256":oos_hash,"backtest_sha256":oos_backtest_hash,"used_only_after_selection_frozen":True}},"development_passing_count":len(dev_pass),"development_near_miss_count":len(dev_near),"oos_evaluated_count":len(oos_results),"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"near_miss_shortfall":max(0,5-len(delivery)) if not validated else 0,"development_audit_failures":audit_failures,"exports":exports,"results":results,"selection_policy":"Train creates candidates; capability-evidence candidates (>=0.5 TP/day, >=50 trades, and WR>=25% or PF>=0.5) are prioritized for search steering but the pilot is advisory and never terminates search; Development freezes selection and ranks by the same capability tier then full criterion distance; OOS is only evaluated after selection is frozen and never used to rank/select.","reproducibility":"Primary and independent ledgers compared field-by-field at rel_tol=1e-10 and abs_tol=1e-8; standalone exports include exact hashes and auto-fetch 1-second windows only for ambiguous candles."}
     write(OUT/"report.json",report); write(PROGRESS,{"status":"completed" if search_complete else "partial_search_reported","candidate_search_complete":search_complete,"outcome":outcome,"candidate_search_complete":search_complete,"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"report":"research-results/report.json","strategy_zip":"research-results/validated_strategies.zip"})
     print("FINAL_REPORT "+json.dumps({"outcome":outcome,"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"full_dataset_sha256":full_hash,"train_sha256":train_hash,"development_sha256":dev_hash,"oos_sha256":oos_hash,"report_path":"research-results/report.json","zip_path":"research-results/validated_strategies.zip"},sort_keys=True),flush=True)
 def main():
