@@ -1,0 +1,21 @@
+{
+  "candidate_search_complete": false,
+  "evaluated_unique_candidates": 250,
+  "preflight_summary": {
+    "best_tp_per_day": 1.000007631315868,
+    "best_trade_count": 496,
+    "candidates_tp_per_day_ge_0_5": 69,
+    "evaluated_candidates": 250,
+    "promising_candidates": 0
+  },
+  "report": "research-results/report.json",
+  "requested_candidates": 500000,
+  "status": "preflight_gate_failed",
+  "archive_metadata": {
+    "archived_at_utc": "2026-10-20",
+    "classification": "LEGACY_RESULT_NOT_VALID_FOR_CURRENT_SOURCE",
+    "historical_commit": "e23880b0c5b5dd884e5714233dd83eda6f49d7d4",
+    "source_commit": "unknown-source",
+    "reason": "Historical preflight gate failed after pilot. This result predates the latest 40-family source and is retained only for audit/history."
+  }
+}
