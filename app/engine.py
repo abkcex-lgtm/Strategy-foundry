@@ -1,5 +1,6 @@
 from __future__ import annotations
 import hashlib, json, math, time
+from collections import OrderedDict
 from dataclasses import dataclass, asdict, replace
 from typing import Any
 import numpy as np
@@ -414,7 +415,9 @@ def _resolve_execution_interval(side: str, execution_frame: pd.DataFrame, start_
 
 class _PreparedBacktestData:
     """One-time validated immutable market-data view shared by candidate backtests."""
-    __slots__ = ("source_frame", "frame", "base_interval", "report", "data_hash")
+    __slots__ = ("source_frame", "frame", "base_interval", "report", "data_hash",
+                 "indicator_cache", "indicator_cache_hits", "indicator_cache_misses",
+                 "indicator_cache_limit")
     def __init__(self, frame):
         df=frame.copy().reset_index(drop=True)
         required=["open_time","open","high","low","close","volume"]
@@ -440,6 +443,31 @@ class _PreparedBacktestData:
         self.base_interval=base_interval
         self.report=report
         self.data_hash=sha256_bytes(df.to_csv(index=False,float_format="%.12g").encode())
+        # Stop distance and trade direction do not alter signal/ATR arrays. A
+        # bounded LRU reuses exact indicator results across those genome variants.
+        self.indicator_cache=OrderedDict()
+        self.indicator_cache_hits=0
+        self.indicator_cache_misses=0
+        self.indicator_cache_limit=128
+
+    def indicator_arrays(self, spec):
+        key=(spec.fast,spec.slow,spec.atr_period,spec.family,spec.context_filter,
+             spec.confirmation_filter,spec.secondary_family,spec.signal_composition)
+        cached=self.indicator_cache.get(key)
+        if cached is not None:
+            self.indicator_cache_hits+=1
+            self.indicator_cache.move_to_end(key)
+            return cached
+        self.indicator_cache_misses+=1
+        x=indicators(self.frame,spec)
+        arrays=tuple(np.asarray(x[column].to_numpy(copy=True),dtype=dtype)
+                     for column,dtype in (("atr",np.float64),("long_signal",np.bool_),("short_signal",np.bool_)))
+        for array in arrays:
+            array.setflags(write=False)
+        self.indicator_cache[key]=arrays
+        if len(self.indicator_cache)>self.indicator_cache_limit:
+            self.indicator_cache.popitem(last=False)
+        return arrays
 
 
 def prepare_backtest_data(frame):
@@ -480,26 +508,27 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
             base_interval=int(df.open_time.diff().dropna().mode().iloc[0])
             if base_interval % 1000:
                 raise DataIntegrityError("Base candle interval cannot be resolved with 1-second candles")
-    x=indicators(df,spec); balance=float(cfg["initial_balance"]); ledger=[]; streak=0; max_streak=0; open_position=None
-    # Visit only actual signal candles instead of scanning every row in Python.
-    # Indicator calculations remain full-resolution and causal; this is a
-    # semantics-preserving execution optimization, not candle subsampling.
-    open_times=x["open_time"].to_numpy(dtype=np.int64)
-    open_values=x["open"].to_numpy(dtype=float)
-    high_values=x["high"].to_numpy(dtype=float)
-    low_values=x["low"].to_numpy(dtype=float)
-    signal_mask=x["long_signal"].to_numpy(dtype=bool) | x["short_signal"].to_numpy(dtype=bool)
+    atr_values,long_signal_values,short_signal_values=prepared.indicator_arrays(spec)
+    balance=float(cfg["initial_balance"]); ledger=[]; streak=0; max_streak=0; open_position=None
+    # OHLCV arrays come from the fully validated shared frame. Signal/ATR arrays
+    # are cached by every signal-affecting parameter, but not stop/direction.
+    open_times=df["open_time"].to_numpy(dtype=np.int64)
+    open_values=df["open"].to_numpy(dtype=float)
+    high_values=df["high"].to_numpy(dtype=float)
+    low_values=df["low"].to_numpy(dtype=float)
+    close_values=df["close"].to_numpy(dtype=float)
+    signal_mask=long_signal_values | short_signal_values
     signal_positions=np.flatnonzero(signal_mask)
     warmup=max(spec.slow,spec.atr_period)
-    signal_positions=signal_positions[(signal_positions>=warmup)&(signal_positions<len(x)-1)]
+    signal_positions=signal_positions[(signal_positions>=warmup)&(signal_positions<len(df)-1)]
     signal_cursor=0
     while signal_cursor < len(signal_positions):
         i=int(signal_positions[signal_cursor]); signal_cursor+=1
-        row=x.iloc[i]
-        if not np.isfinite(row.atr) or row.atr<=0: continue
-        side="LONG" if bool(row.long_signal) else ("SHORT" if bool(row.short_signal) else None)
+        atr=float(atr_values[i])
+        if not np.isfinite(atr) or atr<=0: continue
+        side="LONG" if bool(long_signal_values[i]) else ("SHORT" if bool(short_signal_values[i]) else None)
         if side is None or (spec.direction=="long" and side=="SHORT") or (spec.direction=="short" and side=="LONG"): continue
-        entry_i=i+1; entry=float(open_values[entry_i]); dist=float(row.atr*spec.stop_atr)
+        entry_i=i+1; entry=float(open_values[entry_i]); dist=float(atr*spec.stop_atr)
         stop=entry-dist if side=="LONG" else entry+dist
         risk_budget=_risk_budget(cfg,balance if cfg["compound"] or cfg["risk_mode"]=="percent_equity" else cfg["initial_balance"])
         if risk_budget<=0: i+=1; continue
@@ -511,7 +540,7 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
         if qty<=0: i+=1; continue
         exit_i=exit_price=exit_time=None; reason=None; resolution_status="resolved_base_ohlc"
         if exec_df is not None:
-            for j in range(entry_i,len(x)):
+            for j in range(entry_i,len(df)):
                 try:
                     resolution=_resolve_execution_interval(side,exec_df,int(open_times[j]),base_interval,stop,target)
                 except DataIntegrityError as exc:
@@ -546,7 +575,7 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
                     reason,exit_price=resolution; exit_i=j; exit_time=int(open_times[j])
                     resolution_status="resolved_base_ohlc"
         if exit_i is None:
-            last_price=float(x.close.iloc[-1])
+            last_price=float(close_values[-1])
             unrealized_gross=(last_price-entry)*qty*(1 if side=="LONG" else -1)
             open_position={"signal_time":int(open_times[i]),"entry_time":int(open_times[entry_i]),"direction":side,
                            "entry_price":entry,"stop_loss":stop,"take_profit":target,"quantity":qty,"risk_budget":risk_budget,
@@ -558,7 +587,7 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
         net=gross-entry_cost-exit_cost; balance+=net
         if reason=="TP": streak=0
         else: streak+=1; max_streak=max(max_streak,streak)
-        ledger.append({"trade_id":len(ledger)+1,"signal_time":int(open_times[i]),"entry_time":int(open_times[entry_i]),"exit_time":int(exit_time),"direction":side,"signal_price":float(row.close),"entry_price":entry,"stop_loss":stop,"take_profit":target,"exit_price":float(exit_price),"exit_reason":reason,"quantity":qty,"risk_budget":risk_budget,"gross_pnl":gross,"entry_cost":entry_cost,"exit_cost":exit_cost,"fees_slippage":entry_cost+exit_cost,"net_pnl":net,"balance_after":balance,"loss_streak_after":streak,"resolution_status":resolution_status,"execution_ambiguity":resolution_status=="unresolved_as_loss"})
+        ledger.append({"trade_id":len(ledger)+1,"signal_time":int(open_times[i]),"entry_time":int(open_times[entry_i]),"exit_time":int(exit_time),"direction":side,"signal_price":float(close_values[i]),"entry_price":entry,"stop_loss":stop,"take_profit":target,"exit_price":float(exit_price),"exit_reason":reason,"quantity":qty,"risk_budget":risk_budget,"gross_pnl":gross,"entry_cost":entry_cost,"exit_cost":exit_cost,"fees_slippage":entry_cost+exit_cost,"net_pnl":net,"balance_after":balance,"loss_streak_after":streak,"resolution_status":resolution_status,"execution_ambiguity":resolution_status=="unresolved_as_loss"})
         signal_cursor=int(np.searchsorted(signal_positions,exit_i+1,side="left"))
     wins=[t for t in ledger if t["exit_reason"]=="TP" and t["net_pnl"]>0]
     gp=sum(max(0,t["net_pnl"]) for t in ledger); gl=abs(sum(min(0,t["net_pnl"]) for t in ledger))
@@ -950,7 +979,10 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             "failed_candidates":errors,"duplicate_genomes_skipped":duplicate_genomes,
             "seed":seed,"algorithm":algorithm,"generations":generation,"surrogate_model_fits":surrogate_fit_count,
             "family_evaluated_counts":family_counts,"contract":cfg,"all_passing":all_passing,
-            "prior_candidates_used":len(prior_rows),"preflight_summary":preflight_summary,
+            "prior_candidates_used":len(prior_rows),"preflight_summary":preflight_summary,            "indicator_cache_stats":{"hits":prepared_context.indicator_cache_hits,
+                                     "misses":prepared_context.indicator_cache_misses,
+                                     "entries":len(prepared_context.indicator_cache),
+                                     "limit":prepared_context.indicator_cache_limit},
             "evaluated_genome_hashes":[genome_hash(key) for key in evaluated.keys()],
             "independent_audit_failures":audit_failures,
             "results":selected,"requested_near_misses":0 if all_passing else 5,

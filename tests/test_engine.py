@@ -61,6 +61,20 @@ def test_search_validates_shared_market_data_once_for_all_candidates(monkeypatch
     assert calls["n"]==1
 
 
+
+def test_indicator_cache_reuses_signal_arrays_across_stop_and_direction_variants():
+    df=candles(800)
+    prepared=prepare_backtest_data(df)
+    long_spec=StrategySpec(fast=5,slow=18,atr_period=7,stop_atr=1.0,direction="long")
+    short_spec=StrategySpec(fast=5,slow=18,atr_period=7,stop_atr=2.5,direction="short")
+    first=prepared.indicator_arrays(long_spec)
+    second=prepared.indicator_arrays(short_spec)
+    assert all((a==b).all() for a,b in zip(first,second))
+    assert prepared.indicator_cache_hits==1
+    assert prepared.indicator_cache_misses==1
+    assert prepared.indicator_cache_limit==128
+
+
 def test_valid_data_report():
     r=validate_ohlcv(candles())
     assert r['rows']==300 and r['gap_count']==0
