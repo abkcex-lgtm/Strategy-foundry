@@ -31,3 +31,22 @@ def test_capability_evidence_outranks_low_sample_near_miss():
         },
     }
     assert near_key(active_candidate) < near_key(sparse_high_pf)
+
+
+def test_capability_pilot_is_advisory_and_never_blocks_requested_search():
+    from research.run_factory import capability_pilot_warning
+
+    warning = capability_pilot_warning({
+        "capability_evidence_candidates": 0,
+        "promising_candidates": 0,
+    }, 500000)
+    assert warning is not None
+    assert "advisory only" in warning
+    assert capability_pilot_warning({
+        "capability_evidence_candidates": 2,
+        "promising_candidates": 0,
+    }, 500000) is None
+    assert capability_pilot_warning({
+        "capability_evidence_candidates": 0,
+        "promising_candidates": 0,
+    }, 100) is None
