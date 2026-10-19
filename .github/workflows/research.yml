@@ -30,6 +30,7 @@ jobs:
       # Audited full-research launch requested by project owner; tests run before data/search.
       # Benchmark parity is checked in the research runner.
       # Latest smoke includes standalone-template parity tests for all 40 families.
+      # UI family controls are checked against the engine family registry by tests.
       # The research runner emits SEARCH_HEARTBEAT every 25 unique candidate evaluations
       # so operators can see continuous progress instead of waiting for a whole batch.
       FOUNDRY_CANDIDATES: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '500000' || github.event_name == 'push' && '1000' || github.event.inputs.candidates || '500000' }}
