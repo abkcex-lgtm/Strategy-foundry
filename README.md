@@ -10,7 +10,7 @@ pinned: false
 
 # Strategy Foundry
 
-Application release: 0.9.7
+Application release: 0.9.9
 
 Research-engine line: 0.9.9 (engine-generation line; not the API/UI release version)
 
@@ -32,6 +32,14 @@ The Settings panel sends these values into backtesting and candidate search, and
 Default preset preserves the agreed starting profile: $1,000 initial balance; $10 fixed risk; R:R 3.5; commission 0.04% + slippage 0.02% per side (0.06% total); one position; next-candle-open entry; SL/TP-only exit; target measured net of modeled costs. The preset is editable, not a factory-wide restriction. Each acceptance filter (WR, PF, TP/day, and loss streak) can independently be enabled or disabled; disabled filters do not affect pass/fail or near-miss distance. The active values and enabled flags are included in the run fingerprint.
 
 The net target model sizes quantity so modeled SL net loss equals the selected risk budget and TP net gain equals risk budget × R:R, assuming the configured percentage cost model. Real slippage is not a constant in live markets; users must select realistic estimates and independently validate them. Management toggles that are not implemented are rejected fail-closed rather than silently ignored.
+
+## Equal-weight target selection (release 0.9.9)
+
+When multiple target filters are enabled, each active performance target has equal influence on near-miss ranking: each target's gap is normalized by its configured threshold, then the arithmetic mean of active target distances is used. The default four targets are win rate, profit factor, average net full TPs/day, and maximum consecutive losses. No one of these four is a hidden primary objective; disabled target filters are omitted from the score and pass/fail checks.
+
+Data integrity, independent ledger replay, no open position at the end, and minimum evidence are separate eligibility gates, not extra weighted performance criteria. A strategy is not certified from a sparse sample: at least 100 closed trades are required, and when TP/day is enabled the observed trade count must also be compatible with the requested TP/day rate and observed win rate. If TP/day is disabled, it does not silently steer the evidence gate beyond the 100-trade floor.
+
+The optimizer's surrogate target, final candidate ranking, API near-miss ranking, and research-runner ranking must all use this same policy. The four target weights remain equal; OOS stays untouched until the candidate pool is frozen.
 
 ## Principles
 
