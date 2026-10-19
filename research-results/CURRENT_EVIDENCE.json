@@ -10,5 +10,39 @@
   "legacy_progress_archive": "research-results/archive/legacy-source-4a33354d92d2c38c571ca30b3296dd4a24f63fbb/progress.json",
   "legacy_source_commit": "4a33354d92d2c38c571ca30b3296dd4a24f63fbb",
   "current_source_result_verified": false,
-  "note": "Do not interpret the existing top-level report.json/progress.json as evidence for current source until a fresh workflow artifact or report proves source_commit and requested candidate count. Legacy copies were archived, not deleted. Do not clear or overwrite live SQLite history."
+  "note": "The top-level report.json and progress.json are historical/mixed-run artifacts and are not evidence for the current 40-family source. Several prior research commits were inspected; all reported source commits differ from the current requested source. Copies of the readable historical report/progress pairs are preserved under archive/. Do not clear or overwrite live SQLite history. A fresh result must prove its exact source_commit, requested/evaluated counts, test gate, and terminal status before certification.",
+  "historical_runs_archived": [
+    {
+      "archive": "research-results/archive/legacy-source-4a33354d92d2c38c571ca30b3296dd4a24f63fbb/",
+      "source_commit": "4a33354d92d2c38c571ca30b3296dd4a24f63fbb",
+      "requested": 1000,
+      "evaluated": 1000,
+      "status": "completed",
+      "valid_for_current_source": false
+    },
+    {
+      "archive": "research-results/archive/legacy-run-17000-partial/",
+      "source_commit": "72ee70a81db0df9dd1a7b2e25f9ebf97ae9563b6",
+      "requested": 500000,
+      "evaluated": 17000,
+      "status": "partial_search_reported",
+      "valid_for_current_source": false
+    },
+    {
+      "archive": "research-results/archive/legacy-run-preflight-failed-250/",
+      "source_commit": "24b09a44a6f156721462af58d6674ec4add208cc",
+      "requested": 500000,
+      "evaluated": 250,
+      "status": "preflight_gate_failed",
+      "valid_for_current_source": false
+    },
+    {
+      "archive": "research-results/archive/legacy-run-134250/",
+      "source_commit": "5c135280040ebfd2ccdbcc4d8fcba1442bfb590d",
+      "requested": 500000,
+      "evaluated": 134250,
+      "status": "partial_search_reported",
+      "valid_for_current_source": false
+    }
+  ]
 }
