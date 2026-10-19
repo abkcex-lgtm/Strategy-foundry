@@ -661,7 +661,8 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
     gp=sum(max(0,t["net_pnl"]) for t in ledger); gl=abs(sum(min(0,t["net_pnl"]) for t in ledger))
     span_days=max((int(df.open_time.iloc[-1])-int(df.open_time.iloc[0]))/86400000,1/1440)
     wr=100*len(wins)/len(ledger) if ledger else 0.0; pf=gp/gl if gl else (math.inf if gp else 0.0); tp_day=len(wins)/span_days
-    passes=(not cfg["use_min_win_rate"] or wr>cfg["min_win_rate_pct"]) and (not cfg["use_min_profit_factor"] or pf>cfg["min_profit_factor"]) and (not cfg["use_min_tp_per_day"] or tp_day>=cfg["min_tp_per_day"]) and (not cfg["use_max_consecutive_losses"] or max_streak<=cfg["max_consecutive_losses"]) and open_position is None
+    evidence_metrics={"span_days":span_days,"trades":len(ledger),"win_rate_pct":wr,"avg_net_tp_per_day":tp_day}
+    passes=(not cfg["use_min_win_rate"] or wr>cfg["min_win_rate_pct"]) and (not cfg["use_min_profit_factor"] or pf>cfg["min_profit_factor"]) and (not cfg["use_min_tp_per_day"] or tp_day>=cfg["min_tp_per_day"]) and (not cfg["use_max_consecutive_losses"] or max_streak<=cfg["max_consecutive_losses"]) and open_position is None and _goal_activity_evidence(evidence_metrics,cfg)
     if execution_frames_used:
         combined_execution=pd.concat(execution_frames_used,ignore_index=True).drop_duplicates(subset=["open_time"]).sort_values("open_time").reset_index(drop=True)
         execution_hash=sha256_bytes(combined_execution.to_csv(index=False,float_format="%.12g").encode())
@@ -689,6 +690,9 @@ def _goal_activity_evidence(metrics: dict[str, Any], cfg: dict[str, Any]) -> boo
     target_tp=float(cfg.get("min_tp_per_day", 3.0)) if cfg.get("use_min_tp_per_day", True) else 3.0
     if span_days <= 0.0 or trades < 100:
         return False
+    # Disabled TP/day must not silently steer or block selection.
+    if not cfg.get("use_min_tp_per_day", True):
+        return True
     required=span_days*target_tp/max(wr, 0.01)
     return trades >= math.ceil(required)
 
@@ -719,10 +723,13 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
         # among candidates already under the limit.
         distances["max_consecutive_losses"]=max(0.0,streak)/limit
         if streak>int(cfg["max_consecutive_losses"]): failed.append("max_consecutive_losses")
+    # Evidence sufficiency is an eligibility gate, not a fifth weighted target.
+    if not _goal_activity_evidence(metrics,cfg):
+        failed.append("insufficient_activity_evidence")
     if int(metrics.get("open_positions_at_end",0))>0:
-        distances["open_positions_at_end"]=1.0
         failed.append("open_positions_at_end")
-    return sum(distances.values()), failed, distances
+    # Equal arithmetic mean: every enabled target contributes exactly 1/N.
+    return (sum(distances.values()) / len(distances) if distances else 0.0), failed, distances
 
 
 def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="surrogate_genetic", search_space=None, progress_callback=None, excluded_genome_hashes=None, prior_candidates=None, prepared_context=None):
@@ -827,16 +834,12 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction,spec.context_filter,spec.confirmation_filter,spec.secondary_family,spec.signal_composition)
 
     def fitness(row):
-        # First require minimum evidence of useful activity; otherwise the
-        # distance metric can prefer 5-trade samples with a perfect PF over
-        # candidates that actually approach the binding TP/day requirement.
-        # Within that evidence tier, balance all hard criteria by distance.
-        m=row["metrics"]; pf=math.inf if m["profit_factor"] is None else float(m["profit_factor"])
-        tp_day=float(m["avg_net_tp_per_day"])
-        tp_gap=max(0.0,cfg["min_tp_per_day"]-tp_day)/max(cfg["min_tp_per_day"],1.0) if cfg["use_min_tp_per_day"] else 0.0
-        return (not m["passes_all_targets"],not _goal_activity_evidence(m,cfg),row["distance"],
-                -min(pf,1000.0),-min(float(m["win_rate_pct"]),100.0),
-                int(m["max_consecutive_losses"]),tp_gap,-min(tp_day,1000.0),-int(m["trades"]))
+        # Evidence/pass status are eligibility gates, separate from the score.
+        # The four selectable performance criteria are ranked only by their
+        # equal-weight normalized distance, with no metric-specific tie-break.
+        m=row["metrics"]
+        return (not m["passes_all_targets"], not _goal_activity_evidence(m,cfg),
+                row["distance"], -int(m["trades"]))
 
     def feature_vector(spec):
         vals=[1.0 if spec.family==f else 0.0 for f in all_families]
@@ -850,16 +853,11 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
 
     def surrogate_target(row):
         m=row["metrics"]
-        pf=10.0 if m["profit_factor"] is None else min(10.0,float(m["profit_factor"]))
-        tp_gap=max(0.0,cfg["min_tp_per_day"]-float(m["avg_net_tp_per_day"]))/max(cfg["min_tp_per_day"],1.0) if cfg["use_min_tp_per_day"] else 0.0
-        # Candidates without basic activity evidence receive a substantial
-        # steering penalty, but remain eligible for exploration.
-        capability_penalty=0.0 if _goal_activity_evidence(m,cfg) else 2.0
-        return (float(row["distance"])+(0.0 if m["passes_all_targets"] else 1.0)
-                +capability_penalty+0.10*tp_gap
-                +min(float(m["max_consecutive_losses"]),100.0)*0.01
-                -min(float(m["win_rate_pct"]),100.0)*0.001
-                -min(float(m["avg_net_tp_per_day"]),100.0)*0.001-pf*0.01)
+        # Learn the same equal-weight score as final ranking. Evidence and
+        # pass status are separate penalties, not hidden metric-specific weights.
+        evidence_penalty=0.0 if _goal_activity_evidence(m,cfg) else 2.0
+        pass_penalty=0.0 if m["passes_all_targets"] else 1.0
+        return float(row["distance"])+evidence_penalty+pass_penalty
 
     last_model_fit_at=-1
     surrogate_fit_count=0
