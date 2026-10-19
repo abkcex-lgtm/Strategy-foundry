@@ -1,6 +1,14 @@
 {
-  "dataset_sha256": "f2c0bc9ba360a319f8b475322e111b1cbd9d1696183ed38d416e52b266cb22bb",
+  "candidate_search_complete": false,
+  "evaluated_unique_candidates": 250,
+  "preflight_summary": {
+    "best_tp_per_day": 1.000007631315868,
+    "best_trade_count": 496,
+    "candidates_tp_per_day_ge_0_5": 69,
+    "evaluated_candidates": 250,
+    "promising_candidates": 0
+  },
+  "report": "research-results/report.json",
   "requested_candidates": 500000,
-  "rows": 263520,
-  "status": "data_validated"
+  "status": "preflight_gate_failed"
 }
