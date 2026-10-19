@@ -2,6 +2,13 @@
 
 > This file is the single handoff source for any new ChatGPT conversation, contributor, or coding agent. Read this before changing code. The `main` branch is the canonical product line; old feature/research branches are historical work unless explicitly reopened by a current issue or pull request.
 
+## Release 0.9.9 objective policy (2026-10-19)
+
+- Latest engineering intent: each active performance criterion (WR, PF, net full TPs/day, maximum consecutive losses) has equal weight via the arithmetic mean of normalized target distances. There are no per-metric hidden ranking bonuses or tie-break preferences.
+- Separate eligibility gates: independent ledger match, data integrity, no open position at end, and sufficient sample evidence. Minimum evidence is 100 closed trades; with TP/day enabled, observed trade count must also support the configured TP/day goal at the observed win rate. When TP/day is disabled, it must not steer/block selection beyond the 100-trade floor.
+- Code changes in engine, API ranking, research runner, tests, README, docs, changelog, VERSION, and UI are intended for release 0.9.9. Check latest CI and live /api/health before calling it deployed. Do not claim a new real-data search has run unless a fresh report/artifact proves it.
+- Preserve existing SQLite data and prior run history. Before publishing/rebuilding, verify the hosting platform's durable storage behavior or establish a verified backup/restore path. Never disable live-trading safety (must remain false).
+
 ## Current source of truth
 
 - Repository: https://github.com/abkcex-lgtm/Strategy-foundry
