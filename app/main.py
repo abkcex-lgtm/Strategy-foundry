@@ -45,7 +45,7 @@ def _period_label(frame:pd.DataFrame, note:str='') -> str:
     suffix=f' ({note})' if note else ''
     return f'{first} to {last}{suffix}'
 
-app=FastAPI(title='Strategy Foundry API',version='0.9.7',description='Server-side strategy research and simulation only; never sends live orders.')
+app=FastAPI(title='Strategy Foundry API',version='0.9.8',description='Server-side strategy research and simulation only; never sends live orders.')
 app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')
 DATASETS:dict[str,pd.DataFrame]=load_datasets()
 DATASET_METADATA:dict[str,dict[str,Any]]=load_dataset_metadata()
@@ -77,9 +77,9 @@ class AIChatRequest(BaseModel):
     history:list[dict[str,str]]=Field(default_factory=list)
 
 @app.get('/',response_class=HTMLResponse)
-def home(): return (ROOT/'static'/'index.html').read_text(encoding='utf-8')
+def home(): return HTMLResponse((ROOT/'static'/'index.html').read_text(encoding='utf-8'), headers={'Cache-Control':'no-store, no-cache, must-revalidate, max-age=0','Pragma':'no-cache','Expires':'0'})
 @app.get('/api/health')
-def health(): return {'status':'ok','service':'strategy-foundry','version':'0.9.7','execution':'server-side','live_trading':False,'persistent_store':'sqlite','storage':storage_status(),'loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'persistent_search_history':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','search_history_endpoint':'/api/search-history','persistent_job_status':True,'batch_search_max_candidates':500000,'global_genome_deduplication':True,'batch_checkpoint_resume':True,'question_first_assistant_routing':True,'automatic_1s_ambiguity_resolution':True,'fail_closed_execution_ambiguity':True}}
+def health(): return {'status':'ok','service':'strategy-foundry','version':'0.9.8','execution':'server-side','live_trading':False,'persistent_store':'sqlite','storage':storage_status(),'loaded_datasets':len(DATASETS),'loaded_runs':len(RUNS),'features':{'tracked_binance_download_jobs':True,'tracked_search_jobs':True,'persistent_search_history':True,'download_progress_endpoint':'/api/jobs/{job_id}','search_job_endpoint':'/api/search-jobs/{dataset_id}','search_history_endpoint':'/api/search-history','persistent_job_status':True,'batch_search_max_candidates':500000,'global_genome_deduplication':True,'batch_checkpoint_resume':True,'question_first_assistant_routing':True,'automatic_1s_ambiguity_resolution':True,'fail_closed_execution_ambiguity':True}}
 @app.get('/api/contract')
 def contract():
     from .engine import normalize_contract
