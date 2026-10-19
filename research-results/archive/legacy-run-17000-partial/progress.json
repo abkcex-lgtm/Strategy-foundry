@@ -1,0 +1,18 @@
+{
+  "candidate_search_complete": false,
+  "evaluated_unique_candidates": 17000,
+  "outcome": "INCOMPLETE_SEARCH_NO_CERTIFIED_STRATEGY",
+  "report": "research-results/report.json",
+  "requested_candidates": 500000,
+  "returned_candidate_count": 5,
+  "status": "partial_search_reported",
+  "strategy_zip": "research-results/validated_strategies.zip",
+  "validated_strategy_count": 0,
+  "archive_metadata": {
+    "archived_at_utc": "2026-10-20",
+    "classification": "LEGACY_RESULT_NOT_VALID_FOR_CURRENT_SOURCE",
+    "historical_commit": "2c8c4c70ade4b3c608b6e62b52fe13faf4c69dbe",
+    "source_commit": "unknown-source",
+    "reason": "Historical partial 500k search, 17000 evaluated. This result predates the latest 40-family source and is retained only for audit/history."
+  }
+}
