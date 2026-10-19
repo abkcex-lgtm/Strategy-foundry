@@ -1,0 +1,204 @@
+{
+  "algorithm": "surrogate_genetic",
+  "candidate_search_complete": false,
+  "completed_batches": 1,
+  "contract": {
+    "break_even_enabled": false,
+    "commission_pct_per_side": 0.04,
+    "compound": false,
+    "entry_model": "next_candle_open",
+    "exit_model": "sl_tp_only",
+    "initial_balance": 1000,
+    "max_consecutive_losses": 13,
+    "max_positions": 1,
+    "min_profit_factor": 1,
+    "min_tp_per_day": 3,
+    "min_win_rate_pct": 40,
+    "partial_exit_enabled": false,
+    "profile_name": "ETHUSDT fixed-risk 3.5R (editable preset)",
+    "reward_risk": 3.5,
+    "risk_mode": "fixed_usd",
+    "risk_pct": 1,
+    "risk_usd": 10,
+    "slippage_pct_per_side": 0.02,
+    "symbol": "ETHUSDT",
+    "target_mode": "net_rr",
+    "time_exit_enabled": false,
+    "trailing_stop_enabled": false,
+    "use_max_consecutive_losses": true,
+    "use_min_profit_factor": true,
+    "use_min_tp_per_day": true,
+    "use_min_win_rate": true
+  },
+  "data": {
+    "csv_sha256": "f2c0bc9ba360a319f8b475322e111b1cbd9d1696183ed38d416e52b266cb22bb",
+    "dataset_sha256": "f2c0bc9ba360a319f8b475322e111b1cbd9d1696183ed38d416e52b266cb22bb",
+    "interval": "1m",
+    "month_rows": {
+      "2026-04": 43200,
+      "2026-05": 44640,
+      "2026-06": 43200,
+      "2026-07": 44640,
+      "2026-08": 44640,
+      "2026-09": 43200
+    },
+    "monthly_archives": [
+      {
+        "archive_sha256": "fd01f08f331a0dcb5d89c718afb199f7cda63f43228b72ddda0bdd08bfd527c7",
+        "month": "2026-04",
+        "rows": 43200,
+        "url": "https://data.binance.vision/data/futures/um/monthly/klines/ETHUSDT/1m/ETHUSDT-1m-2026-04.zip"
+      },
+      {
+        "archive_sha256": "9710b3d1e350bef5bf31b8d1531c5801d35f963d223d0a42e73ae86ddd376e92",
+        "month": "2026-05",
+        "rows": 44640,
+        "url": "https://data.binance.vision/data/futures/um/monthly/klines/ETHUSDT/1m/ETHUSDT-1m-2026-05.zip"
+      },
+      {
+        "archive_sha256": "3b771e114b494805ac4cc677b34befb7e5f332bf5bd3a8a368cd21d65cd99cba",
+        "month": "2026-06",
+        "rows": 43200,
+        "url": "https://data.binance.vision/data/futures/um/monthly/klines/ETHUSDT/1m/ETHUSDT-1m-2026-06.zip"
+      },
+      {
+        "archive_sha256": "5c98ad0cfa152fbe08df59838ead7c8bbfa433af943bbfb4d082626ebee2d83e",
+        "month": "2026-07",
+        "rows": 44640,
+        "url": "https://data.binance.vision/data/futures/um/monthly/klines/ETHUSDT/1m/ETHUSDT-1m-2026-07.zip"
+      },
+      {
+        "archive_sha256": "038b412935c3349e95b4abe3e9cec8a7fd521d16ce73fff3c2f92d605b252b9e",
+        "month": "2026-08",
+        "rows": 44640,
+        "url": "https://data.binance.vision/data/futures/um/monthly/klines/ETHUSDT/1m/ETHUSDT-1m-2026-08.zip"
+      },
+      {
+        "archive_sha256": "c85c7ec631fa7fe3a90c30e4ef6a76aeac0b88be895872388d87a6a8fd3d2892",
+        "month": "2026-09",
+        "rows": 43200,
+        "url": "https://data.binance.vision/data/futures/um/monthly/klines/ETHUSDT/1m/ETHUSDT-1m-2026-09.zip"
+      }
+    ],
+    "source": "Binance USD-M Vision monthly archives",
+    "symbol": "ETHUSDT",
+    "validation": {
+      "first_open_time": 1775001600000,
+      "gap_count": 0,
+      "gaps": [],
+      "last_open_time": 1790812740000,
+      "rows": 263520
+    }
+  },
+  "development_audit_failures": [],
+  "development_near_miss_count": 0,
+  "development_passing_count": 0,
+  "evaluated_unique_candidates": 250,
+  "exports": [],
+  "failed_candidate_evaluations": 7,
+  "family_evaluated_counts": {
+    "adx_trend": 6,
+    "atr_squeeze_breakout": 6,
+    "bollinger_reversion": 12,
+    "channel_breakout": 8,
+    "ema_crossover": 7,
+    "ema_pullback": 6,
+    "engulfing_reversal": 11,
+    "failed_breakout_reversal": 11,
+    "inside_bar_breakout": 5,
+    "keltner_breakout": 3,
+    "macd_crossover": 5,
+    "micro_double_bottom": 3,
+    "micro_double_top": 4,
+    "momentum_breakout": 21,
+    "obv_trend": 6,
+    "pivot_reversal": 6,
+    "range_compression_breakout": 7,
+    "range_expansion_breakout": 7,
+    "roc_momentum": 4,
+    "rsi_reversion": 4,
+    "stochastic_reversion": 5,
+    "support_resistance_rejection": 6,
+    "swing_structure_break": 35,
+    "three_bar_momentum": 3,
+    "trend_exhaustion_reversal": 21,
+    "volatility_regime_breakout": 9,
+    "volume_breakout": 5,
+    "volume_climax_reversal": 12,
+    "vwap_reclaim": 5,
+    "wick_rejection": 7
+  },
+  "generations": 193,
+  "indicator_cache_stats": {
+    "entries": 128,
+    "hits": 8,
+    "limit": 128,
+    "misses": 254
+  },
+  "near_miss_shortfall": 5,
+  "oos_evaluated_count": 0,
+  "outcome": "PREFLIGHT_GATE_FAILED_NO_PROMISING_CANDIDATE",
+  "preflight_gate": {
+    "interpretation": "Fail-fast evidence threshold only; not a proof of impossibility and not a strategy certificate.",
+    "passed": false,
+    "pilot_candidates": 250,
+    "reason": "The 250-candidate pilot found no candidate with at least 0.5 net TP/day, 30% win rate, PF >= 0.7, and at least 50 trades. This is a fail-fast capability warning, not proof that no strategy exists.",
+    "summary": {
+      "best_tp_per_day": 1.000007631315868,
+      "best_trade_count": 496,
+      "candidates_tp_per_day_ge_0_5": 69,
+      "evaluated_candidates": 250,
+      "promising_candidates": 0
+    }
+  },
+  "reproducibility": "Data and split hashes are recorded; pilot candidates are scored on TRAIN only; no strategy is certified.",
+  "requested_candidates": 500000,
+  "results": [],
+  "returned_candidate_count": 0,
+  "schema_version": 1,
+  "seed": 42,
+  "selection_policy": "No long search or OOS selection was performed because the representative pilot failed the predeclared capability gate.",
+  "source_commit": "24b09a44a6f156721462af58d6674ec4add208cc",
+  "splits": {
+    "development": {
+      "backtest_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
+      "rows": 44640,
+      "sha256": "ff8e235e0e08a12049fa9f84ff5726e591bd4eb1ba0e16ea849e914286853f96",
+      "used_for_candidate_generation": false
+    },
+    "oos": {
+      "rows": 87840,
+      "sha256": "6bc7247d96add23519c7034b9ee5d18562076d1a540105ff43d8f58b43f897d6",
+      "used_for_candidate_generation": false
+    },
+    "train": {
+      "backtest_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
+      "rows": 131040,
+      "sha256": "041ceeb9f28fb2ca14078bc92b7e677d12c7f4ebb538239bf2f87ce7bc007af4",
+      "used_for_candidate_generation": true
+    }
+  },
+  "surrogate_model_fits": 1,
+  "target_criteria": {
+    "avg_net_tp_per_day_at_least": 3,
+    "commission_pct_per_side": 0.04,
+    "entry_model": "next_candle_open",
+    "exit_model": "SL/TP only",
+    "initial_balance": 1000,
+    "max_consecutive_losses_at_most": 13,
+    "max_positions": 1,
+    "net_reward_risk": 3.5,
+    "profit_factor_strictly_greater_than": 1,
+    "risk_usd_fixed": 10,
+    "slippage_pct_per_side": 0.02,
+    "win_rate_pct_strictly_greater_than": 40
+  },
+  "validated_strategy_count": 0,
+  "archive_metadata": {
+    "archived_at_utc": "2026-10-20",
+    "classification": "LEGACY_RESULT_NOT_VALID_FOR_CURRENT_SOURCE",
+    "historical_commit": "e23880b0c5b5dd884e5714233dd83eda6f49d7d4",
+    "source_commit": "24b09a44a6f156721462af58d6674ec4add208cc",
+    "reason": "Historical preflight gate failed after pilot. This result predates the latest 40-family source and is retained only for audit/history."
+  }
+}
