@@ -75,6 +75,21 @@ def test_indicator_cache_reuses_signal_arrays_across_stop_and_direction_variants
     assert prepared.indicator_cache_limit==128
 
 
+def test_indicator_cache_memory_budget_scales_down_for_full_reference_dataset():
+    from app.engine import (
+        INDICATOR_CACHE_BUDGET_BYTES,
+        INDICATOR_BYTES_PER_CANDLE,
+        _indicator_cache_limit_for_rows,
+    )
+
+    full_dataset_rows = 263520
+    limit = _indicator_cache_limit_for_rows(full_dataset_rows)
+
+    assert 1 <= limit < 128
+    assert limit * full_dataset_rows * INDICATOR_BYTES_PER_CANDLE <= INDICATOR_CACHE_BUDGET_BYTES
+    assert limit == 6
+    assert _indicator_cache_limit_for_rows(131040) == 12
+
 
 def test_preflight_capability_evidence_is_weaker_than_final_acceptance(monkeypatch):
     import hashlib
