@@ -678,17 +678,34 @@ def _capability_evidence(metrics: dict[str, Any]) -> bool:
             and (float(metrics.get("win_rate_pct",0.0))>=25.0 or pf>=0.5))
 
 
+def _goal_activity_evidence(metrics: dict[str, Any], cfg: dict[str, Any]) -> bool:
+    """Reject samples too small to substantiate the requested full-TP/day rate.
+
+    This is a ranking/evidence gate, not an extra acceptance threshold.
+    """
+    span_days=max(float(metrics.get("span_days", 0.0) or 0.0), 0.0)
+    trades=int(metrics.get("trades", 0) or 0)
+    wr=max(0.0, min(1.0, float(metrics.get("win_rate_pct", 0.0) or 0.0)/100.0))
+    target_tp=float(cfg.get("min_tp_per_day", 3.0)) if cfg.get("use_min_tp_per_day", True) else 3.0
+    if span_days <= 0.0 or trades < 100:
+        return False
+    required=span_days*target_tp/max(wr, 0.01)
+    return trades >= math.ceil(required)
+
+
 def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[float, list[str], dict[str, float]]:
+    """Equal-weight normalized distance to each active target."""
     failed: list[str] = []
     distances: dict[str, float] = {}
     if cfg["use_min_win_rate"]:
-        gap=max(0.0,cfg["min_win_rate_pct"]+0.0001-float(metrics["win_rate_pct"]))
+        wr=float(metrics["win_rate_pct"])
+        gap=max(0.0,cfg["min_win_rate_pct"]+0.0001-wr)
         distances["win_rate_pct"]=gap/max(cfg["min_win_rate_pct"],1.0)
-        if float(metrics["win_rate_pct"])<=cfg["min_win_rate_pct"]: failed.append("win_rate_pct")
+        if wr<=cfg["min_win_rate_pct"]: failed.append("win_rate_pct")
     if cfg["use_min_profit_factor"]:
         pf=math.inf if metrics["profit_factor"] is None else float(metrics["profit_factor"])
         gap=max(0.0,cfg["min_profit_factor"]+0.0001-pf)
-        distances["profit_factor"]=gap
+        distances["profit_factor"]=gap/max(abs(cfg["min_profit_factor"]),1.0)
         if pf<=cfg["min_profit_factor"]: failed.append("profit_factor")
     if cfg["use_min_tp_per_day"]:
         tp_day=float(metrics["avg_net_tp_per_day"])
@@ -815,7 +832,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         m=row["metrics"]; pf=math.inf if m["profit_factor"] is None else float(m["profit_factor"])
         tp_day=float(m["avg_net_tp_per_day"])
         tp_gap=max(0.0,cfg["min_tp_per_day"]-tp_day)/max(cfg["min_tp_per_day"],1.0) if cfg["use_min_tp_per_day"] else 0.0
-        return (not m["passes_all_targets"],not _capability_evidence(m),row["distance"],
+        return (not m["passes_all_targets"],not _goal_activity_evidence(m,cfg),row["distance"],
                 -min(pf,1000.0),-min(float(m["win_rate_pct"]),100.0),
                 int(m["max_consecutive_losses"]),tp_gap,-min(tp_day,1000.0),-int(m["trades"]))
 
@@ -835,7 +852,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         tp_gap=max(0.0,cfg["min_tp_per_day"]-float(m["avg_net_tp_per_day"]))/max(cfg["min_tp_per_day"],1.0) if cfg["use_min_tp_per_day"] else 0.0
         # Candidates without basic activity evidence receive a substantial
         # steering penalty, but remain eligible for exploration.
-        capability_penalty=0.0 if _capability_evidence(m) else 2.0
+        capability_penalty=0.0 if _goal_activity_evidence(m,cfg) else 2.0
         return (float(row["distance"])+(0.0 if m["passes_all_targets"] else 1.0)
                 +capability_penalty+0.10*tp_gap
                 +min(float(m["max_consecutive_losses"]),100.0)*0.01
