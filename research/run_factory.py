@@ -30,7 +30,36 @@ def ledger_match(primary,other):
                 if not math.isclose(float(p),float(q),rel_tol=1e-10,abs_tol=1e-8): return False,{"trade_id":i,"field":field,"primary":p,"independent":q}
             elif p!=q: return False,{"trade_id":i,"field":field,"primary":p,"independent":q}
     if not open_position_matches(primary,other): return False,{"mismatch":"open_position","primary":primary.get("open_position"),"independent":other.get("open_position")}
-    return True,{"primary_trades":len(a),"independent_trades":len(b),"ledger_fields_checked":len(FIELDS),"open_position_checked":True}
+    metrics=primary.get("metrics") or {}; contract=primary.get("contract") or {}
+    net_values=[float(t.get("net_pnl",0.0)) for t in b]
+    gross_profit=sum(max(0.0,v) for v in net_values); gross_loss=abs(sum(min(0.0,v) for v in net_values))
+    pf=(gross_profit/gross_loss) if gross_loss else (None if gross_profit else 0.0)
+    wins=sum(t.get("exit_reason")=="TP" and float(t.get("net_pnl",0.0))>0 for t in b)
+    losses=sum(v<=0 for v in net_values); net_pnl=sum(net_values)
+    span_days=float(metrics.get("span_days",0.0) or 0.0)
+    independent_streak=max([int(t.get("loss_streak_after",0)) for t in b]+[0])
+    other_streak=int(other.get("max_consecutive_losses",independent_streak))
+    open_pos=other.get("open_position")
+    expected_metrics={
+        "trades":len(b),"wins":wins,"losses":losses,
+        "win_rate_pct":100.0*wins/len(b) if b else 0.0,
+        "profit_factor":pf,"avg_net_tp_per_day":wins/span_days if span_days>0 else 0.0,
+        "max_consecutive_losses":other_streak,"net_pnl":net_pnl,
+        "final_balance":float(contract.get("initial_balance",0.0))+net_pnl,
+        "total_costs":sum(float(t.get("fees_slippage",0.0)) for t in b),
+        "unresolved_as_loss_count":sum(bool(t.get("execution_ambiguity",False)) for t in b),
+        "open_positions_at_end":1 if open_pos else 0,
+        "open_position_unrealized_net_pnl":float(open_pos.get("unrealized_net_pnl",0.0)) if open_pos else 0.0,
+    }
+    for field,expected in expected_metrics.items():
+        actual=metrics.get(field)
+        if expected is None:
+            if actual is not None: return False,{"mismatch":"aggregate_metric","field":field,"primary":actual,"independent":None}
+        elif actual is None or not math.isclose(float(actual),float(expected),rel_tol=1e-10,abs_tol=1e-8):
+            return False,{"mismatch":"aggregate_metric","field":field,"primary":actual,"independent":expected}
+    if int(metrics.get("max_consecutive_losses",0))!=independent_streak:
+        return False,{"mismatch":"ledger_loss_streak","metric":metrics.get("max_consecutive_losses"),"ledger_max":independent_streak}
+    return True,{"primary_trades":len(a),"independent_trades":len(b),"ledger_fields_checked":len(FIELDS),"open_position_checked":True,"aggregate_metrics_checked":list(expected_metrics)}
 def brief(m):
     keys=("trades","wins","losses","win_rate_pct","profit_factor","avg_net_tp_per_day","max_consecutive_losses","net_pnl","final_balance","total_costs","passes_all_targets","data_hash_sha256","execution_data_hash_sha256","execution_resolution","unresolved_as_loss_count","open_positions_at_end","open_position_unrealized_net_pnl","span_days","rows")
     return {k:m.get(k) for k in keys}
