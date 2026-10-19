@@ -1,5 +1,6 @@
 import hashlib
 
+import numpy as np
 import pandas as pd
 
 import app.engine as engine
@@ -110,3 +111,35 @@ def test_empty_search_space_selection_is_rejected():
     with pytest.raises(ValueError, match="family selection is empty"):
         search_candidates(pd.DataFrame(), max_candidates=1,
                           search_space={"families": []})
+
+
+def test_new_family_signal_arrays_match_independent_replay():
+    # Deterministic unit-test fixture only; never used as market research data.
+    n = 1200
+    idx = np.arange(n, dtype=float)
+    close = 2500.0 + 0.04 * idx + 15.0 * np.sin(idx / 17.0) + 4.0 * np.sin(idx / 3.7)
+    open_ = np.r_[close[0], close[:-1]]
+    high = np.maximum(open_, close) + 0.8 + (idx % 7) * 0.05
+    low = np.minimum(open_, close) - 0.7 - (idx % 5) * 0.04
+    frame = pd.DataFrame({
+        "open_time": np.arange(n, dtype=np.int64) * 60_000,
+        "open": open_, "high": high, "low": low, "close": close,
+        "volume": 100.0 + (idx % 31) * 13.0 + 20.0 * np.sin(idx / 5.0),
+    })
+    families = (
+        "atr_trend_pullback", "volume_weighted_breakout",
+        "range_midpoint_reversion", "roc_acceleration",
+        "atr_normalized_momentum",
+    )
+    for family in families:
+        spec = engine.StrategySpec(family=family, fast=8, slow=24, atr_period=14)
+        primary = engine.indicators(frame, spec)
+        long_, short_, atr, *_ = audit._independent_signals(frame, {
+            "family": family, "fast": spec.fast, "slow": spec.slow,
+            "atr_period": spec.atr_period, "context_filter": "none",
+            "confirmation_filter": "none", "direction": "both",
+            "secondary_family": "none", "signal_composition": "single",
+        })
+        np.testing.assert_array_equal(primary["long_signal"].fillna(False).to_numpy(), long_.fillna(False).to_numpy())
+        np.testing.assert_array_equal(primary["short_signal"].fillna(False).to_numpy(), short_.fillna(False).to_numpy())
+        np.testing.assert_allclose(primary["atr"].to_numpy(), atr.to_numpy(), rtol=1e-12, atol=1e-12, equal_nan=True)
