@@ -96,9 +96,9 @@ class StrategySpec:
         if not (2 <= self.atr_period <= 200): raise ValueError("atr_period must be 2..200")
         if not (0.2 <= self.stop_atr <= 10): raise ValueError("stop_atr must be 0.2..10")
         if self.direction not in {"both","long","short"}: raise ValueError("Invalid direction")
-        if self.family not in {"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top","williams_r_reversion","donchian_midline_trend","dual_thrust_breakout","chaikin_money_flow","money_flow_index_reversion"}:
+        if self.family not in {"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top","williams_r_reversion","donchian_midline_trend","dual_thrust_breakout","chaikin_money_flow","money_flow_index_reversion","atr_trend_pullback","volume_weighted_breakout","range_midpoint_reversion","roc_acceleration","atr_normalized_momentum"}:
             raise ValueError("Unsupported strategy family")
-        valid_families={"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top","williams_r_reversion","donchian_midline_trend","dual_thrust_breakout","chaikin_money_flow","money_flow_index_reversion"}
+        valid_families={"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top","williams_r_reversion","donchian_midline_trend","dual_thrust_breakout","chaikin_money_flow","money_flow_index_reversion","atr_trend_pullback","volume_weighted_breakout","range_midpoint_reversion","roc_acceleration","atr_normalized_momentum"}
         if self.secondary_family not in valid_families | {"none"}: raise ValueError("Unsupported secondary strategy family")
         if self.signal_composition not in {"single","and","or","xor"}: raise ValueError("Unsupported signal composition")
         if self.signal_composition=="single" and self.secondary_family!="none": raise ValueError("Single-family strategy cannot set secondary_family")
@@ -338,6 +338,31 @@ def indicators(df, spec):
         mfi=100-100/(1+ratio)
         long_signal=(mfi.shift(1)<=20)&(mfi>20)
         short_signal=(mfi.shift(1)>=80)&(mfi<80)
+    elif spec.family=="atr_trend_pullback":
+        trend_up=x.ema_fast>x.ema_slow; trend_down=x.ema_fast<x.ema_slow
+        long_signal=trend_up&(x.low<=x.ema_fast+0.1*x.atr)&(c>x.ema_fast)&(c>x.open)
+        short_signal=trend_down&(x.high>=x.ema_fast-0.1*x.atr)&(c<x.ema_fast)&(c<x.open)
+    elif spec.family=="volume_weighted_breakout":
+        upper=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        lower=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        baseline=x.volume.rolling(spec.fast,min_periods=spec.fast).median().shift(1)
+        active=x.volume>baseline*1.5
+        long_signal=active&(c>upper)&(c.shift(1)<=upper.shift(1))
+        short_signal=active&(c<lower)&(c.shift(1)>=lower.shift(1))
+    elif spec.family=="range_midpoint_reversion":
+        support=x.low.rolling(spec.slow,min_periods=spec.slow).min().shift(1)
+        resistance=x.high.rolling(spec.slow,min_periods=spec.slow).max().shift(1)
+        width=(resistance-support).replace(0,np.nan)
+        long_signal=(x.low<=support+0.15*width)&(c>=support+0.35*width)&(c>x.open)
+        short_signal=(x.high>=resistance-0.15*width)&(c<=resistance-0.35*width)&(c<x.open)
+    elif spec.family=="roc_acceleration":
+        roc=c.pct_change(periods=spec.fast)*100
+        long_signal=(roc>0)&(roc>roc.shift(1))&(c>x.ema_slow)
+        short_signal=(roc<0)&(roc<roc.shift(1))&(c<x.ema_slow)
+    elif spec.family=="atr_normalized_momentum":
+        normalized=(c-c.shift(spec.fast))/x.atr.replace(0,np.nan)
+        long_signal=(normalized>=1.0)&(c>x.ema_slow)
+        short_signal=(normalized<=-1.0)&(c<x.ema_slow)
     if spec.context_filter=="ema_trend":
         long_signal=long_signal&(x.ema_fast>x.ema_slow)
         short_signal=short_signal&(x.ema_fast<x.ema_slow)
@@ -747,7 +772,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     excluded_genome_hashes=set(excluded_genome_hashes or ())
     def genome_hash(key):
         return hashlib.sha256(json.dumps(list(key),separators=(",",":"),ensure_ascii=False).encode()).hexdigest()
-    all_families=("ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top","williams_r_reversion","donchian_midline_trend","dual_thrust_breakout","chaikin_money_flow","money_flow_index_reversion")
+    all_families=("ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top","williams_r_reversion","donchian_midline_trend","dual_thrust_breakout","chaikin_money_flow","money_flow_index_reversion","atr_trend_pullback","volume_weighted_breakout","range_midpoint_reversion","roc_acceleration","atr_normalized_momentum")
     all_context_filters=("none","ema_trend","adx_strength","volume_confirm","vwap_side","low_volatility")
     all_confirmation_filters=("none","candle_direction","momentum","rsi_midline")
     space=dict(search_space or {})
@@ -767,7 +792,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             prepared_context=prepare_backtest_data(frame)
     if prepared_context is not None and prepared_context.source_frame is not frame:
         raise ValueError("Prepared market data can only be reused with its exact source DataFrame")
-    names={"ema_crossover":"EMA crossover","channel_breakout":"Price channel breakout","rsi_reversion":"RSI reversion","volume_breakout":"Volume-confirmed breakout","ema_pullback":"EMA trend pullback","macd_crossover":"MACD crossover","bollinger_reversion":"Bollinger mean reversion","inside_bar_breakout":"Inside-bar breakout","engulfing_reversal":"Engulfing candle reversal","momentum_breakout":"Momentum-confirmed breakout","stochastic_reversion":"Stochastic reversion","roc_momentum":"Rate-of-change momentum","adx_trend":"ADX directional trend","keltner_breakout":"Keltner channel breakout","atr_squeeze_breakout":"Volatility squeeze breakout","obv_trend":"OBV volume trend","vwap_reclaim":"VWAP reclaim","pivot_reversal":"Support/resistance pivot reversal","swing_structure_break":"شکست ساختار سوئینگ","failed_breakout_reversal":"برگشت شکست ناموفق","wick_rejection":"رد قیمت با سایه کندل","range_expansion_breakout":"شکست با انبساط دامنه","three_bar_momentum":"مومنتوم سه‌کندلی","volatility_regime_breakout":"شکست در رژیم نوسان","trend_exhaustion_reversal":"برگشت فرسودگی روند","volume_climax_reversal":"برگشت اوج حجم","range_compression_breakout":"شکست پس از فشردگی دامنه","support_resistance_rejection":"رد قیمت حمایت/مقاومت","micro_double_bottom":"کف دوقلوی کوتاه‌مدت","micro_double_top":"سقف دوقلوی کوتاه‌مدت","williams_r_reversion":"Williams %R reversion","donchian_midline_trend":"Donchian midline trend","dual_thrust_breakout":"Dual Thrust breakout","chaikin_money_flow":"Chaikin money-flow trend","money_flow_index_reversion":"Money Flow Index reversion"}
+    names={"ema_crossover":"EMA crossover","channel_breakout":"Price channel breakout","rsi_reversion":"RSI reversion","volume_breakout":"Volume-confirmed breakout","ema_pullback":"EMA trend pullback","macd_crossover":"MACD crossover","bollinger_reversion":"Bollinger mean reversion","inside_bar_breakout":"Inside-bar breakout","engulfing_reversal":"Engulfing candle reversal","momentum_breakout":"Momentum-confirmed breakout","stochastic_reversion":"Stochastic reversion","roc_momentum":"Rate-of-change momentum","adx_trend":"ADX directional trend","keltner_breakout":"Keltner channel breakout","atr_squeeze_breakout":"Volatility squeeze breakout","obv_trend":"OBV volume trend","vwap_reclaim":"VWAP reclaim","pivot_reversal":"Support/resistance pivot reversal","swing_structure_break":"شکست ساختار سوئینگ","failed_breakout_reversal":"برگشت شکست ناموفق","wick_rejection":"رد قیمت با سایه کندل","range_expansion_breakout":"شکست با انبساط دامنه","three_bar_momentum":"مومنتوم سه‌کندلی","volatility_regime_breakout":"شکست در رژیم نوسان","trend_exhaustion_reversal":"برگشت فرسودگی روند","volume_climax_reversal":"برگشت اوج حجم","range_compression_breakout":"شکست پس از فشردگی دامنه","support_resistance_rejection":"رد قیمت حمایت/مقاومت","micro_double_bottom":"کف دوقلوی کوتاه‌مدت","micro_double_top":"سقف دوقلوی کوتاه‌مدت","williams_r_reversion":"Williams %R reversion","donchian_midline_trend":"Donchian midline trend","dual_thrust_breakout":"Dual Thrust breakout","chaikin_money_flow":"Chaikin money-flow trend","money_flow_index_reversion":"Money Flow Index reversion","atr_trend_pullback":"ATR-aware trend pullback","volume_weighted_breakout":"Volume-weighted range breakout","range_midpoint_reversion":"Range midpoint reversion","roc_acceleration":"Rate-of-change acceleration","atr_normalized_momentum":"ATR-normalized momentum"}
     fast_values=np.array([3,4,5,6,8,9,10,12,14,16,18,21,24,28,32,36,40,48,55,64,72,89],dtype=int)
     slow_values=np.array([12,16,18,20,24,28,32,36,40,48,55,64,72,89,100,120,144,180,200,240,300,400,500],dtype=int)
     periods=np.array([5,7,9,10,12,14,16,18,21,24,28,30,40,50],dtype=int)
