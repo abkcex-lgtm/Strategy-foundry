@@ -102,6 +102,15 @@ A watchdog must distinguish a genuinely stale heartbeat from a long but active c
 - Do not rewrite tags/releases or delete data/results that provide audit evidence. Archive or mark obsolete historical work instead.
 - Update this file when the canonical branch, run state, acceptance contract, or immediate next task changes.
 
+## Verified research evidence and blockers (2026-10-20)
+
+- The currently committed `research-results/progress.json` is stale relative to the 40-family source: it reports only 1,000 requested/evaluated unique candidates, 0 validated strategies, and 5 near-misses. Its report identifies source commit `4a33354d92d2c38c571ca30b3296dd4a24f63fbb`, which predates the latest family expansion and speed benchmark. Do not treat this as validation of the latest source.
+- That earlier report records 263,520 Binance USD-M ETHUSDT 1m rows, expected month counts, and zero timestamp gaps. It records no strategy passing all required splits; all five near-misses fail at least one target. Its recorded primary-vs-independent ledgers match for the listed candidates, but most selected runs use `base_ohlc_only` because no ambiguous same-candle exit was encountered in those trades.
+- The 40-family source, standalone export template, Persian UI, primary/independent parity tests, chunked-scan test, and real-TRAIN speed microbenchmark are present in the current source tree. Their latest test outcome has not been independently retrieved through the available GitHub Actions tools.
+- Commit `6a558b60e4366ad1c8514a75bdec3823cc16ef22` was pushed with message `[full-research]` and should request the 500,000-candidate / seed-42 / 19,500-second run. The connected GitHub tools available here do not expose a workflow-dispatch or repository-wide workflow-run listing action, and the classic commit status is empty; therefore I cannot currently prove the run started or read its job/artifact outcome. The latest progress file remains the old 1,000-candidate report.
+- Do not publish the new source to NetRun until the latest test gate and research artifact have been checked. NetRun project 3551 currently reports sleeping/free-plan status. Existing SQLite data/history must be backed up and verified before deployment.
+- Approval gate remains strict: no strategy is accepted without all criteria passing; otherwise exactly five closest Development-ranked near-misses, with frozen-selection OOS results shown separately. No criteria or split boundaries may be relaxed to force a pass.
+
 ## Immediate next tasks
 
 1. Inspect and test the actual heartbeat callback contract; ensure updates happen during candidate evaluation rather than only after a batch.
