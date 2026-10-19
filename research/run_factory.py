@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 ROOT=Path(__file__).resolve().parents[1]; sys.path.insert(0,str(ROOT))
 from app.data import download_binance_month, validate_ohlcv, split_reference_period
-from app.engine import search_candidates, backtest, normalize_contract, prepare_backtest_data, _candidate_distance, _capability_evidence
+from app.engine import search_candidates, backtest, normalize_contract, prepare_backtest_data, _candidate_distance, _capability_evidence, _goal_activity_evidence
 from app.audit import independent_replay, FIELDS, open_position_matches
 SYMBOL="ETHUSDT"; YEAR=2026; MONTHS=[4,5,6,7,8,9]
 EXPECTED={4:43200,5:44640,6:43200,7:44640,8:44640,9:43200}
@@ -79,7 +79,9 @@ def near_key(x):
     tp_gap=max(0.0,3.0-tp_day)/3.0
     # Do not return a 5-trade high-PF sample ahead of candidates with enough
     # activity to meaningfully test the user's TP/day requirement.
+    cfg=normalize_contract(x.get("contract") or {})
     return (0 if x.get("development_audit_status")=="MATCH" else 1,
+            not _goal_activity_evidence(m,cfg),
             not _capability_evidence(m),
             float(x.get("development_distance",x.get("distance",math.inf))),
             -float(pf if pf is not None else 1e9), -float(m.get("win_rate_pct",0)),
