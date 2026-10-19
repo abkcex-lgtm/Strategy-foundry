@@ -615,6 +615,14 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
     run_hash=sha256_bytes(json.dumps({"spec":asdict(spec),"contract":cfg,"data_hash":data_hash,"execution_data_hash":execution_hash,"execution_resolution":execution_resolution},sort_keys=True).encode())
     return {"strategy":asdict(spec),"contract":cfg,"metrics":metrics,"ledger":ledger,"open_position":open_position,"data_report":report,"run_hash_sha256":run_hash}
 
+def _capability_evidence(metrics: dict[str, Any]) -> bool:
+    """Search-steering gate: avoid optimizing statistically tiny, low-activity samples."""
+    pf=math.inf if metrics.get("profit_factor") is None else float(metrics.get("profit_factor",0.0))
+    return (float(metrics.get("avg_net_tp_per_day",0.0))>=0.5
+            and int(metrics.get("trades",0))>=50
+            and (float(metrics.get("win_rate_pct",0.0))>=25.0 or pf>=0.5))
+
+
 def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[float, list[str], dict[str, float]]:
     failed: list[str] = []
     distances: dict[str, float] = {}
@@ -736,15 +744,16 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction,spec.context_filter,spec.confirmation_filter,spec.secondary_family,spec.signal_composition)
 
     def fitness(row):
-        # Minimize normalized distance to every hard criterion first. TP/day
-        # is already represented in distance; making it the first tie-breaker
-        # systematically favored high-frequency losers over balanced candidates.
+        # First require minimum evidence of useful activity; otherwise the
+        # distance metric can prefer 5-trade samples with a perfect PF over
+        # candidates that actually approach the binding TP/day requirement.
+        # Within that evidence tier, balance all hard criteria by distance.
         m=row["metrics"]; pf=math.inf if m["profit_factor"] is None else float(m["profit_factor"])
         tp_day=float(m["avg_net_tp_per_day"])
         tp_gap=max(0.0,cfg["min_tp_per_day"]-tp_day)/max(cfg["min_tp_per_day"],1.0) if cfg["use_min_tp_per_day"] else 0.0
-        return (not m["passes_all_targets"],row["distance"],-min(pf,1000.0),
-                -min(float(m["win_rate_pct"]),100.0),int(m["max_consecutive_losses"]),
-                tp_gap,-min(tp_day,1000.0),-int(m["trades"]))
+        return (not m["passes_all_targets"],not _capability_evidence(m),row["distance"],
+                -min(pf,1000.0),-min(float(m["win_rate_pct"]),100.0),
+                int(m["max_consecutive_losses"]),tp_gap,-min(tp_day,1000.0),-int(m["trades"]))
 
     def feature_vector(spec):
         vals=[1.0 if spec.family==f else 0.0 for f in all_families]
@@ -760,10 +769,11 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         m=row["metrics"]
         pf=10.0 if m["profit_factor"] is None else min(10.0,float(m["profit_factor"]))
         tp_gap=max(0.0,cfg["min_tp_per_day"]-float(m["avg_net_tp_per_day"]))/max(cfg["min_tp_per_day"],1.0) if cfg["use_min_tp_per_day"] else 0.0
-        # distance already includes TP/day shortfall. Keep its extra weight small
-        # so the surrogate cannot trade away expectancy just to chase frequency.
+        # Candidates without basic activity evidence receive a substantial
+        # steering penalty, but remain eligible for exploration.
+        capability_penalty=0.0 if _capability_evidence(m) else 2.0
         return (float(row["distance"])+(0.0 if m["passes_all_targets"] else 1.0)
-                +0.10*tp_gap
+                +capability_penalty+0.10*tp_gap
                 +min(float(m["max_consecutive_losses"]),100.0)*0.01
                 -min(float(m["win_rate_pct"]),100.0)*0.001
                 -min(float(m["avg_net_tp_per_day"]),100.0)*0.001-pf*0.01)
