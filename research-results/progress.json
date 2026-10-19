@@ -1,11 +1,11 @@
 {
-  "candidate_search_complete": false,
-  "evaluated_unique_candidates": 134250,
-  "outcome": "INCOMPLETE_SEARCH_NO_CERTIFIED_STRATEGY",
+  "candidate_search_complete": true,
+  "evaluated_unique_candidates": 1000,
+  "outcome": "NO_STRATEGY_PASSED_ALL_REQUIRED_SPLITS",
   "report": "research-results/report.json",
-  "requested_candidates": 500000,
+  "requested_candidates": 1000,
   "returned_candidate_count": 5,
-  "status": "partial_search_reported",
+  "status": "completed",
   "strategy_zip": "research-results/validated_strategies.zip",
   "validated_strategy_count": 0
 }

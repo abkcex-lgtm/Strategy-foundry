@@ -1,7 +1,7 @@
 {
   "algorithm": "surrogate_genetic",
-  "candidate_search_complete": false,
-  "completed_batches": 135,
+  "candidate_search_complete": true,
+  "completed_batches": 2,
   "contract": {
     "break_even_enabled": false,
     "commission_pct_per_side": 0.04,
@@ -91,246 +91,256 @@
     }
   },
   "development_audit_failures": [],
-  "development_near_miss_count": 500,
+  "development_near_miss_count": 10,
   "development_passing_count": 0,
-  "evaluated_unique_candidates": 134250,
+  "evaluated_unique_candidates": 1000,
   "exports": [
     {
       "file": "strategy_001.py",
       "full_data_audit_status": "MATCH",
-      "full_run_hash_sha256": "41cd861b585443ef468f666d29d98d31b21d3307470612346e24f2d158a34500",
+      "full_run_hash_sha256": "2d5b5bbe02de734a55868d6bd82aed4ab40759f3cf1b3f3cc7958a17418b2018",
       "full_run_metrics": {
-        "avg_net_tp_per_day": 0.7923527335789828,
+        "avg_net_tp_per_day": 0.027322508054447685,
         "data_hash_sha256": "910d152c5845aac65600872c5728cdd6a622ca8d62f2a07f7ffbf539be71e5ae",
         "execution_data_hash_sha256": null,
         "execution_resolution": "base_ohlc_only",
-        "final_balance": 4.999999999987438,
-        "losses": 607,
-        "max_consecutive_losses": 26,
-        "net_pnl": -995.0000000000119,
+        "final_balance": 1124.9999999999998,
+        "losses": 5,
+        "max_consecutive_losses": 2,
+        "net_pnl": 124.99999999999964,
         "open_position_unrealized_net_pnl": 0.0,
         "open_positions_at_end": 0,
         "passes_all_targets": false,
-        "profit_factor": 0.8360790774299816,
-        "total_costs": 2726.3521155177386,
-        "trades": 752,
+        "profit_factor": 3.4999999999999933,
+        "rows": 263520,
+        "span_days": 182.99930555555557,
+        "total_costs": 43.11849461453556,
+        "trades": 10,
         "unresolved_as_loss_count": 0,
-        "win_rate_pct": 19.28191489361702,
-        "wins": 145
+        "win_rate_pct": 50.0,
+        "wins": 5
       },
       "strategy": {
-        "atr_period": 16,
-        "confirmation_filter": "candle_direction",
-        "context_filter": "volume_confirm",
-        "direction": "both",
-        "family": "stochastic_reversion",
-        "fast": 8,
-        "name": "Stochastic reversion XOR شکست در رژیم نوسان 8/120 ATR 16x2.5 both [ctx=volume_confirm; confirm=candle_direction]",
-        "secondary_family": "volatility_regime_breakout",
-        "seed": 107000363,
-        "signal_composition": "xor",
-        "slow": 120,
+        "atr_period": 10,
+        "confirmation_filter": "none",
+        "context_filter": "adx_strength",
+        "direction": "long",
+        "family": "micro_double_bottom",
+        "fast": 9,
+        "name": "کف دوقلوی کوتاه‌مدت AND EMA trend pullback 9/300 ATR 10x2.5 long [ctx=adx_strength; confirm=none]",
+        "secondary_family": "ema_pullback",
+        "seed": 42,
+        "signal_composition": "and",
+        "slow": 300,
         "stop_atr": 2.5
       }
     },
     {
       "file": "strategy_002.py",
       "full_data_audit_status": "MATCH",
-      "full_run_hash_sha256": "8464caa85305e9e70dfa3c68801f3dab97908ac15fe64c369726886e726770b4",
+      "full_run_hash_sha256": "bdc19568b52d6f02d9d7cfb34a4b6f97ea0ecd25dfb2f81ad800ad7d008ccbd2",
       "full_run_metrics": {
-        "avg_net_tp_per_day": 0.6557401933067445,
+        "avg_net_tp_per_day": 0.021858006443558148,
         "data_hash_sha256": "910d152c5845aac65600872c5728cdd6a622ca8d62f2a07f7ffbf539be71e5ae",
         "execution_data_hash_sha256": null,
         "execution_resolution": "base_ohlc_only",
-        "final_balance": 9.999999999988603,
-        "losses": 519,
-        "max_consecutive_losses": 17,
-        "net_pnl": -990.0000000000114,
+        "final_balance": 1069.9999999999995,
+        "losses": 7,
+        "max_consecutive_losses": 4,
+        "net_pnl": 69.99999999999947,
         "open_position_unrealized_net_pnl": 0.0,
         "open_positions_at_end": 0,
         "passes_all_targets": false,
-        "profit_factor": 0.8092485549132927,
-        "total_costs": 2014.2888705347739,
-        "trades": 639,
+        "profit_factor": 1.9999999999999927,
+        "rows": 263520,
+        "span_days": 182.99930555555557,
+        "total_costs": 52.40315691640117,
+        "trades": 11,
         "unresolved_as_loss_count": 0,
-        "win_rate_pct": 18.779342723004696,
-        "wins": 120
+        "win_rate_pct": 36.36363636363637,
+        "wins": 4
       },
       "strategy": {
-        "atr_period": 50,
+        "atr_period": 14,
         "confirmation_filter": "candle_direction",
-        "context_filter": "volume_confirm",
-        "direction": "both",
-        "family": "volatility_regime_breakout",
-        "fast": 8,
-        "name": "شکست در رژیم نوسان OR Stochastic reversion 8/120 ATR 50x3 both [ctx=volume_confirm; confirm=candle_direction]",
-        "secondary_family": "stochastic_reversion",
-        "seed": 106000360,
-        "signal_composition": "or",
-        "slow": 120,
-        "stop_atr": 3.0
+        "context_filter": "adx_strength",
+        "direction": "long",
+        "family": "micro_double_bottom",
+        "fast": 9,
+        "name": "کف دوقلوی کوتاه‌مدت 9/32 ATR 14x2.5 long [ctx=adx_strength; confirm=candle_direction]",
+        "secondary_family": "none",
+        "seed": 42,
+        "signal_composition": "single",
+        "slow": 32,
+        "stop_atr": 2.5
       }
     },
     {
       "file": "strategy_003.py",
       "full_data_audit_status": "MATCH",
-      "full_run_hash_sha256": "115af0dd9779950291619a0d343b909bd472cd783458900f6f60c75ac7a18ff3",
+      "full_run_hash_sha256": "67de21de0e4593261a0c7ebffdb3b364e24e2298588983aea0460bde444381f6",
       "full_run_metrics": {
-        "avg_net_tp_per_day": 0.6557401933067445,
+        "avg_net_tp_per_day": 0.03278700966533722,
         "data_hash_sha256": "910d152c5845aac65600872c5728cdd6a622ca8d62f2a07f7ffbf539be71e5ae",
         "execution_data_hash_sha256": null,
         "execution_resolution": "base_ohlc_only",
-        "final_balance": 9.99999999999099,
-        "losses": 519,
-        "max_consecutive_losses": 16,
-        "net_pnl": -990.0000000000094,
+        "final_balance": 1069.9999999999993,
+        "losses": 14,
+        "max_consecutive_losses": 6,
+        "net_pnl": 69.99999999999926,
         "open_position_unrealized_net_pnl": 0.0,
         "open_positions_at_end": 0,
         "passes_all_targets": false,
-        "profit_factor": 0.8092485549132931,
-        "total_costs": 2054.7210683391386,
-        "trades": 639,
+        "profit_factor": 1.4999999999999947,
+        "rows": 263520,
+        "span_days": 182.99930555555557,
+        "total_costs": 89.01429678616576,
+        "trades": 20,
         "unresolved_as_loss_count": 0,
-        "win_rate_pct": 18.779342723004696,
-        "wins": 120
+        "win_rate_pct": 30.0,
+        "wins": 6
       },
       "strategy": {
-        "atr_period": 50,
-        "confirmation_filter": "candle_direction",
-        "context_filter": "volume_confirm",
-        "direction": "both",
-        "family": "channel_breakout",
+        "atr_period": 12,
+        "confirmation_filter": "rsi_midline",
+        "context_filter": "adx_strength",
+        "direction": "long",
+        "family": "micro_double_bottom",
         "fast": 8,
-        "name": "Price channel breakout OR Stochastic reversion 8/100 ATR 50x3 both [ctx=volume_confirm; confirm=candle_direction]",
-        "secondary_family": "stochastic_reversion",
-        "seed": 99000339,
-        "signal_composition": "or",
+        "name": "کف دوقلوی کوتاه‌مدت 8/100 ATR 12x2.5 long [ctx=adx_strength; confirm=rsi_midline]",
+        "secondary_family": "none",
+        "seed": 1000045,
+        "signal_composition": "single",
         "slow": 100,
-        "stop_atr": 3.0
+        "stop_atr": 2.5
       }
     },
     {
       "file": "strategy_004.py",
       "full_data_audit_status": "MATCH",
-      "full_run_hash_sha256": "9205464d12140f2787b35ed3175d100c5613d7f94c01354d449b2d948f72b58f",
+      "full_run_hash_sha256": "5c85ed806522765b8042c7816dc49db75a74ba26ac9922aa988f85f2d9f464bb",
       "full_run_metrics": {
-        "avg_net_tp_per_day": 0.6557401933067445,
+        "avg_net_tp_per_day": 0.021858006443558148,
         "data_hash_sha256": "910d152c5845aac65600872c5728cdd6a622ca8d62f2a07f7ffbf539be71e5ae",
         "execution_data_hash_sha256": null,
         "execution_resolution": "base_ohlc_only",
-        "final_balance": 9.99999999999099,
-        "losses": 519,
-        "max_consecutive_losses": 16,
-        "net_pnl": -990.0000000000094,
+        "final_balance": 1069.9999999999995,
+        "losses": 7,
+        "max_consecutive_losses": 6,
+        "net_pnl": 69.99999999999953,
         "open_position_unrealized_net_pnl": 0.0,
         "open_positions_at_end": 0,
         "passes_all_targets": false,
-        "profit_factor": 0.8092485549132931,
-        "total_costs": 2054.7210683391386,
-        "trades": 639,
+        "profit_factor": 1.9999999999999936,
+        "rows": 263520,
+        "span_days": 182.99930555555557,
+        "total_costs": 53.480641748316906,
+        "trades": 11,
         "unresolved_as_loss_count": 0,
-        "win_rate_pct": 18.779342723004696,
-        "wins": 120
+        "win_rate_pct": 36.36363636363637,
+        "wins": 4
       },
       "strategy": {
-        "atr_period": 50,
-        "confirmation_filter": "candle_direction",
-        "context_filter": "volume_confirm",
+        "atr_period": 12,
+        "confirmation_filter": "none",
+        "context_filter": "adx_strength",
         "direction": "both",
-        "family": "stochastic_reversion",
-        "fast": 8,
-        "name": "Stochastic reversion OR شکست ساختار سوئینگ 8/100 ATR 50x3 both [ctx=volume_confirm; confirm=candle_direction]",
-        "secondary_family": "swing_structure_break",
-        "seed": 129000429,
-        "signal_composition": "or",
-        "slow": 100,
-        "stop_atr": 3.0
+        "family": "micro_double_bottom",
+        "fast": 9,
+        "name": "کف دوقلوی کوتاه‌مدت AND MACD crossover 9/89 ATR 12x2.5 both [ctx=adx_strength; confirm=none]",
+        "secondary_family": "macd_crossover",
+        "seed": 1000045,
+        "signal_composition": "and",
+        "slow": 89,
+        "stop_atr": 2.5
       }
     },
     {
       "file": "strategy_005.py",
       "full_data_audit_status": "MATCH",
-      "full_run_hash_sha256": "ac37a89fa29c61a3478e5e7b24d89b1d71e2a66fa10684121fea3fd836881697",
+      "full_run_hash_sha256": "e2c0e7d01df5e0d6e3a885f527bcb68369b9cff75f77c3332da58849214681f9",
       "full_run_metrics": {
-        "avg_net_tp_per_day": 0.6229531836414072,
+        "avg_net_tp_per_day": 0.01639350483266861,
         "data_hash_sha256": "910d152c5845aac65600872c5728cdd6a622ca8d62f2a07f7ffbf539be71e5ae",
         "execution_data_hash_sha256": null,
         "execution_resolution": "base_ohlc_only",
-        "final_balance": 9.99999999999045,
-        "losses": 498,
-        "max_consecutive_losses": 23,
-        "net_pnl": -990.0000000000092,
+        "final_balance": 1004.9999999999993,
+        "losses": 10,
+        "max_consecutive_losses": 8,
+        "net_pnl": 4.9999999999994404,
         "open_position_unrealized_net_pnl": 0.0,
         "open_positions_at_end": 0,
         "passes_all_targets": false,
-        "profit_factor": 0.8012048192771066,
-        "total_costs": 1916.6803618085123,
-        "trades": 612,
+        "profit_factor": 1.0499999999999943,
+        "rows": 263520,
+        "span_days": 182.99930555555557,
+        "total_costs": 47.469397489548584,
+        "trades": 13,
         "unresolved_as_loss_count": 0,
-        "win_rate_pct": 18.627450980392158,
-        "wins": 114
+        "win_rate_pct": 23.076923076923077,
+        "wins": 3
       },
       "strategy": {
-        "atr_period": 50,
-        "confirmation_filter": "candle_direction",
-        "context_filter": "volume_confirm",
-        "direction": "both",
-        "family": "macd_crossover",
-        "fast": 8,
-        "name": "MACD crossover OR Stochastic reversion 8/200 ATR 50x3 both [ctx=volume_confirm; confirm=candle_direction]",
-        "secondary_family": "stochastic_reversion",
-        "seed": 94000324,
-        "signal_composition": "or",
-        "slow": 200,
-        "stop_atr": 3.0
+        "atr_period": 10,
+        "confirmation_filter": "rsi_midline",
+        "context_filter": "ema_trend",
+        "direction": "short",
+        "family": "stochastic_reversion",
+        "fast": 10,
+        "name": "Stochastic reversion AND سقف دوقلوی کوتاه‌مدت 10/89 ATR 10x6 short [ctx=ema_trend; confirm=rsi_midline]",
+        "secondary_family": "micro_double_top",
+        "seed": 42,
+        "signal_composition": "and",
+        "slow": 89,
+        "stop_atr": 6.0
       }
     }
   ],
-  "failed_candidate_evaluations": 4712,
+  "failed_candidate_evaluations": 12,
   "family_evaluated_counts": {
-    "adx_trend": 3431,
-    "atr_squeeze_breakout": 3408,
-    "bollinger_reversion": 3497,
-    "channel_breakout": 3230,
-    "ema_crossover": 3400,
-    "ema_pullback": 3434,
-    "engulfing_reversal": 3318,
-    "failed_breakout_reversal": 3362,
-    "inside_bar_breakout": 3143,
-    "keltner_breakout": 3322,
-    "macd_crossover": 3344,
-    "micro_double_bottom": 3391,
-    "micro_double_top": 3412,
-    "momentum_breakout": 3365,
-    "obv_trend": 3572,
-    "pivot_reversal": 3728,
-    "range_compression_breakout": 3396,
-    "range_expansion_breakout": 3378,
-    "roc_momentum": 3509,
-    "rsi_reversion": 3132,
-    "stochastic_reversion": 11233,
-    "support_resistance_rejection": 3438,
-    "swing_structure_break": 3933,
-    "three_bar_momentum": 27989,
-    "trend_exhaustion_reversal": 3500,
-    "volatility_regime_breakout": 3219,
-    "volume_breakout": 3157,
-    "volume_climax_reversal": 3351,
-    "vwap_reclaim": 3315,
-    "wick_rejection": 3343
+    "adx_trend": 32,
+    "atr_squeeze_breakout": 24,
+    "bollinger_reversion": 31,
+    "channel_breakout": 23,
+    "ema_crossover": 25,
+    "ema_pullback": 23,
+    "engulfing_reversal": 23,
+    "failed_breakout_reversal": 21,
+    "inside_bar_breakout": 20,
+    "keltner_breakout": 43,
+    "macd_crossover": 23,
+    "micro_double_bottom": 276,
+    "micro_double_top": 18,
+    "momentum_breakout": 15,
+    "obv_trend": 24,
+    "pivot_reversal": 26,
+    "range_compression_breakout": 22,
+    "range_expansion_breakout": 22,
+    "roc_momentum": 19,
+    "rsi_reversion": 23,
+    "stochastic_reversion": 27,
+    "support_resistance_rejection": 21,
+    "swing_structure_break": 21,
+    "three_bar_momentum": 19,
+    "trend_exhaustion_reversal": 33,
+    "volatility_regime_breakout": 26,
+    "volume_breakout": 34,
+    "volume_climax_reversal": 24,
+    "vwap_reclaim": 34,
+    "wick_rejection": 28
   },
-  "generations": 130325,
+  "generations": 884,
   "indicator_cache_stats": {
     "entries": 128,
-    "hits": 360,
+    "hits": 16,
     "limit": 128,
-    "misses": 139277
+    "misses": 1011
   },
   "near_miss_shortfall": 0,
   "oos_evaluated_count": 5,
-  "outcome": "INCOMPLETE_SEARCH_NO_CERTIFIED_STRATEGY",
+  "outcome": "NO_STRATEGY_PASSED_ALL_REQUIRED_SPLITS",
   "reproducibility": "Primary and independent ledgers compared field-by-field at rel_tol=1e-10 and abs_tol=1e-8; standalone exports include exact hashes and auto-fetch 1-second windows only for ambiguous candles.",
-  "requested_candidates": 500000,
+  "requested_candidates": 1000,
   "results": [
     {
       "contract": {
@@ -362,168 +372,378 @@
         "use_min_win_rate": true
       },
       "criterion_distances": {
-        "avg_net_tp_per_day": 0.46886041560146213,
-        "max_consecutive_losses": 1.0,
-        "profit_factor": 0.16402092257001843,
-        "win_rate_pct": 0.5179546276595746
+        "avg_net_tp_per_day": 0.9853478735338334,
+        "max_consecutive_losses": 0.0,
+        "profit_factor": 0.0,
+        "win_rate_pct": 0.0
       },
       "development_audit_evidence": {
-        "independent_trades": 366,
+        "aggregate_metrics_checked": [
+          "trades",
+          "wins",
+          "losses",
+          "win_rate_pct",
+          "profit_factor",
+          "avg_net_tp_per_day",
+          "max_consecutive_losses",
+          "net_pnl",
+          "final_balance",
+          "total_costs",
+          "unresolved_as_loss_count",
+          "open_positions_at_end",
+          "open_position_unrealized_net_pnl"
+        ],
+        "independent_trades": 2,
         "ledger_fields_checked": 22,
         "open_position_checked": true,
-        "primary_trades": 366
+        "primary_trades": 2
       },
       "development_audit_status": "MATCH",
       "development_criterion_distances": {
-        "avg_net_tp_per_day": 0.3440713277627187,
-        "max_consecutive_losses": 1.1538461538461537,
-        "open_positions_at_end": 1.0,
-        "profit_factor": 0.3001000000000007,
-        "win_rate_pct": 0.5833358333333334
+        "avg_net_tp_per_day": 0.9892470709469299,
+        "max_consecutive_losses": 0.0,
+        "profit_factor": 0.0,
+        "win_rate_pct": 0.0
       },
       "development_data_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
-      "development_distance": 3.3813533149422064,
+      "development_distance": 0.9892470709469299,
       "development_execution_data_sha256": null,
       "development_failed_conditions": [
-        "win_rate_pct",
-        "profit_factor",
-        "avg_net_tp_per_day",
-        "max_consecutive_losses",
-        "open_positions_at_end"
+        "avg_net_tp_per_day"
       ],
       "development_metrics": {
-        "avg_net_tp_per_day": 1.967786016711844,
+        "avg_net_tp_per_day": 0.03225878715921056,
         "data_hash_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
         "execution_data_hash_sha256": null,
         "execution_resolution": "base_ohlc_only",
-        "final_balance": 84.99999999999754,
-        "losses": 305,
-        "max_consecutive_losses": 28,
-        "net_pnl": -915.0000000000022,
-        "open_position_unrealized_net_pnl": 5.856147801427275,
-        "open_positions_at_end": 1,
+        "final_balance": 1024.9999999999998,
+        "losses": 1,
+        "max_consecutive_losses": 1,
+        "net_pnl": 24.99999999999976,
+        "open_position_unrealized_net_pnl": 0.0,
+        "open_positions_at_end": 0,
         "passes_all_targets": false,
-        "profit_factor": 0.6999999999999993,
-        "total_costs": 1370.6860894003933,
-        "trades": 366,
+        "profit_factor": 3.499999999999976,
+        "rows": 44640,
+        "span_days": 30.999305555555555,
+        "total_costs": 7.330424876187788,
+        "trades": 2,
         "unresolved_as_loss_count": 0,
-        "win_rate_pct": 16.666666666666668,
-        "wins": 61
+        "win_rate_pct": 50.0,
+        "wins": 1
       },
       "development_passes_all_targets": false,
-      "distance": 2.150835965831055,
+      "distance": 0.9853478735338334,
       "failed_conditions": [
-        "win_rate_pct",
-        "profit_factor",
-        "avg_net_tp_per_day",
-        "max_consecutive_losses"
+        "avg_net_tp_per_day"
       ],
       "full_data_audit_evidence": {
-        "independent_trades": 752,
+        "aggregate_metrics_checked": [
+          "trades",
+          "wins",
+          "losses",
+          "win_rate_pct",
+          "profit_factor",
+          "avg_net_tp_per_day",
+          "max_consecutive_losses",
+          "net_pnl",
+          "final_balance",
+          "total_costs",
+          "unresolved_as_loss_count",
+          "open_positions_at_end",
+          "open_position_unrealized_net_pnl"
+        ],
+        "independent_trades": 10,
         "ledger_fields_checked": 22,
         "open_position_checked": true,
-        "primary_trades": 752
+        "primary_trades": 10
       },
       "full_data_audit_status": "MATCH",
       "independent_audit": {
         "engine": "app.audit.independent_replay",
-        "independent_trades": 752,
+        "independent_trades": 7,
         "ledger_fields_checked": 22,
-        "primary_trades": 752,
+        "primary_trades": 7,
         "status": "MATCH"
       },
       "metrics": {
-        "avg_net_tp_per_day": 1.5934187531956137,
+        "avg_net_tp_per_day": 0.04395637939849969,
         "data_hash_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
         "execution_data_hash_sha256": null,
         "execution_resolution": "base_ohlc_only",
-        "final_balance": 4.999999999987438,
-        "losses": 607,
-        "max_consecutive_losses": 26,
-        "net_pnl": -995.0000000000119,
+        "final_balance": 1110.0,
+        "losses": 3,
+        "max_consecutive_losses": 1,
+        "net_pnl": 109.99999999999989,
         "open_position_unrealized_net_pnl": 0.0,
         "open_positions_at_end": 0,
         "passes_all_targets": false,
-        "profit_factor": 0.8360790774299816,
+        "profit_factor": 4.6666666666666625,
         "rows": 131040,
         "span_days": 90.99930555555555,
-        "total_costs": 2726.3521155177386,
-        "trades": 752,
+        "total_costs": 28.51840520617324,
+        "trades": 7,
         "unresolved_as_loss_count": 0,
-        "win_rate_pct": 19.28191489361702,
-        "wins": 145
+        "win_rate_pct": 57.142857142857146,
+        "wins": 4
       },
       "oos_audit_evidence": {
-        "independent_trades": 144,
+        "aggregate_metrics_checked": [
+          "trades",
+          "wins",
+          "losses",
+          "win_rate_pct",
+          "profit_factor",
+          "avg_net_tp_per_day",
+          "max_consecutive_losses",
+          "net_pnl",
+          "final_balance",
+          "total_costs",
+          "unresolved_as_loss_count",
+          "open_positions_at_end",
+          "open_position_unrealized_net_pnl"
+        ],
+        "independent_trades": 1,
         "ledger_fields_checked": 22,
         "open_position_checked": true,
-        "primary_trades": 144
+        "primary_trades": 1
       },
       "oos_audit_status": "MATCH",
       "oos_data_sha256": "1d0d240ea14018cc8171aa259049fa7be174966a685029c40e5b067a13f4c796",
-      "oos_distance": 3.972190389731536,
+      "oos_distance": 3.0001025,
       "oos_execution_data_sha256": null,
       "oos_failed_conditions": [
         "win_rate_pct",
         "profit_factor",
-        "avg_net_tp_per_day",
-        "max_consecutive_losses"
+        "avg_net_tp_per_day"
       ],
       "oos_metrics": {
-        "avg_net_tp_per_day": 0.16393629253520645,
+        "avg_net_tp_per_day": 0.0,
         "data_hash_sha256": "1d0d240ea14018cc8171aa259049fa7be174966a685029c40e5b067a13f4c796",
         "execution_data_hash_sha256": null,
         "execution_resolution": "base_ohlc_only",
-        "final_balance": 9.999999999999488,
-        "losses": 134,
-        "max_consecutive_losses": 32,
-        "net_pnl": -990.0000000000005,
+        "final_balance": 990.0,
+        "losses": 1,
+        "max_consecutive_losses": 1,
+        "net_pnl": -10.0,
         "open_position_unrealized_net_pnl": 0.0,
         "open_positions_at_end": 0,
         "passes_all_targets": false,
-        "profit_factor": 0.2611940298507459,
-        "total_costs": 721.0109105212813,
-        "trades": 144,
+        "profit_factor": 0.0,
+        "rows": 87840,
+        "span_days": 60.99930555555556,
+        "total_costs": 7.269664532174529,
+        "trades": 1,
         "unresolved_as_loss_count": 0,
-        "win_rate_pct": 6.944444444444445,
-        "wins": 10
+        "win_rate_pct": 0.0,
+        "wins": 0
       },
       "oos_passes_all_targets": false,
-      "run_hash_sha256": "47b7667567b59dbd28bc09d15d4714b6e85452c51e5cd019d3ab9f409b256a8d",
+      "run_hash_sha256": "6ea61b9bced5eee8301875dbe28e7898d0563d418fe58086aa1f3abd43dcab25",
       "strategy": {
-        "atr_period": 16,
-        "confirmation_filter": "candle_direction",
-        "context_filter": "volume_confirm",
-        "direction": "both",
-        "family": "stochastic_reversion",
-        "fast": 8,
-        "name": "Stochastic reversion XOR شکست در رژیم نوسان 8/120 ATR 16x2.5 both [ctx=volume_confirm; confirm=candle_direction]",
-        "secondary_family": "volatility_regime_breakout",
-        "seed": 107000363,
-        "signal_composition": "xor",
-        "slow": 120,
+        "atr_period": 10,
+        "confirmation_filter": "none",
+        "context_filter": "adx_strength",
+        "direction": "long",
+        "family": "micro_double_bottom",
+        "fast": 9,
+        "name": "کف دوقلوی کوتاه‌مدت AND EMA trend pullback 9/300 ATR 10x2.5 long [ctx=adx_strength; confirm=none]",
+        "secondary_family": "ema_pullback",
+        "seed": 42,
+        "signal_composition": "and",
+        "slow": 300,
         "stop_atr": 2.5
       },
+      "trade_diagnostics": {
+        "development": {
+          "avg_tp_per_day": 0.03225878715921056,
+          "closed_trades": 2,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 1,
+              "net_pnl": 24.99999999999976,
+              "profit_factor": 3.499999999999976,
+              "trades": 2,
+              "win_rate_pct": 50.0,
+              "wins": 1
+            },
+            "SHORT": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 1,
+            "TP": 1
+          },
+          "holding_minutes": {
+            "max": 27.0,
+            "mean": 14.5,
+            "median": 14.5,
+            "p95": 27.0
+          },
+          "loss_streak_length_histogram": {
+            "1": 1
+          },
+          "loss_streak_run_count": 1,
+          "losses": 1,
+          "max_consecutive_losses": 1,
+          "net_pnl": 24.99999999999976,
+          "total_costs": 7.330424876187788,
+          "trade_ledger_sha256": "a6204c1b92a07e653e374ac81e1ab68adf188e6b85d619a9052648a63f4d8cf6",
+          "wins": 1
+        },
+        "full": {
+          "avg_tp_per_day": 0.027322508054447685,
+          "closed_trades": 10,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 5,
+              "net_pnl": 124.99999999999964,
+              "profit_factor": 3.4999999999999933,
+              "trades": 10,
+              "win_rate_pct": 50.0,
+              "wins": 5
+            },
+            "SHORT": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 5,
+            "TP": 5
+          },
+          "holding_minutes": {
+            "max": 345.0,
+            "mean": 78.6,
+            "median": 32.0,
+            "p95": 345.0
+          },
+          "loss_streak_length_histogram": {
+            "1": 3,
+            "2": 1
+          },
+          "loss_streak_run_count": 4,
+          "losses": 5,
+          "max_consecutive_losses": 2,
+          "net_pnl": 124.99999999999964,
+          "total_costs": 43.11849461453556,
+          "trade_ledger_sha256": "835b98ded4bb1be95169a6c7c75dec4f8cf0af56a0f872f3bc95f700dbd36b19",
+          "wins": 5
+        },
+        "oos": {
+          "avg_tp_per_day": 0.0,
+          "closed_trades": 1,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 1,
+              "net_pnl": -10.0,
+              "profit_factor": 0.0,
+              "trades": 1,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            },
+            "SHORT": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 1
+          },
+          "holding_minutes": {
+            "max": 4.0,
+            "mean": 4.0,
+            "median": 4.0,
+            "p95": 4.0
+          },
+          "loss_streak_length_histogram": {
+            "1": 1
+          },
+          "loss_streak_run_count": 1,
+          "losses": 1,
+          "max_consecutive_losses": 1,
+          "net_pnl": -10.0,
+          "total_costs": 7.269664532174529,
+          "trade_ledger_sha256": "7c094bbecd516986b787f9f8fc718776a92e0a6197a089e2061b81e525861804",
+          "wins": 0
+        },
+        "train": {
+          "avg_tp_per_day": 0.04395637939849969,
+          "closed_trades": 7,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 3,
+              "net_pnl": 109.99999999999989,
+              "profit_factor": 4.6666666666666625,
+              "trades": 7,
+              "win_rate_pct": 57.142857142857146,
+              "wins": 4
+            },
+            "SHORT": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 3,
+            "TP": 4
+          },
+          "holding_minutes": {
+            "max": 345.0,
+            "mean": 107.57142857142857,
+            "median": 68.0,
+            "p95": 345.0
+          },
+          "loss_streak_length_histogram": {
+            "1": 3
+          },
+          "loss_streak_run_count": 3,
+          "losses": 3,
+          "max_consecutive_losses": 1,
+          "net_pnl": 109.99999999999989,
+          "total_costs": 28.51840520617324,
+          "trade_ledger_sha256": "bb0542dd2b7d4dd1949066ec1fa11c6f99e3a797a761185c3752a0504943f7ff",
+          "wins": 4
+        }
+      },
       "train_metrics": {
-        "avg_net_tp_per_day": 1.5934187531956137,
+        "avg_net_tp_per_day": 0.04395637939849969,
         "data_hash_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
         "execution_data_hash_sha256": null,
         "execution_resolution": "base_ohlc_only",
-        "final_balance": 4.999999999987438,
-        "losses": 607,
-        "max_consecutive_losses": 26,
-        "net_pnl": -995.0000000000119,
+        "final_balance": 1110.0,
+        "losses": 3,
+        "max_consecutive_losses": 1,
+        "net_pnl": 109.99999999999989,
         "open_position_unrealized_net_pnl": 0.0,
         "open_positions_at_end": 0,
         "passes_all_targets": false,
-        "profit_factor": 0.8360790774299816,
+        "profit_factor": 4.6666666666666625,
         "rows": 131040,
         "span_days": 90.99930555555555,
-        "total_costs": 2726.3521155177386,
-        "trades": 752,
+        "total_costs": 28.51840520617324,
+        "trades": 7,
         "unresolved_as_loss_count": 0,
-        "win_rate_pct": 19.28191489361702,
-        "wins": 145
+        "win_rate_pct": 57.142857142857146,
+        "wins": 4
       }
     },
     {
@@ -556,749 +776,1601 @@
         "use_min_win_rate": true
       },
       "criterion_distances": {
-        "avg_net_tp_per_day": 0.5604362060150031,
-        "max_consecutive_losses": 0.3076923076923077,
-        "profit_factor": 0.19085144508670726,
-        "win_rate_pct": 0.5305189319248826
-      },
-      "development_audit_evidence": {
-        "independent_trades": 312,
-        "ledger_fields_checked": 22,
-        "open_position_checked": true,
-        "primary_trades": 312
-      },
-      "development_audit_status": "MATCH",
-      "development_criterion_distances": {
-        "avg_net_tp_per_day": 0.38708304397499943,
-        "max_consecutive_losses": 0.6923076923076923,
-        "open_positions_at_end": 1.0,
-        "profit_factor": 0.2177470588235303,
-        "win_rate_pct": 0.5432717307692309
-      },
-      "development_data_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
-      "development_distance": 2.8404095258754527,
-      "development_execution_data_sha256": null,
-      "development_failed_conditions": [
-        "win_rate_pct",
-        "profit_factor",
-        "avg_net_tp_per_day",
-        "max_consecutive_losses",
-        "open_positions_at_end"
-      ],
-      "development_metrics": {
-        "avg_net_tp_per_day": 1.8387508680750018,
-        "data_hash_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
-        "execution_data_hash_sha256": null,
-        "execution_resolution": "base_ohlc_only",
-        "final_balance": 444.99999999999784,
-        "losses": 255,
-        "max_consecutive_losses": 22,
-        "net_pnl": -555.0000000000022,
-        "open_position_unrealized_net_pnl": 17.79625574575658,
-        "open_positions_at_end": 1,
-        "passes_all_targets": false,
-        "profit_factor": 0.7823529411764697,
-        "total_costs": 1071.496609002239,
-        "trades": 312,
-        "unresolved_as_loss_count": 0,
-        "win_rate_pct": 18.26923076923077,
-        "wins": 57
-      },
-      "development_passes_all_targets": false,
-      "distance": 1.5894988907189007,
-      "failed_conditions": [
-        "win_rate_pct",
-        "profit_factor",
-        "avg_net_tp_per_day",
-        "max_consecutive_losses"
-      ],
-      "full_data_audit_evidence": {
-        "independent_trades": 639,
-        "ledger_fields_checked": 22,
-        "open_position_checked": true,
-        "primary_trades": 639
-      },
-      "full_data_audit_status": "MATCH",
-      "independent_audit": {
-        "engine": "app.audit.independent_replay",
-        "independent_trades": 639,
-        "ledger_fields_checked": 22,
-        "primary_trades": 639,
-        "status": "MATCH"
-      },
-      "metrics": {
-        "avg_net_tp_per_day": 1.3186913819549906,
-        "data_hash_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
-        "execution_data_hash_sha256": null,
-        "execution_resolution": "base_ohlc_only",
-        "final_balance": 9.999999999988603,
-        "losses": 519,
-        "max_consecutive_losses": 17,
-        "net_pnl": -990.0000000000114,
-        "open_position_unrealized_net_pnl": 0.0,
-        "open_positions_at_end": 0,
-        "passes_all_targets": false,
-        "profit_factor": 0.8092485549132927,
-        "rows": 131040,
-        "span_days": 90.99930555555555,
-        "total_costs": 2014.2888705347739,
-        "trades": 639,
-        "unresolved_as_loss_count": 0,
-        "win_rate_pct": 18.779342723004696,
-        "wins": 120
-      },
-      "oos_audit_evidence": {
-        "independent_trades": 167,
-        "ledger_fields_checked": 22,
-        "open_position_checked": true,
-        "primary_trades": 167
-      },
-      "oos_audit_status": "MATCH",
-      "oos_data_sha256": "1d0d240ea14018cc8171aa259049fa7be174966a685029c40e5b067a13f4c796",
-      "oos_distance": 3.8866502571482386,
-      "oos_execution_data_sha256": null,
-      "oos_failed_conditions": [
-        "win_rate_pct",
-        "profit_factor",
-        "avg_net_tp_per_day",
-        "max_consecutive_losses"
-      ],
-      "oos_metrics": {
-        "avg_net_tp_per_day": 0.24590443880280968,
-        "data_hash_sha256": "1d0d240ea14018cc8171aa259049fa7be174966a685029c40e5b067a13f4c796",
-        "execution_data_hash_sha256": null,
-        "execution_resolution": "base_ohlc_only",
-        "final_balance": 4.999999999997996,
-        "losses": 152,
-        "max_consecutive_losses": 33,
-        "net_pnl": -995.0000000000019,
-        "open_position_unrealized_net_pnl": 0.0,
-        "open_positions_at_end": 0,
-        "passes_all_targets": false,
-        "profit_factor": 0.345394736842104,
-        "total_costs": 789.4635699222002,
-        "trades": 167,
-        "unresolved_as_loss_count": 0,
-        "win_rate_pct": 8.982035928143713,
-        "wins": 15
-      },
-      "oos_passes_all_targets": false,
-      "run_hash_sha256": "c32afb785bde4253cd47752c92708ce543608ca8370c39fa552af4fc6da909f5",
-      "strategy": {
-        "atr_period": 50,
-        "confirmation_filter": "candle_direction",
-        "context_filter": "volume_confirm",
-        "direction": "both",
-        "family": "volatility_regime_breakout",
-        "fast": 8,
-        "name": "شکست در رژیم نوسان OR Stochastic reversion 8/120 ATR 50x3 both [ctx=volume_confirm; confirm=candle_direction]",
-        "secondary_family": "stochastic_reversion",
-        "seed": 106000360,
-        "signal_composition": "or",
-        "slow": 120,
-        "stop_atr": 3.0
-      },
-      "train_metrics": {
-        "avg_net_tp_per_day": 1.3186913819549906,
-        "data_hash_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
-        "execution_data_hash_sha256": null,
-        "execution_resolution": "base_ohlc_only",
-        "final_balance": 9.999999999988603,
-        "losses": 519,
-        "max_consecutive_losses": 17,
-        "net_pnl": -990.0000000000114,
-        "open_position_unrealized_net_pnl": 0.0,
-        "open_positions_at_end": 0,
-        "passes_all_targets": false,
-        "profit_factor": 0.8092485549132927,
-        "rows": 131040,
-        "span_days": 90.99930555555555,
-        "total_costs": 2014.2888705347739,
-        "trades": 639,
-        "unresolved_as_loss_count": 0,
-        "win_rate_pct": 18.779342723004696,
-        "wins": 120
-      }
-    },
-    {
-      "contract": {
-        "break_even_enabled": false,
-        "commission_pct_per_side": 0.04,
-        "compound": false,
-        "entry_model": "next_candle_open",
-        "exit_model": "sl_tp_only",
-        "initial_balance": 1000.0,
-        "max_consecutive_losses": 13,
-        "max_positions": 1,
-        "min_profit_factor": 1.0,
-        "min_tp_per_day": 3.0,
-        "min_win_rate_pct": 40.0,
-        "partial_exit_enabled": false,
-        "profile_name": "ETHUSDT fixed-risk 3.5R (editable preset)",
-        "reward_risk": 3.5,
-        "risk_mode": "fixed_usd",
-        "risk_pct": 1.0,
-        "risk_usd": 10.0,
-        "slippage_pct_per_side": 0.02,
-        "symbol": "ETHUSDT",
-        "target_mode": "net_rr",
-        "time_exit_enabled": false,
-        "trailing_stop_enabled": false,
-        "use_max_consecutive_losses": true,
-        "use_min_profit_factor": true,
-        "use_min_tp_per_day": true,
-        "use_min_win_rate": true
-      },
-      "criterion_distances": {
-        "avg_net_tp_per_day": 0.5604362060150031,
-        "max_consecutive_losses": 0.23076923076923078,
-        "profit_factor": 0.19085144508670693,
-        "win_rate_pct": 0.5305189319248826
-      },
-      "development_audit_evidence": {
-        "independent_trades": 323,
-        "ledger_fields_checked": 22,
-        "open_position_checked": true,
-        "primary_trades": 323
-      },
-      "development_audit_status": "MATCH",
-      "development_criterion_distances": {
-        "avg_net_tp_per_day": 0.38708304397499943,
-        "max_consecutive_losses": 0.6923076923076923,
-        "open_positions_at_end": 1.0,
-        "profit_factor": 0.2501000000000009,
-        "win_rate_pct": 0.5588260294117647
-      },
-      "development_data_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
-      "development_distance": 2.8883167656944573,
-      "development_execution_data_sha256": null,
-      "development_failed_conditions": [
-        "win_rate_pct",
-        "profit_factor",
-        "avg_net_tp_per_day",
-        "max_consecutive_losses",
-        "open_positions_at_end"
-      ],
-      "development_metrics": {
-        "avg_net_tp_per_day": 1.8387508680750018,
-        "data_hash_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
-        "execution_data_hash_sha256": null,
-        "execution_resolution": "base_ohlc_only",
-        "final_balance": 334.9999999999978,
-        "losses": 266,
-        "max_consecutive_losses": 22,
-        "net_pnl": -665.0000000000024,
-        "open_position_unrealized_net_pnl": 17.79625574575658,
-        "open_positions_at_end": 1,
-        "passes_all_targets": false,
-        "profit_factor": 0.7499999999999991,
-        "total_costs": 1079.993473872633,
-        "trades": 323,
-        "unresolved_as_loss_count": 0,
-        "win_rate_pct": 17.647058823529413,
-        "wins": 57
-      },
-      "development_passes_all_targets": false,
-      "distance": 1.5125758137958234,
-      "failed_conditions": [
-        "win_rate_pct",
-        "profit_factor",
-        "avg_net_tp_per_day",
-        "max_consecutive_losses"
-      ],
-      "full_data_audit_evidence": {
-        "independent_trades": 639,
-        "ledger_fields_checked": 22,
-        "open_position_checked": true,
-        "primary_trades": 639
-      },
-      "full_data_audit_status": "MATCH",
-      "independent_audit": {
-        "engine": "app.audit.independent_replay",
-        "independent_trades": 639,
-        "ledger_fields_checked": 22,
-        "primary_trades": 639,
-        "status": "MATCH"
-      },
-      "metrics": {
-        "avg_net_tp_per_day": 1.3186913819549906,
-        "data_hash_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
-        "execution_data_hash_sha256": null,
-        "execution_resolution": "base_ohlc_only",
-        "final_balance": 9.99999999999099,
-        "losses": 519,
-        "max_consecutive_losses": 16,
-        "net_pnl": -990.0000000000094,
-        "open_position_unrealized_net_pnl": 0.0,
-        "open_positions_at_end": 0,
-        "passes_all_targets": false,
-        "profit_factor": 0.8092485549132931,
-        "rows": 131040,
-        "span_days": 90.99930555555555,
-        "total_costs": 2054.7210683391386,
-        "trades": 639,
-        "unresolved_as_loss_count": 0,
-        "win_rate_pct": 18.779342723004696,
-        "wins": 120
-      },
-      "oos_audit_evidence": {
-        "independent_trades": 158,
-        "ledger_fields_checked": 22,
-        "open_position_checked": true,
-        "primary_trades": 158
-      },
-      "oos_audit_status": "MATCH",
-      "oos_data_sha256": "1d0d240ea14018cc8171aa259049fa7be174966a685029c40e5b067a13f4c796",
-      "oos_distance": 3.7172664416137984,
-      "oos_execution_data_sha256": null,
-      "oos_failed_conditions": [
-        "win_rate_pct",
-        "profit_factor",
-        "avg_net_tp_per_day",
-        "max_consecutive_losses"
-      ],
-      "oos_metrics": {
-        "avg_net_tp_per_day": 0.21311718029576837,
-        "data_hash_sha256": "1d0d240ea14018cc8171aa259049fa7be174966a685029c40e5b067a13f4c796",
-        "execution_data_hash_sha256": null,
-        "execution_resolution": "base_ohlc_only",
-        "final_balance": 4.999999999998209,
-        "losses": 145,
-        "max_consecutive_losses": 30,
-        "net_pnl": -995.0000000000018,
-        "open_position_unrealized_net_pnl": 0.0,
-        "open_positions_at_end": 0,
-        "passes_all_targets": false,
-        "profit_factor": 0.3137931034482746,
-        "total_costs": 750.4930834437472,
-        "trades": 158,
-        "unresolved_as_loss_count": 0,
-        "win_rate_pct": 8.227848101265822,
-        "wins": 13
-      },
-      "oos_passes_all_targets": false,
-      "run_hash_sha256": "49377dc24985e0c895a71676d1a7eba3c5a9e955d96142603d48cf3e2f32ba99",
-      "strategy": {
-        "atr_period": 50,
-        "confirmation_filter": "candle_direction",
-        "context_filter": "volume_confirm",
-        "direction": "both",
-        "family": "channel_breakout",
-        "fast": 8,
-        "name": "Price channel breakout OR Stochastic reversion 8/100 ATR 50x3 both [ctx=volume_confirm; confirm=candle_direction]",
-        "secondary_family": "stochastic_reversion",
-        "seed": 99000339,
-        "signal_composition": "or",
-        "slow": 100,
-        "stop_atr": 3.0
-      },
-      "train_metrics": {
-        "avg_net_tp_per_day": 1.3186913819549906,
-        "data_hash_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
-        "execution_data_hash_sha256": null,
-        "execution_resolution": "base_ohlc_only",
-        "final_balance": 9.99999999999099,
-        "losses": 519,
-        "max_consecutive_losses": 16,
-        "net_pnl": -990.0000000000094,
-        "open_position_unrealized_net_pnl": 0.0,
-        "open_positions_at_end": 0,
-        "passes_all_targets": false,
-        "profit_factor": 0.8092485549132931,
-        "rows": 131040,
-        "span_days": 90.99930555555555,
-        "total_costs": 2054.7210683391386,
-        "trades": 639,
-        "unresolved_as_loss_count": 0,
-        "win_rate_pct": 18.779342723004696,
-        "wins": 120
-      }
-    },
-    {
-      "contract": {
-        "break_even_enabled": false,
-        "commission_pct_per_side": 0.04,
-        "compound": false,
-        "entry_model": "next_candle_open",
-        "exit_model": "sl_tp_only",
-        "initial_balance": 1000.0,
-        "max_consecutive_losses": 13,
-        "max_positions": 1,
-        "min_profit_factor": 1.0,
-        "min_tp_per_day": 3.0,
-        "min_win_rate_pct": 40.0,
-        "partial_exit_enabled": false,
-        "profile_name": "ETHUSDT fixed-risk 3.5R (editable preset)",
-        "reward_risk": 3.5,
-        "risk_mode": "fixed_usd",
-        "risk_pct": 1.0,
-        "risk_usd": 10.0,
-        "slippage_pct_per_side": 0.02,
-        "symbol": "ETHUSDT",
-        "target_mode": "net_rr",
-        "time_exit_enabled": false,
-        "trailing_stop_enabled": false,
-        "use_max_consecutive_losses": true,
-        "use_min_profit_factor": true,
-        "use_min_tp_per_day": true,
-        "use_min_win_rate": true
-      },
-      "criterion_distances": {
-        "avg_net_tp_per_day": 0.5604362060150031,
-        "max_consecutive_losses": 0.23076923076923078,
-        "profit_factor": 0.19085144508670693,
-        "win_rate_pct": 0.5305189319248826
-      },
-      "development_audit_evidence": {
-        "independent_trades": 323,
-        "ledger_fields_checked": 22,
-        "open_position_checked": true,
-        "primary_trades": 323
-      },
-      "development_audit_status": "MATCH",
-      "development_criterion_distances": {
-        "avg_net_tp_per_day": 0.38708304397499943,
-        "max_consecutive_losses": 0.6923076923076923,
-        "open_positions_at_end": 1.0,
-        "profit_factor": 0.2501000000000009,
-        "win_rate_pct": 0.5588260294117647
-      },
-      "development_data_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
-      "development_distance": 2.8883167656944573,
-      "development_execution_data_sha256": null,
-      "development_failed_conditions": [
-        "win_rate_pct",
-        "profit_factor",
-        "avg_net_tp_per_day",
-        "max_consecutive_losses",
-        "open_positions_at_end"
-      ],
-      "development_metrics": {
-        "avg_net_tp_per_day": 1.8387508680750018,
-        "data_hash_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
-        "execution_data_hash_sha256": null,
-        "execution_resolution": "base_ohlc_only",
-        "final_balance": 334.9999999999978,
-        "losses": 266,
-        "max_consecutive_losses": 22,
-        "net_pnl": -665.0000000000024,
-        "open_position_unrealized_net_pnl": 17.79625574575658,
-        "open_positions_at_end": 1,
-        "passes_all_targets": false,
-        "profit_factor": 0.7499999999999991,
-        "total_costs": 1079.993473872633,
-        "trades": 323,
-        "unresolved_as_loss_count": 0,
-        "win_rate_pct": 17.647058823529413,
-        "wins": 57
-      },
-      "development_passes_all_targets": false,
-      "distance": 1.5125758137958234,
-      "failed_conditions": [
-        "win_rate_pct",
-        "profit_factor",
-        "avg_net_tp_per_day",
-        "max_consecutive_losses"
-      ],
-      "full_data_audit_evidence": {
-        "independent_trades": 639,
-        "ledger_fields_checked": 22,
-        "open_position_checked": true,
-        "primary_trades": 639
-      },
-      "full_data_audit_status": "MATCH",
-      "independent_audit": {
-        "engine": "app.audit.independent_replay",
-        "independent_trades": 639,
-        "ledger_fields_checked": 22,
-        "primary_trades": 639,
-        "status": "MATCH"
-      },
-      "metrics": {
-        "avg_net_tp_per_day": 1.3186913819549906,
-        "data_hash_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
-        "execution_data_hash_sha256": null,
-        "execution_resolution": "base_ohlc_only",
-        "final_balance": 9.99999999999099,
-        "losses": 519,
-        "max_consecutive_losses": 16,
-        "net_pnl": -990.0000000000094,
-        "open_position_unrealized_net_pnl": 0.0,
-        "open_positions_at_end": 0,
-        "passes_all_targets": false,
-        "profit_factor": 0.8092485549132931,
-        "rows": 131040,
-        "span_days": 90.99930555555555,
-        "total_costs": 2054.7210683391386,
-        "trades": 639,
-        "unresolved_as_loss_count": 0,
-        "win_rate_pct": 18.779342723004696,
-        "wins": 120
-      },
-      "oos_audit_evidence": {
-        "independent_trades": 158,
-        "ledger_fields_checked": 22,
-        "open_position_checked": true,
-        "primary_trades": 158
-      },
-      "oos_audit_status": "MATCH",
-      "oos_data_sha256": "1d0d240ea14018cc8171aa259049fa7be174966a685029c40e5b067a13f4c796",
-      "oos_distance": 3.7172664416137984,
-      "oos_execution_data_sha256": null,
-      "oos_failed_conditions": [
-        "win_rate_pct",
-        "profit_factor",
-        "avg_net_tp_per_day",
-        "max_consecutive_losses"
-      ],
-      "oos_metrics": {
-        "avg_net_tp_per_day": 0.21311718029576837,
-        "data_hash_sha256": "1d0d240ea14018cc8171aa259049fa7be174966a685029c40e5b067a13f4c796",
-        "execution_data_hash_sha256": null,
-        "execution_resolution": "base_ohlc_only",
-        "final_balance": 4.999999999998209,
-        "losses": 145,
-        "max_consecutive_losses": 30,
-        "net_pnl": -995.0000000000018,
-        "open_position_unrealized_net_pnl": 0.0,
-        "open_positions_at_end": 0,
-        "passes_all_targets": false,
-        "profit_factor": 0.3137931034482746,
-        "total_costs": 750.4930834437472,
-        "trades": 158,
-        "unresolved_as_loss_count": 0,
-        "win_rate_pct": 8.227848101265822,
-        "wins": 13
-      },
-      "oos_passes_all_targets": false,
-      "run_hash_sha256": "3bcd354d23b835583a1226d66b350f37a8497d3c3d72e5db04c1172f28333562",
-      "strategy": {
-        "atr_period": 50,
-        "confirmation_filter": "candle_direction",
-        "context_filter": "volume_confirm",
-        "direction": "both",
-        "family": "stochastic_reversion",
-        "fast": 8,
-        "name": "Stochastic reversion OR شکست ساختار سوئینگ 8/100 ATR 50x3 both [ctx=volume_confirm; confirm=candle_direction]",
-        "secondary_family": "swing_structure_break",
-        "seed": 129000429,
-        "signal_composition": "or",
-        "slow": 100,
-        "stop_atr": 3.0
-      },
-      "train_metrics": {
-        "avg_net_tp_per_day": 1.3186913819549906,
-        "data_hash_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
-        "execution_data_hash_sha256": null,
-        "execution_resolution": "base_ohlc_only",
-        "final_balance": 9.99999999999099,
-        "losses": 519,
-        "max_consecutive_losses": 16,
-        "net_pnl": -990.0000000000094,
-        "open_position_unrealized_net_pnl": 0.0,
-        "open_positions_at_end": 0,
-        "passes_all_targets": false,
-        "profit_factor": 0.8092485549132931,
-        "rows": 131040,
-        "span_days": 90.99930555555555,
-        "total_costs": 2054.7210683391386,
-        "trades": 639,
-        "unresolved_as_loss_count": 0,
-        "win_rate_pct": 18.779342723004696,
-        "wins": 120
-      }
-    },
-    {
-      "contract": {
-        "break_even_enabled": false,
-        "commission_pct_per_side": 0.04,
-        "compound": false,
-        "entry_model": "next_candle_open",
-        "exit_model": "sl_tp_only",
-        "initial_balance": 1000.0,
-        "max_consecutive_losses": 13,
-        "max_positions": 1,
-        "min_profit_factor": 1.0,
-        "min_tp_per_day": 3.0,
-        "min_win_rate_pct": 40.0,
-        "partial_exit_enabled": false,
-        "profile_name": "ETHUSDT fixed-risk 3.5R (editable preset)",
-        "reward_risk": 3.5,
-        "risk_mode": "fixed_usd",
-        "risk_pct": 1.0,
-        "risk_usd": 10.0,
-        "slippage_pct_per_side": 0.02,
-        "symbol": "ETHUSDT",
-        "target_mode": "net_rr",
-        "time_exit_enabled": false,
-        "trailing_stop_enabled": false,
-        "use_max_consecutive_losses": true,
-        "use_min_profit_factor": true,
-        "use_min_tp_per_day": true,
-        "use_min_win_rate": true
-      },
-      "criterion_distances": {
-        "avg_net_tp_per_day": 0.582414395714253,
-        "max_consecutive_losses": 0.7692307692307693,
-        "profit_factor": 0.19889518072289336,
-        "win_rate_pct": 0.5343162254901961
-      },
-      "development_audit_evidence": {
-        "independent_trades": 255,
-        "ledger_fields_checked": 22,
-        "open_position_checked": true,
-        "primary_trades": 255
-      },
-      "development_audit_status": "MATCH",
-      "development_criterion_distances": {
-        "avg_net_tp_per_day": 0.3978359730280696,
+        "avg_net_tp_per_day": 0.989010905150375,
         "max_consecutive_losses": 0.0,
-        "open_positions_at_end": 1.0,
-        "profit_factor": 0.015175376884422387,
-        "win_rate_pct": 0.4509828921568628
+        "profit_factor": 0.0,
+        "win_rate_pct": 0.0
+      },
+      "development_audit_evidence": {
+        "aggregate_metrics_checked": [
+          "trades",
+          "wins",
+          "losses",
+          "win_rate_pct",
+          "profit_factor",
+          "avg_net_tp_per_day",
+          "max_consecutive_losses",
+          "net_pnl",
+          "final_balance",
+          "total_costs",
+          "unresolved_as_loss_count",
+          "open_positions_at_end",
+          "open_position_unrealized_net_pnl"
+        ],
+        "independent_trades": 3,
+        "ledger_fields_checked": 22,
+        "open_position_checked": true,
+        "primary_trades": 3
+      },
+      "development_audit_status": "MATCH",
+      "development_criterion_distances": {
+        "avg_net_tp_per_day": 0.9892470709469299,
+        "max_consecutive_losses": 0.0,
+        "profit_factor": 0.0,
+        "win_rate_pct": 0.1666691666666667
       },
       "development_data_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
-      "development_distance": 1.8639942420693547,
+      "development_distance": 1.1559162376135965,
       "development_execution_data_sha256": null,
       "development_failed_conditions": [
         "win_rate_pct",
-        "profit_factor",
-        "avg_net_tp_per_day",
-        "open_positions_at_end"
+        "avg_net_tp_per_day"
       ],
       "development_metrics": {
-        "avg_net_tp_per_day": 1.8064920809157912,
+        "avg_net_tp_per_day": 0.03225878715921056,
         "data_hash_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
         "execution_data_hash_sha256": null,
         "execution_resolution": "base_ohlc_only",
-        "final_balance": 969.9999999999993,
-        "losses": 199,
-        "max_consecutive_losses": 12,
-        "net_pnl": -30.000000000000597,
-        "open_position_unrealized_net_pnl": 6.625649503677911,
-        "open_positions_at_end": 1,
+        "final_balance": 1014.9999999999998,
+        "losses": 2,
+        "max_consecutive_losses": 2,
+        "net_pnl": 14.999999999999764,
+        "open_position_unrealized_net_pnl": 0.0,
+        "open_positions_at_end": 0,
         "passes_all_targets": false,
-        "profit_factor": 0.9849246231155776,
-        "total_costs": 832.5615866301346,
-        "trades": 255,
+        "profit_factor": 1.7499999999999882,
+        "rows": 44640,
+        "span_days": 30.999305555555555,
+        "total_costs": 11.305477457988548,
+        "trades": 3,
         "unresolved_as_loss_count": 0,
-        "win_rate_pct": 21.96078431372549,
-        "wins": 56
+        "win_rate_pct": 33.333333333333336,
+        "wins": 1
       },
       "development_passes_all_targets": false,
-      "distance": 2.0848565711581117,
+      "distance": 0.989010905150375,
       "failed_conditions": [
-        "win_rate_pct",
-        "profit_factor",
-        "avg_net_tp_per_day",
-        "max_consecutive_losses"
+        "avg_net_tp_per_day"
       ],
       "full_data_audit_evidence": {
-        "independent_trades": 612,
+        "aggregate_metrics_checked": [
+          "trades",
+          "wins",
+          "losses",
+          "win_rate_pct",
+          "profit_factor",
+          "avg_net_tp_per_day",
+          "max_consecutive_losses",
+          "net_pnl",
+          "final_balance",
+          "total_costs",
+          "unresolved_as_loss_count",
+          "open_positions_at_end",
+          "open_position_unrealized_net_pnl"
+        ],
+        "independent_trades": 11,
         "ledger_fields_checked": 22,
         "open_position_checked": true,
-        "primary_trades": 612
+        "primary_trades": 11
       },
       "full_data_audit_status": "MATCH",
       "independent_audit": {
         "engine": "app.audit.independent_replay",
-        "independent_trades": 612,
+        "independent_trades": 5,
         "ledger_fields_checked": 22,
-        "primary_trades": 612,
+        "primary_trades": 5,
         "status": "MATCH"
       },
       "metrics": {
-        "avg_net_tp_per_day": 1.252756812857241,
+        "avg_net_tp_per_day": 0.032967284548874765,
         "data_hash_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
         "execution_data_hash_sha256": null,
         "execution_resolution": "base_ohlc_only",
-        "final_balance": 9.99999999999045,
-        "losses": 498,
-        "max_consecutive_losses": 23,
-        "net_pnl": -990.0000000000092,
+        "final_balance": 1084.9999999999998,
+        "losses": 2,
+        "max_consecutive_losses": 2,
+        "net_pnl": 84.99999999999972,
         "open_position_unrealized_net_pnl": 0.0,
         "open_positions_at_end": 0,
         "passes_all_targets": false,
-        "profit_factor": 0.8012048192771066,
+        "profit_factor": 5.249999999999986,
         "rows": 131040,
         "span_days": 90.99930555555555,
-        "total_costs": 1916.6803618085123,
-        "trades": 612,
+        "total_costs": 17.159945277803168,
+        "trades": 5,
         "unresolved_as_loss_count": 0,
-        "win_rate_pct": 18.627450980392158,
-        "wins": 114
+        "win_rate_pct": 60.0,
+        "wins": 3
       },
       "oos_audit_evidence": {
-        "independent_trades": 158,
+        "aggregate_metrics_checked": [
+          "trades",
+          "wins",
+          "losses",
+          "win_rate_pct",
+          "profit_factor",
+          "avg_net_tp_per_day",
+          "max_consecutive_losses",
+          "net_pnl",
+          "final_balance",
+          "total_costs",
+          "unresolved_as_loss_count",
+          "open_positions_at_end",
+          "open_position_unrealized_net_pnl"
+        ],
+        "independent_trades": 3,
         "ledger_fields_checked": 22,
         "open_position_checked": true,
-        "primary_trades": 158
+        "primary_trades": 3
       },
       "oos_audit_status": "MATCH",
       "oos_data_sha256": "1d0d240ea14018cc8171aa259049fa7be174966a685029c40e5b067a13f4c796",
-      "oos_distance": 3.5634202877676437,
+      "oos_distance": 3.0001025,
       "oos_execution_data_sha256": null,
       "oos_failed_conditions": [
         "win_rate_pct",
         "profit_factor",
-        "avg_net_tp_per_day",
-        "max_consecutive_losses"
+        "avg_net_tp_per_day"
       ],
       "oos_metrics": {
-        "avg_net_tp_per_day": 0.21311718029576837,
+        "avg_net_tp_per_day": 0.0,
         "data_hash_sha256": "1d0d240ea14018cc8171aa259049fa7be174966a685029c40e5b067a13f4c796",
         "execution_data_hash_sha256": null,
         "execution_resolution": "base_ohlc_only",
-        "final_balance": 4.9999999999988916,
-        "losses": 145,
-        "max_consecutive_losses": 28,
-        "net_pnl": -995.000000000001,
+        "final_balance": 970.0,
+        "losses": 3,
+        "max_consecutive_losses": 3,
+        "net_pnl": -30.0,
         "open_position_unrealized_net_pnl": 0.0,
         "open_positions_at_end": 0,
         "passes_all_targets": false,
-        "profit_factor": 0.31379310344827516,
-        "total_costs": 735.6509314211503,
-        "trades": 158,
+        "profit_factor": 0.0,
+        "rows": 87840,
+        "span_days": 60.99930555555556,
+        "total_costs": 23.937734180609457,
+        "trades": 3,
         "unresolved_as_loss_count": 0,
-        "win_rate_pct": 8.227848101265822,
-        "wins": 13
+        "win_rate_pct": 0.0,
+        "wins": 0
       },
       "oos_passes_all_targets": false,
-      "run_hash_sha256": "8e5a46cfee7a1c7275abf7981b7a4c2a9bdf5256228605b88d27c2702a5c335b",
+      "run_hash_sha256": "ce4c61c63e30330043a1040320dd1348021ca6656f7542f989d4e881f68a6508",
       "strategy": {
-        "atr_period": 50,
+        "atr_period": 14,
         "confirmation_filter": "candle_direction",
-        "context_filter": "volume_confirm",
-        "direction": "both",
-        "family": "macd_crossover",
-        "fast": 8,
-        "name": "MACD crossover OR Stochastic reversion 8/200 ATR 50x3 both [ctx=volume_confirm; confirm=candle_direction]",
-        "secondary_family": "stochastic_reversion",
-        "seed": 94000324,
-        "signal_composition": "or",
-        "slow": 200,
-        "stop_atr": 3.0
+        "context_filter": "adx_strength",
+        "direction": "long",
+        "family": "micro_double_bottom",
+        "fast": 9,
+        "name": "کف دوقلوی کوتاه‌مدت 9/32 ATR 14x2.5 long [ctx=adx_strength; confirm=candle_direction]",
+        "secondary_family": "none",
+        "seed": 42,
+        "signal_composition": "single",
+        "slow": 32,
+        "stop_atr": 2.5
+      },
+      "trade_diagnostics": {
+        "development": {
+          "avg_tp_per_day": 0.03225878715921056,
+          "closed_trades": 3,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 2,
+              "net_pnl": 14.999999999999764,
+              "profit_factor": 1.7499999999999882,
+              "trades": 3,
+              "win_rate_pct": 33.333333333333336,
+              "wins": 1
+            },
+            "SHORT": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 2,
+            "TP": 1
+          },
+          "holding_minutes": {
+            "max": 27.0,
+            "mean": 10.666666666666666,
+            "median": 3.0,
+            "p95": 27.0
+          },
+          "loss_streak_length_histogram": {
+            "2": 1
+          },
+          "loss_streak_run_count": 1,
+          "losses": 2,
+          "max_consecutive_losses": 2,
+          "net_pnl": 14.999999999999764,
+          "total_costs": 11.305477457988548,
+          "trade_ledger_sha256": "3a74ffccbd8d82d8957201feb85e4441c87af6a156b1f19d016a87699fd4a3e0",
+          "wins": 1
+        },
+        "full": {
+          "avg_tp_per_day": 0.021858006443558148,
+          "closed_trades": 11,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 7,
+              "net_pnl": 69.99999999999947,
+              "profit_factor": 1.9999999999999927,
+              "trades": 11,
+              "win_rate_pct": 36.36363636363637,
+              "wins": 4
+            },
+            "SHORT": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 7,
+            "TP": 4
+          },
+          "holding_minutes": {
+            "max": 147.0,
+            "mean": 32.36363636363637,
+            "median": 17.0,
+            "p95": 147.0
+          },
+          "loss_streak_length_histogram": {
+            "3": 1,
+            "4": 1
+          },
+          "loss_streak_run_count": 2,
+          "losses": 7,
+          "max_consecutive_losses": 4,
+          "net_pnl": 69.99999999999947,
+          "total_costs": 52.40315691640117,
+          "trade_ledger_sha256": "4e66ca0139546b5ce94359ef10a84e442adc75deafab03dd514f5142c1f7daf3",
+          "wins": 4
+        },
+        "oos": {
+          "avg_tp_per_day": 0.0,
+          "closed_trades": 3,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 3,
+              "net_pnl": -30.0,
+              "profit_factor": 0.0,
+              "trades": 3,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            },
+            "SHORT": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 3
+          },
+          "holding_minutes": {
+            "max": 17.0,
+            "mean": 6.666666666666667,
+            "median": 2.0,
+            "p95": 17.0
+          },
+          "loss_streak_length_histogram": {
+            "3": 1
+          },
+          "loss_streak_run_count": 1,
+          "losses": 3,
+          "max_consecutive_losses": 3,
+          "net_pnl": -30.0,
+          "total_costs": 23.937734180609457,
+          "trade_ledger_sha256": "3d4e6631215c1cf4625d08a93cec2d05d5bfc2521eca6af1073fd021653245f3",
+          "wins": 0
+        },
+        "train": {
+          "avg_tp_per_day": 0.032967284548874765,
+          "closed_trades": 5,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 2,
+              "net_pnl": 84.99999999999972,
+              "profit_factor": 5.249999999999986,
+              "trades": 5,
+              "win_rate_pct": 60.0,
+              "wins": 3
+            },
+            "SHORT": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 2,
+            "TP": 3
+          },
+          "holding_minutes": {
+            "max": 147.0,
+            "mean": 60.8,
+            "median": 51.0,
+            "p95": 147.0
+          },
+          "loss_streak_length_histogram": {
+            "2": 1
+          },
+          "loss_streak_run_count": 1,
+          "losses": 2,
+          "max_consecutive_losses": 2,
+          "net_pnl": 84.99999999999972,
+          "total_costs": 17.159945277803168,
+          "trade_ledger_sha256": "7d0d91012d42d3121e9bb054a1ba82cdcbdd58998fd83380fe71070ed0f3061d",
+          "wins": 3
+        }
       },
       "train_metrics": {
-        "avg_net_tp_per_day": 1.252756812857241,
+        "avg_net_tp_per_day": 0.032967284548874765,
         "data_hash_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
         "execution_data_hash_sha256": null,
         "execution_resolution": "base_ohlc_only",
-        "final_balance": 9.99999999999045,
-        "losses": 498,
-        "max_consecutive_losses": 23,
-        "net_pnl": -990.0000000000092,
+        "final_balance": 1084.9999999999998,
+        "losses": 2,
+        "max_consecutive_losses": 2,
+        "net_pnl": 84.99999999999972,
         "open_position_unrealized_net_pnl": 0.0,
         "open_positions_at_end": 0,
         "passes_all_targets": false,
-        "profit_factor": 0.8012048192771066,
+        "profit_factor": 5.249999999999986,
         "rows": 131040,
         "span_days": 90.99930555555555,
-        "total_costs": 1916.6803618085123,
-        "trades": 612,
+        "total_costs": 17.159945277803168,
+        "trades": 5,
         "unresolved_as_loss_count": 0,
-        "win_rate_pct": 18.627450980392158,
-        "wins": 114
+        "win_rate_pct": 60.0,
+        "wins": 3
+      }
+    },
+    {
+      "contract": {
+        "break_even_enabled": false,
+        "commission_pct_per_side": 0.04,
+        "compound": false,
+        "entry_model": "next_candle_open",
+        "exit_model": "sl_tp_only",
+        "initial_balance": 1000.0,
+        "max_consecutive_losses": 13,
+        "max_positions": 1,
+        "min_profit_factor": 1.0,
+        "min_tp_per_day": 3.0,
+        "min_win_rate_pct": 40.0,
+        "partial_exit_enabled": false,
+        "profile_name": "ETHUSDT fixed-risk 3.5R (editable preset)",
+        "reward_risk": 3.5,
+        "risk_mode": "fixed_usd",
+        "risk_pct": 1.0,
+        "risk_usd": 10.0,
+        "slippage_pct_per_side": 0.02,
+        "symbol": "ETHUSDT",
+        "target_mode": "net_rr",
+        "time_exit_enabled": false,
+        "trailing_stop_enabled": false,
+        "use_max_consecutive_losses": true,
+        "use_min_profit_factor": true,
+        "use_min_tp_per_day": true,
+        "use_min_win_rate": true
+      },
+      "criterion_distances": {
+        "avg_net_tp_per_day": 0.9816848419172918,
+        "max_consecutive_losses": 0.0,
+        "profit_factor": 0.0,
+        "win_rate_pct": 0.0
+      },
+      "development_audit_evidence": {
+        "aggregate_metrics_checked": [
+          "trades",
+          "wins",
+          "losses",
+          "win_rate_pct",
+          "profit_factor",
+          "avg_net_tp_per_day",
+          "max_consecutive_losses",
+          "net_pnl",
+          "final_balance",
+          "total_costs",
+          "unresolved_as_loss_count",
+          "open_positions_at_end",
+          "open_position_unrealized_net_pnl"
+        ],
+        "independent_trades": 4,
+        "ledger_fields_checked": 22,
+        "open_position_checked": true,
+        "primary_trades": 4
+      },
+      "development_audit_status": "MATCH",
+      "development_criterion_distances": {
+        "avg_net_tp_per_day": 0.9892470709469299,
+        "max_consecutive_losses": 0.0,
+        "profit_factor": 0.0,
+        "win_rate_pct": 0.37500250000000007
+      },
+      "development_data_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
+      "development_distance": 1.36424957094693,
+      "development_execution_data_sha256": null,
+      "development_failed_conditions": [
+        "win_rate_pct",
+        "avg_net_tp_per_day"
+      ],
+      "development_metrics": {
+        "avg_net_tp_per_day": 0.03225878715921056,
+        "data_hash_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
+        "execution_data_hash_sha256": null,
+        "execution_resolution": "base_ohlc_only",
+        "final_balance": 1004.9999999999998,
+        "losses": 3,
+        "max_consecutive_losses": 3,
+        "net_pnl": 4.999999999999769,
+        "open_position_unrealized_net_pnl": 0.0,
+        "open_positions_at_end": 0,
+        "passes_all_targets": false,
+        "profit_factor": 1.166666666666659,
+        "rows": 44640,
+        "span_days": 30.999305555555555,
+        "total_costs": 16.465444243131806,
+        "trades": 4,
+        "unresolved_as_loss_count": 0,
+        "win_rate_pct": 25.0,
+        "wins": 1
+      },
+      "development_passes_all_targets": false,
+      "distance": 0.9816848419172918,
+      "failed_conditions": [
+        "avg_net_tp_per_day"
+      ],
+      "full_data_audit_evidence": {
+        "aggregate_metrics_checked": [
+          "trades",
+          "wins",
+          "losses",
+          "win_rate_pct",
+          "profit_factor",
+          "avg_net_tp_per_day",
+          "max_consecutive_losses",
+          "net_pnl",
+          "final_balance",
+          "total_costs",
+          "unresolved_as_loss_count",
+          "open_positions_at_end",
+          "open_position_unrealized_net_pnl"
+        ],
+        "independent_trades": 20,
+        "ledger_fields_checked": 22,
+        "open_position_checked": true,
+        "primary_trades": 20
+      },
+      "full_data_audit_status": "MATCH",
+      "independent_audit": {
+        "engine": "app.audit.independent_replay",
+        "independent_trades": 10,
+        "ledger_fields_checked": 22,
+        "primary_trades": 10,
+        "status": "MATCH"
+      },
+      "metrics": {
+        "avg_net_tp_per_day": 0.054945474248124605,
+        "data_hash_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
+        "execution_data_hash_sha256": null,
+        "execution_resolution": "base_ohlc_only",
+        "final_balance": 1124.9999999999995,
+        "losses": 5,
+        "max_consecutive_losses": 2,
+        "net_pnl": 124.9999999999995,
+        "open_position_unrealized_net_pnl": 0.0,
+        "open_positions_at_end": 0,
+        "passes_all_targets": false,
+        "profit_factor": 3.49999999999999,
+        "rows": 131040,
+        "span_days": 90.99930555555555,
+        "total_costs": 36.83229609223572,
+        "trades": 10,
+        "unresolved_as_loss_count": 0,
+        "win_rate_pct": 50.0,
+        "wins": 5
+      },
+      "oos_audit_evidence": {
+        "aggregate_metrics_checked": [
+          "trades",
+          "wins",
+          "losses",
+          "win_rate_pct",
+          "profit_factor",
+          "avg_net_tp_per_day",
+          "max_consecutive_losses",
+          "net_pnl",
+          "final_balance",
+          "total_costs",
+          "unresolved_as_loss_count",
+          "open_positions_at_end",
+          "open_position_unrealized_net_pnl"
+        ],
+        "independent_trades": 6,
+        "ledger_fields_checked": 22,
+        "open_position_checked": true,
+        "primary_trades": 6
+      },
+      "oos_audit_status": "MATCH",
+      "oos_data_sha256": "1d0d240ea14018cc8171aa259049fa7be174966a685029c40e5b067a13f4c796",
+      "oos_distance": 3.0001025,
+      "oos_execution_data_sha256": null,
+      "oos_failed_conditions": [
+        "win_rate_pct",
+        "profit_factor",
+        "avg_net_tp_per_day"
+      ],
+      "oos_metrics": {
+        "avg_net_tp_per_day": 0.0,
+        "data_hash_sha256": "1d0d240ea14018cc8171aa259049fa7be174966a685029c40e5b067a13f4c796",
+        "execution_data_hash_sha256": null,
+        "execution_resolution": "base_ohlc_only",
+        "final_balance": 940.0,
+        "losses": 6,
+        "max_consecutive_losses": 6,
+        "net_pnl": -60.0,
+        "open_position_unrealized_net_pnl": 0.0,
+        "open_positions_at_end": 0,
+        "passes_all_targets": false,
+        "profit_factor": 0.0,
+        "rows": 87840,
+        "span_days": 60.99930555555556,
+        "total_costs": 35.71655645079823,
+        "trades": 6,
+        "unresolved_as_loss_count": 0,
+        "win_rate_pct": 0.0,
+        "wins": 0
+      },
+      "oos_passes_all_targets": false,
+      "run_hash_sha256": "ecf47ed862155e4f1dd9ecdd8b26605ca2665aaff23bef40d1b092083a07b238",
+      "strategy": {
+        "atr_period": 12,
+        "confirmation_filter": "rsi_midline",
+        "context_filter": "adx_strength",
+        "direction": "long",
+        "family": "micro_double_bottom",
+        "fast": 8,
+        "name": "کف دوقلوی کوتاه‌مدت 8/100 ATR 12x2.5 long [ctx=adx_strength; confirm=rsi_midline]",
+        "secondary_family": "none",
+        "seed": 1000045,
+        "signal_composition": "single",
+        "slow": 100,
+        "stop_atr": 2.5
+      },
+      "trade_diagnostics": {
+        "development": {
+          "avg_tp_per_day": 0.03225878715921056,
+          "closed_trades": 4,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 3,
+              "net_pnl": 4.999999999999769,
+              "profit_factor": 1.166666666666659,
+              "trades": 4,
+              "win_rate_pct": 25.0,
+              "wins": 1
+            },
+            "SHORT": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 3,
+            "TP": 1
+          },
+          "holding_minutes": {
+            "max": 27.0,
+            "mean": 11.75,
+            "median": 9.0,
+            "p95": 27.0
+          },
+          "loss_streak_length_histogram": {
+            "3": 1
+          },
+          "loss_streak_run_count": 1,
+          "losses": 3,
+          "max_consecutive_losses": 3,
+          "net_pnl": 4.999999999999769,
+          "total_costs": 16.465444243131806,
+          "trade_ledger_sha256": "420af2cdf9f5a7c32e78479a8abc663672a745044f016507314eee03b28cf989",
+          "wins": 1
+        },
+        "full": {
+          "avg_tp_per_day": 0.03278700966533722,
+          "closed_trades": 20,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 14,
+              "net_pnl": 69.99999999999926,
+              "profit_factor": 1.4999999999999947,
+              "trades": 20,
+              "win_rate_pct": 30.0,
+              "wins": 6
+            },
+            "SHORT": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 14,
+            "TP": 6
+          },
+          "holding_minutes": {
+            "max": 3024.0,
+            "mean": 249.35,
+            "median": 21.0,
+            "p95": 912.0
+          },
+          "loss_streak_length_histogram": {
+            "1": 1,
+            "2": 1,
+            "5": 1,
+            "6": 1
+          },
+          "loss_streak_run_count": 4,
+          "losses": 14,
+          "max_consecutive_losses": 6,
+          "net_pnl": 69.99999999999926,
+          "total_costs": 89.01429678616576,
+          "trade_ledger_sha256": "ba120a8a5b93c13e2054ec321926719b1f0a285e508e9e24fcf3eaf29b807582",
+          "wins": 6
+        },
+        "oos": {
+          "avg_tp_per_day": 0.0,
+          "closed_trades": 6,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 6,
+              "net_pnl": -60.0,
+              "profit_factor": 0.0,
+              "trades": 6,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            },
+            "SHORT": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 6
+          },
+          "holding_minutes": {
+            "max": 3024.0,
+            "mean": 545.3333333333334,
+            "median": 6.5,
+            "p95": 3024.0
+          },
+          "loss_streak_length_histogram": {
+            "6": 1
+          },
+          "loss_streak_run_count": 1,
+          "losses": 6,
+          "max_consecutive_losses": 6,
+          "net_pnl": -60.0,
+          "total_costs": 35.71655645079823,
+          "trade_ledger_sha256": "2e876f8e17c75f202fe23227930228f387e66a61ab1144af55fa095357053c8d",
+          "wins": 0
+        },
+        "train": {
+          "avg_tp_per_day": 0.054945474248124605,
+          "closed_trades": 10,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 5,
+              "net_pnl": 124.9999999999995,
+              "profit_factor": 3.49999999999999,
+              "trades": 10,
+              "win_rate_pct": 50.0,
+              "wins": 5
+            },
+            "SHORT": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 5,
+            "TP": 5
+          },
+          "holding_minutes": {
+            "max": 912.0,
+            "mean": 166.8,
+            "median": 42.5,
+            "p95": 912.0
+          },
+          "loss_streak_length_histogram": {
+            "1": 1,
+            "2": 2
+          },
+          "loss_streak_run_count": 3,
+          "losses": 5,
+          "max_consecutive_losses": 2,
+          "net_pnl": 124.9999999999995,
+          "total_costs": 36.83229609223572,
+          "trade_ledger_sha256": "f85fc5ac661f1aa21e26d6863e44e2d96d2d7c42eb8fa432eb4bcb50cb59ea1f",
+          "wins": 5
+        }
+      },
+      "train_metrics": {
+        "avg_net_tp_per_day": 0.054945474248124605,
+        "data_hash_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
+        "execution_data_hash_sha256": null,
+        "execution_resolution": "base_ohlc_only",
+        "final_balance": 1124.9999999999995,
+        "losses": 5,
+        "max_consecutive_losses": 2,
+        "net_pnl": 124.9999999999995,
+        "open_position_unrealized_net_pnl": 0.0,
+        "open_positions_at_end": 0,
+        "passes_all_targets": false,
+        "profit_factor": 3.49999999999999,
+        "rows": 131040,
+        "span_days": 90.99930555555555,
+        "total_costs": 36.83229609223572,
+        "trades": 10,
+        "unresolved_as_loss_count": 0,
+        "win_rate_pct": 50.0,
+        "wins": 5
+      }
+    },
+    {
+      "contract": {
+        "break_even_enabled": false,
+        "commission_pct_per_side": 0.04,
+        "compound": false,
+        "entry_model": "next_candle_open",
+        "exit_model": "sl_tp_only",
+        "initial_balance": 1000.0,
+        "max_consecutive_losses": 13,
+        "max_positions": 1,
+        "min_profit_factor": 1.0,
+        "min_tp_per_day": 3.0,
+        "min_win_rate_pct": 40.0,
+        "partial_exit_enabled": false,
+        "profile_name": "ETHUSDT fixed-risk 3.5R (editable preset)",
+        "reward_risk": 3.5,
+        "risk_mode": "fixed_usd",
+        "risk_pct": 1.0,
+        "risk_usd": 10.0,
+        "slippage_pct_per_side": 0.02,
+        "symbol": "ETHUSDT",
+        "target_mode": "net_rr",
+        "time_exit_enabled": false,
+        "trailing_stop_enabled": false,
+        "use_max_consecutive_losses": true,
+        "use_min_profit_factor": true,
+        "use_min_tp_per_day": true,
+        "use_min_win_rate": true
+      },
+      "criterion_distances": {
+        "avg_net_tp_per_day": 0.9853478735338334,
+        "max_consecutive_losses": 0.0,
+        "profit_factor": 0.0,
+        "win_rate_pct": 0.0
+      },
+      "development_audit_evidence": {
+        "aggregate_metrics_checked": [
+          "trades",
+          "wins",
+          "losses",
+          "win_rate_pct",
+          "profit_factor",
+          "avg_net_tp_per_day",
+          "max_consecutive_losses",
+          "net_pnl",
+          "final_balance",
+          "total_costs",
+          "unresolved_as_loss_count",
+          "open_positions_at_end",
+          "open_position_unrealized_net_pnl"
+        ],
+        "independent_trades": 2,
+        "ledger_fields_checked": 22,
+        "open_position_checked": true,
+        "primary_trades": 2
+      },
+      "development_audit_status": "MATCH",
+      "development_criterion_distances": {
+        "avg_net_tp_per_day": 1.0,
+        "max_consecutive_losses": 0.0,
+        "profit_factor": 1.0001,
+        "win_rate_pct": 1.0000025000000001
+      },
+      "development_data_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
+      "development_distance": 3.0001025,
+      "development_execution_data_sha256": null,
+      "development_failed_conditions": [
+        "win_rate_pct",
+        "profit_factor",
+        "avg_net_tp_per_day"
+      ],
+      "development_metrics": {
+        "avg_net_tp_per_day": 0.0,
+        "data_hash_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
+        "execution_data_hash_sha256": null,
+        "execution_resolution": "base_ohlc_only",
+        "final_balance": 980.0,
+        "losses": 2,
+        "max_consecutive_losses": 2,
+        "net_pnl": -20.0,
+        "open_position_unrealized_net_pnl": 0.0,
+        "open_positions_at_end": 0,
+        "passes_all_targets": false,
+        "profit_factor": 0.0,
+        "rows": 44640,
+        "span_days": 30.999305555555555,
+        "total_costs": 6.964911926538977,
+        "trades": 2,
+        "unresolved_as_loss_count": 0,
+        "win_rate_pct": 0.0,
+        "wins": 0
+      },
+      "development_passes_all_targets": false,
+      "distance": 0.9853478735338334,
+      "failed_conditions": [
+        "avg_net_tp_per_day"
+      ],
+      "full_data_audit_evidence": {
+        "aggregate_metrics_checked": [
+          "trades",
+          "wins",
+          "losses",
+          "win_rate_pct",
+          "profit_factor",
+          "avg_net_tp_per_day",
+          "max_consecutive_losses",
+          "net_pnl",
+          "final_balance",
+          "total_costs",
+          "unresolved_as_loss_count",
+          "open_positions_at_end",
+          "open_position_unrealized_net_pnl"
+        ],
+        "independent_trades": 11,
+        "ledger_fields_checked": 22,
+        "open_position_checked": true,
+        "primary_trades": 11
+      },
+      "full_data_audit_status": "MATCH",
+      "independent_audit": {
+        "engine": "app.audit.independent_replay",
+        "independent_trades": 5,
+        "ledger_fields_checked": 22,
+        "primary_trades": 5,
+        "status": "MATCH"
+      },
+      "metrics": {
+        "avg_net_tp_per_day": 0.04395637939849969,
+        "data_hash_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
+        "execution_data_hash_sha256": null,
+        "execution_resolution": "base_ohlc_only",
+        "final_balance": 1129.9999999999995,
+        "losses": 1,
+        "max_consecutive_losses": 1,
+        "net_pnl": 129.99999999999955,
+        "open_position_unrealized_net_pnl": 0.0,
+        "open_positions_at_end": 0,
+        "passes_all_targets": false,
+        "profit_factor": 13.999999999999957,
+        "rows": 131040,
+        "span_days": 90.99930555555555,
+        "total_costs": 20.02952109105548,
+        "trades": 5,
+        "unresolved_as_loss_count": 0,
+        "win_rate_pct": 80.0,
+        "wins": 4
+      },
+      "oos_audit_evidence": {
+        "aggregate_metrics_checked": [
+          "trades",
+          "wins",
+          "losses",
+          "win_rate_pct",
+          "profit_factor",
+          "avg_net_tp_per_day",
+          "max_consecutive_losses",
+          "net_pnl",
+          "final_balance",
+          "total_costs",
+          "unresolved_as_loss_count",
+          "open_positions_at_end",
+          "open_position_unrealized_net_pnl"
+        ],
+        "independent_trades": 4,
+        "ledger_fields_checked": 22,
+        "open_position_checked": true,
+        "primary_trades": 4
+      },
+      "oos_audit_status": "MATCH",
+      "oos_data_sha256": "1d0d240ea14018cc8171aa259049fa7be174966a685029c40e5b067a13f4c796",
+      "oos_distance": 3.0001025,
+      "oos_execution_data_sha256": null,
+      "oos_failed_conditions": [
+        "win_rate_pct",
+        "profit_factor",
+        "avg_net_tp_per_day"
+      ],
+      "oos_metrics": {
+        "avg_net_tp_per_day": 0.0,
+        "data_hash_sha256": "1d0d240ea14018cc8171aa259049fa7be174966a685029c40e5b067a13f4c796",
+        "execution_data_hash_sha256": null,
+        "execution_resolution": "base_ohlc_only",
+        "final_balance": 960.0,
+        "losses": 4,
+        "max_consecutive_losses": 4,
+        "net_pnl": -40.0,
+        "open_position_unrealized_net_pnl": 0.0,
+        "open_positions_at_end": 0,
+        "passes_all_targets": false,
+        "profit_factor": 0.0,
+        "rows": 87840,
+        "span_days": 60.99930555555556,
+        "total_costs": 26.486208730722453,
+        "trades": 4,
+        "unresolved_as_loss_count": 0,
+        "win_rate_pct": 0.0,
+        "wins": 0
+      },
+      "oos_passes_all_targets": false,
+      "run_hash_sha256": "8b228c4a920a2dd306fc4725b806abf8692b80cff347841e358cb64ca65b08a1",
+      "strategy": {
+        "atr_period": 12,
+        "confirmation_filter": "none",
+        "context_filter": "adx_strength",
+        "direction": "both",
+        "family": "micro_double_bottom",
+        "fast": 9,
+        "name": "کف دوقلوی کوتاه‌مدت AND MACD crossover 9/89 ATR 12x2.5 both [ctx=adx_strength; confirm=none]",
+        "secondary_family": "macd_crossover",
+        "seed": 1000045,
+        "signal_composition": "and",
+        "slow": 89,
+        "stop_atr": 2.5
+      },
+      "trade_diagnostics": {
+        "development": {
+          "avg_tp_per_day": 0.0,
+          "closed_trades": 2,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 2,
+              "net_pnl": -20.0,
+              "profit_factor": 0.0,
+              "trades": 2,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            },
+            "SHORT": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 2
+          },
+          "holding_minutes": {
+            "max": 3.0,
+            "mean": 2.5,
+            "median": 2.5,
+            "p95": 3.0
+          },
+          "loss_streak_length_histogram": {
+            "2": 1
+          },
+          "loss_streak_run_count": 1,
+          "losses": 2,
+          "max_consecutive_losses": 2,
+          "net_pnl": -20.0,
+          "total_costs": 6.964911926538977,
+          "trade_ledger_sha256": "94239ba1ada40a4cb13fde05bdf8507c847619ff6a91688ad5f1a39acaedb9db",
+          "wins": 0
+        },
+        "full": {
+          "avg_tp_per_day": 0.021858006443558148,
+          "closed_trades": 11,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 7,
+              "net_pnl": 69.99999999999953,
+              "profit_factor": 1.9999999999999936,
+              "trades": 11,
+              "win_rate_pct": 36.36363636363637,
+              "wins": 4
+            },
+            "SHORT": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 7,
+            "TP": 4
+          },
+          "holding_minutes": {
+            "max": 344.0,
+            "mean": 79.81818181818181,
+            "median": 17.0,
+            "p95": 344.0
+          },
+          "loss_streak_length_histogram": {
+            "1": 1,
+            "6": 1
+          },
+          "loss_streak_run_count": 2,
+          "losses": 7,
+          "max_consecutive_losses": 6,
+          "net_pnl": 69.99999999999953,
+          "total_costs": 53.480641748316906,
+          "trade_ledger_sha256": "ca2875925505783fe1e69bed378d62d005e4758cc319140f62ed893d0e922e33",
+          "wins": 4
+        },
+        "oos": {
+          "avg_tp_per_day": 0.0,
+          "closed_trades": 4,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 4,
+              "net_pnl": -40.0,
+              "profit_factor": 0.0,
+              "trades": 4,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            },
+            "SHORT": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 4
+          },
+          "holding_minutes": {
+            "max": 232.0,
+            "mean": 63.25,
+            "median": 10.0,
+            "p95": 232.0
+          },
+          "loss_streak_length_histogram": {
+            "4": 1
+          },
+          "loss_streak_run_count": 1,
+          "losses": 4,
+          "max_consecutive_losses": 4,
+          "net_pnl": -40.0,
+          "total_costs": 26.486208730722453,
+          "trade_ledger_sha256": "fddc989d038367fc88a087f71ff66f0e5ad6732b1b1652af252c0750641d51d2",
+          "wins": 0
+        },
+        "train": {
+          "avg_tp_per_day": 0.04395637939849969,
+          "closed_trades": 5,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 1,
+              "net_pnl": 129.99999999999955,
+              "profit_factor": 13.999999999999957,
+              "trades": 5,
+              "win_rate_pct": 80.0,
+              "wins": 4
+            },
+            "SHORT": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 1,
+            "TP": 4
+          },
+          "holding_minutes": {
+            "max": 344.0,
+            "mean": 124.0,
+            "median": 68.0,
+            "p95": 344.0
+          },
+          "loss_streak_length_histogram": {
+            "1": 1
+          },
+          "loss_streak_run_count": 1,
+          "losses": 1,
+          "max_consecutive_losses": 1,
+          "net_pnl": 129.99999999999955,
+          "total_costs": 20.02952109105548,
+          "trade_ledger_sha256": "eb1bf3d687c16adab5abe0cb0d69a4bdd68ab6f8bf211dc67856c5764ada1be1",
+          "wins": 4
+        }
+      },
+      "train_metrics": {
+        "avg_net_tp_per_day": 0.04395637939849969,
+        "data_hash_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
+        "execution_data_hash_sha256": null,
+        "execution_resolution": "base_ohlc_only",
+        "final_balance": 1129.9999999999995,
+        "losses": 1,
+        "max_consecutive_losses": 1,
+        "net_pnl": 129.99999999999955,
+        "open_position_unrealized_net_pnl": 0.0,
+        "open_positions_at_end": 0,
+        "passes_all_targets": false,
+        "profit_factor": 13.999999999999957,
+        "rows": 131040,
+        "span_days": 90.99930555555555,
+        "total_costs": 20.02952109105548,
+        "trades": 5,
+        "unresolved_as_loss_count": 0,
+        "win_rate_pct": 80.0,
+        "wins": 4
+      }
+    },
+    {
+      "contract": {
+        "break_even_enabled": false,
+        "commission_pct_per_side": 0.04,
+        "compound": false,
+        "entry_model": "next_candle_open",
+        "exit_model": "sl_tp_only",
+        "initial_balance": 1000.0,
+        "max_consecutive_losses": 13,
+        "max_positions": 1,
+        "min_profit_factor": 1.0,
+        "min_tp_per_day": 3.0,
+        "min_win_rate_pct": 40.0,
+        "partial_exit_enabled": false,
+        "profile_name": "ETHUSDT fixed-risk 3.5R (editable preset)",
+        "reward_risk": 3.5,
+        "risk_mode": "fixed_usd",
+        "risk_pct": 1.0,
+        "risk_usd": 10.0,
+        "slippage_pct_per_side": 0.02,
+        "symbol": "ETHUSDT",
+        "target_mode": "net_rr",
+        "time_exit_enabled": false,
+        "trailing_stop_enabled": false,
+        "use_max_consecutive_losses": true,
+        "use_min_profit_factor": true,
+        "use_min_tp_per_day": true,
+        "use_min_win_rate": true
+      },
+      "criterion_distances": {
+        "avg_net_tp_per_day": 0.9926739367669167,
+        "max_consecutive_losses": 0.0,
+        "profit_factor": 0.0,
+        "win_rate_pct": 2.5000000000829912e-06
+      },
+      "development_audit_evidence": {
+        "aggregate_metrics_checked": [
+          "trades",
+          "wins",
+          "losses",
+          "win_rate_pct",
+          "profit_factor",
+          "avg_net_tp_per_day",
+          "max_consecutive_losses",
+          "net_pnl",
+          "final_balance",
+          "total_costs",
+          "unresolved_as_loss_count",
+          "open_positions_at_end",
+          "open_position_unrealized_net_pnl"
+        ],
+        "independent_trades": 2,
+        "ledger_fields_checked": 22,
+        "open_position_checked": true,
+        "primary_trades": 2
+      },
+      "development_audit_status": "MATCH",
+      "development_criterion_distances": {
+        "avg_net_tp_per_day": 1.0,
+        "max_consecutive_losses": 0.0,
+        "profit_factor": 1.0001,
+        "win_rate_pct": 1.0000025000000001
+      },
+      "development_data_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
+      "development_distance": 3.0001025,
+      "development_execution_data_sha256": null,
+      "development_failed_conditions": [
+        "win_rate_pct",
+        "profit_factor",
+        "avg_net_tp_per_day"
+      ],
+      "development_metrics": {
+        "avg_net_tp_per_day": 0.0,
+        "data_hash_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
+        "execution_data_hash_sha256": null,
+        "execution_resolution": "base_ohlc_only",
+        "final_balance": 980.0,
+        "losses": 2,
+        "max_consecutive_losses": 2,
+        "net_pnl": -20.0,
+        "open_position_unrealized_net_pnl": 0.0,
+        "open_positions_at_end": 0,
+        "passes_all_targets": false,
+        "profit_factor": 0.0,
+        "rows": 44640,
+        "span_days": 30.999305555555555,
+        "total_costs": 5.334777043843566,
+        "trades": 2,
+        "unresolved_as_loss_count": 0,
+        "win_rate_pct": 0.0,
+        "wins": 0
+      },
+      "development_passes_all_targets": false,
+      "distance": 0.9926764367669169,
+      "failed_conditions": [
+        "win_rate_pct",
+        "avg_net_tp_per_day"
+      ],
+      "full_data_audit_evidence": {
+        "aggregate_metrics_checked": [
+          "trades",
+          "wins",
+          "losses",
+          "win_rate_pct",
+          "profit_factor",
+          "avg_net_tp_per_day",
+          "max_consecutive_losses",
+          "net_pnl",
+          "final_balance",
+          "total_costs",
+          "unresolved_as_loss_count",
+          "open_positions_at_end",
+          "open_position_unrealized_net_pnl"
+        ],
+        "independent_trades": 13,
+        "ledger_fields_checked": 22,
+        "open_position_checked": true,
+        "primary_trades": 13
+      },
+      "full_data_audit_status": "MATCH",
+      "independent_audit": {
+        "engine": "app.audit.independent_replay",
+        "independent_trades": 5,
+        "ledger_fields_checked": 22,
+        "primary_trades": 5,
+        "status": "MATCH"
+      },
+      "metrics": {
+        "avg_net_tp_per_day": 0.021978189699249844,
+        "data_hash_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
+        "execution_data_hash_sha256": null,
+        "execution_resolution": "base_ohlc_only",
+        "final_balance": 1039.9999999999993,
+        "losses": 3,
+        "max_consecutive_losses": 2,
+        "net_pnl": 39.99999999999944,
+        "open_position_unrealized_net_pnl": 0.0,
+        "open_positions_at_end": 0,
+        "passes_all_targets": false,
+        "profit_factor": 2.3333333333333144,
+        "rows": 131040,
+        "span_days": 90.99930555555555,
+        "total_costs": 13.363069754423314,
+        "trades": 5,
+        "unresolved_as_loss_count": 0,
+        "win_rate_pct": 40.0,
+        "wins": 2
+      },
+      "oos_audit_evidence": {
+        "aggregate_metrics_checked": [
+          "trades",
+          "wins",
+          "losses",
+          "win_rate_pct",
+          "profit_factor",
+          "avg_net_tp_per_day",
+          "max_consecutive_losses",
+          "net_pnl",
+          "final_balance",
+          "total_costs",
+          "unresolved_as_loss_count",
+          "open_positions_at_end",
+          "open_position_unrealized_net_pnl"
+        ],
+        "independent_trades": 6,
+        "ledger_fields_checked": 22,
+        "open_position_checked": true,
+        "primary_trades": 6
+      },
+      "oos_audit_status": "MATCH",
+      "oos_data_sha256": "1d0d240ea14018cc8171aa259049fa7be174966a685029c40e5b067a13f4c796",
+      "oos_distance": 1.8779712902488264,
+      "oos_execution_data_sha256": null,
+      "oos_failed_conditions": [
+        "win_rate_pct",
+        "profit_factor",
+        "avg_net_tp_per_day"
+      ],
+      "oos_metrics": {
+        "avg_net_tp_per_day": 0.016393629253520645,
+        "data_hash_sha256": "1d0d240ea14018cc8171aa259049fa7be174966a685029c40e5b067a13f4c796",
+        "execution_data_hash_sha256": null,
+        "execution_resolution": "base_ohlc_only",
+        "final_balance": 985.0,
+        "losses": 5,
+        "max_consecutive_losses": 4,
+        "net_pnl": -15.0,
+        "open_position_unrealized_net_pnl": 0.0,
+        "open_positions_at_end": 0,
+        "passes_all_targets": false,
+        "profit_factor": 0.7,
+        "rows": 87840,
+        "span_days": 60.99930555555556,
+        "total_costs": 28.771550691281703,
+        "trades": 6,
+        "unresolved_as_loss_count": 0,
+        "win_rate_pct": 16.666666666666668,
+        "wins": 1
+      },
+      "oos_passes_all_targets": false,
+      "run_hash_sha256": "5c241d0cf7b66ddb0fd7e1f7649fe490eac797596107fc857baa2473c269f9ed",
+      "strategy": {
+        "atr_period": 10,
+        "confirmation_filter": "rsi_midline",
+        "context_filter": "ema_trend",
+        "direction": "short",
+        "family": "stochastic_reversion",
+        "fast": 10,
+        "name": "Stochastic reversion AND سقف دوقلوی کوتاه‌مدت 10/89 ATR 10x6 short [ctx=ema_trend; confirm=rsi_midline]",
+        "secondary_family": "micro_double_top",
+        "seed": 42,
+        "signal_composition": "and",
+        "slow": 89,
+        "stop_atr": 6.0
+      },
+      "trade_diagnostics": {
+        "development": {
+          "avg_tp_per_day": 0.0,
+          "closed_trades": 2,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            },
+            "SHORT": {
+              "losses": 2,
+              "net_pnl": -20.0,
+              "profit_factor": 0.0,
+              "trades": 2,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 2
+          },
+          "holding_minutes": {
+            "max": 538.0,
+            "mean": 288.0,
+            "median": 288.0,
+            "p95": 538.0
+          },
+          "loss_streak_length_histogram": {
+            "2": 1
+          },
+          "loss_streak_run_count": 1,
+          "losses": 2,
+          "max_consecutive_losses": 2,
+          "net_pnl": -20.0,
+          "total_costs": 5.334777043843566,
+          "trade_ledger_sha256": "5f827ceccc0ede1d0214a0c8086cc08cc46ce84020376b7aa4e10ded7d58a7bb",
+          "wins": 0
+        },
+        "full": {
+          "avg_tp_per_day": 0.01639350483266861,
+          "closed_trades": 13,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            },
+            "SHORT": {
+              "losses": 10,
+              "net_pnl": 4.9999999999994404,
+              "profit_factor": 1.0499999999999943,
+              "trades": 13,
+              "win_rate_pct": 23.076923076923077,
+              "wins": 3
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 10,
+            "TP": 3
+          },
+          "holding_minutes": {
+            "max": 898.0,
+            "mean": 200.84615384615384,
+            "median": 62.0,
+            "p95": 898.0
+          },
+          "loss_streak_length_histogram": {
+            "1": 2,
+            "8": 1
+          },
+          "loss_streak_run_count": 3,
+          "losses": 10,
+          "max_consecutive_losses": 8,
+          "net_pnl": 4.9999999999994404,
+          "total_costs": 47.469397489548584,
+          "trade_ledger_sha256": "9c81b59985e0019f642859344b648c9c254b6edb904c7e3b99d38f200cf436b3",
+          "wins": 3
+        },
+        "oos": {
+          "avg_tp_per_day": 0.016393629253520645,
+          "closed_trades": 6,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            },
+            "SHORT": {
+              "losses": 5,
+              "net_pnl": -15.0,
+              "profit_factor": 0.7,
+              "trades": 6,
+              "win_rate_pct": 16.666666666666668,
+              "wins": 1
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 5,
+            "TP": 1
+          },
+          "holding_minutes": {
+            "max": 443.0,
+            "mean": 127.33333333333333,
+            "median": 60.5,
+            "p95": 443.0
+          },
+          "loss_streak_length_histogram": {
+            "1": 1,
+            "4": 1
+          },
+          "loss_streak_run_count": 2,
+          "losses": 5,
+          "max_consecutive_losses": 4,
+          "net_pnl": -15.0,
+          "total_costs": 28.771550691281703,
+          "trade_ledger_sha256": "865fca11c8c69940c1eb38b2b60f0ee4c7c8d514bdaa8079547fd8c16b53163d",
+          "wins": 1
+        },
+        "train": {
+          "avg_tp_per_day": 0.021978189699249844,
+          "closed_trades": 5,
+          "direction_breakdown": {
+            "LONG": {
+              "losses": 0,
+              "net_pnl": 0,
+              "profit_factor": 0.0,
+              "trades": 0,
+              "win_rate_pct": 0.0,
+              "wins": 0
+            },
+            "SHORT": {
+              "losses": 3,
+              "net_pnl": 39.99999999999944,
+              "profit_factor": 2.3333333333333144,
+              "trades": 5,
+              "win_rate_pct": 40.0,
+              "wins": 2
+            }
+          },
+          "exit_reason_counts": {
+            "SL": 3,
+            "TP": 2
+          },
+          "holding_minutes": {
+            "max": 898.0,
+            "mean": 254.2,
+            "median": 129.0,
+            "p95": 898.0
+          },
+          "loss_streak_length_histogram": {
+            "1": 1,
+            "2": 1
+          },
+          "loss_streak_run_count": 2,
+          "losses": 3,
+          "max_consecutive_losses": 2,
+          "net_pnl": 39.99999999999944,
+          "total_costs": 13.363069754423314,
+          "trade_ledger_sha256": "1c7ea0d92373d711471edeed9a7348ad84bf722504c2c25780daacb2c0f73ebd",
+          "wins": 2
+        }
+      },
+      "train_metrics": {
+        "avg_net_tp_per_day": 0.021978189699249844,
+        "data_hash_sha256": "e20dc5971c42869d1b7bc78ca2621085d55dd1f13ce271978d54a814a60854b2",
+        "execution_data_hash_sha256": null,
+        "execution_resolution": "base_ohlc_only",
+        "final_balance": 1039.9999999999993,
+        "losses": 3,
+        "max_consecutive_losses": 2,
+        "net_pnl": 39.99999999999944,
+        "open_position_unrealized_net_pnl": 0.0,
+        "open_positions_at_end": 0,
+        "passes_all_targets": false,
+        "profit_factor": 2.3333333333333144,
+        "rows": 131040,
+        "span_days": 90.99930555555555,
+        "total_costs": 13.363069754423314,
+        "trades": 5,
+        "unresolved_as_loss_count": 0,
+        "win_rate_pct": 40.0,
+        "wins": 2
       }
     }
   ],
@@ -1306,7 +2378,7 @@
   "schema_version": 1,
   "seed": 42,
   "selection_policy": "Train creates candidates; Development freezes selection and ranks near-misses; OOS is only evaluated after the candidate set is frozen and never used to rank/select.",
-  "source_commit": "5c135280040ebfd2ccdbcc4d8fcba1442bfb590d",
+  "source_commit": "4a33354d92d2c38c571ca30b3296dd4a24f63fbb",
   "splits": {
     "development": {
       "backtest_sha256": "4b68d1a4d74dc062d89384aff4d3f23125c943b25a14b8e96c155300e811eff9",
@@ -1327,7 +2399,7 @@
       "used_for_candidate_generation": true
     }
   },
-  "surrogate_model_fits": 537,
+  "surrogate_model_fits": 4,
   "target_criteria": {
     "avg_net_tp_per_day_at_least": 3,
     "commission_pct_per_side": 0.04,
