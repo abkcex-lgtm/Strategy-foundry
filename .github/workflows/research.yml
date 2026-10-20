@@ -84,7 +84,6 @@ jobs:
             research-run/ETHUSDT-1m-202604-202609.csv.gz
           if-no-files-found: warn
           retention-days: 90
-undefined
   aggregate:
     needs: research
     if: always() && needs.research.result == 'success'
