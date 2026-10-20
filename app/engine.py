@@ -881,6 +881,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         if genes is not None:
             family,fast,slow,period,stop,direction,context_filter,confirmation_filter,secondary_family,signal_composition=genes
         else:
+            requested_family=family
             family=str(family or choose_family())
             fast=int(rng.choice(fast_values))
             slow=int(rng.choice(slow_values))
@@ -890,7 +891,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             # High-frequency baseline lane: test standalone fast moving-average /
             # momentum rules before combining signals, because AND gates can collapse
             # a frequent base signal into only a few trades across the whole dataset.
-            if rng.random() < 0.45:
+            if requested_family is None and rng.random() < 0.45:
                 family=str(rng.choice(["ema_crossover","ema_pullback","macd_crossover","roc_momentum","atr_trend_pullback"]))
                 fast=int(rng.choice([2,3,4,5,6,8]))
                 slow=int(rng.choice([5,6,7,8,9,10,12,14,16,18,20,24,28,32]))
