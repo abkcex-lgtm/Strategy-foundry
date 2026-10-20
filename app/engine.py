@@ -701,7 +701,8 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
     span_days=max((int(df.open_time.iloc[-1])-int(df.open_time.iloc[0]))/86400000,1/1440)
     wr=100*len(wins)/len(ledger) if ledger else 0.0; pf=gp/gl if gl else (math.inf if gp else 0.0); tp_day=len(wins)/span_days
     # Count entries by UTC calendar month so an average cannot hide inactive months.
-    monthly_trade_counts={}
+    month_labels=pd.to_datetime(df["open_time"],unit="ms",utc=True).dt.strftime("%Y-%m")
+    monthly_trade_counts={str(month):0 for month in month_labels.drop_duplicates().tolist()}
     for trade in ledger:
         month=pd.to_datetime(int(trade["entry_time"]),unit="ms",utc=True).strftime("%Y-%m")
         monthly_trade_counts[month]=monthly_trade_counts.get(month,0)+1
