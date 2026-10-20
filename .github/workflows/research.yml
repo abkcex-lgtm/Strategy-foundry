@@ -17,7 +17,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  # Keep validation runs on feature branches from cancelling the canonical main search.
+  # Keep branch smoke checks from cancelling main; broad search screens ambiguity fail-closed.
   group: ethusdt-strategy-factory-research-${{ github.ref }}
   cancel-in-progress: true
 jobs:
