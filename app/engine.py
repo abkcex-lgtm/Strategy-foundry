@@ -700,7 +700,13 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
     gp=sum(max(0,t["net_pnl"]) for t in ledger); gl=abs(sum(min(0,t["net_pnl"]) for t in ledger))
     span_days=max((int(df.open_time.iloc[-1])-int(df.open_time.iloc[0]))/86400000,1/1440)
     wr=100*len(wins)/len(ledger) if ledger else 0.0; pf=gp/gl if gl else (math.inf if gp else 0.0); tp_day=len(wins)/span_days
-    evidence_metrics={"span_days":span_days,"trades":len(ledger),"win_rate_pct":wr,"avg_net_tp_per_day":tp_day}
+    # Count entries by UTC calendar month so an average cannot hide inactive months.
+    monthly_trade_counts={}
+    for trade in ledger:
+        month=pd.to_datetime(int(trade["entry_time"]),unit="ms",utc=True).strftime("%Y-%m")
+        monthly_trade_counts[month]=monthly_trade_counts.get(month,0)+1
+    evidence_metrics={"span_days":span_days,"trades":len(ledger),"win_rate_pct":wr,
+                      "avg_net_tp_per_day":tp_day,"monthly_trade_counts":monthly_trade_counts}
     passes=(not cfg["use_min_win_rate"] or wr>cfg["min_win_rate_pct"]) and (not cfg["use_min_profit_factor"] or pf>cfg["min_profit_factor"]) and (not cfg["use_min_tp_per_day"] or tp_day>=cfg["min_tp_per_day"]) and (not cfg["use_max_consecutive_losses"] or max_streak<=cfg["max_consecutive_losses"]) and open_position is None and _goal_activity_evidence(evidence_metrics,cfg)
     if execution_frames_used:
         combined_execution=pd.concat(execution_frames_used,ignore_index=True).drop_duplicates(subset=["open_time"]).sort_values("open_time").reset_index(drop=True)
@@ -727,16 +733,14 @@ def _goal_activity_evidence(metrics: dict[str, Any], cfg: dict[str, Any]) -> boo
     trades=int(metrics.get("trades", 0) or 0)
     wr=max(0.0, min(1.0, float(metrics.get("win_rate_pct", 0.0) or 0.0)/100.0))
     target_tp=float(cfg.get("min_tp_per_day", 3.0)) if cfg.get("use_min_tp_per_day", True) else 3.0
-    if span_days <= 0.0 or trades < 100:
+    monthly_counts={str(k):int(v) for k,v in (metrics.get("monthly_trade_counts") or {}).items()}
+    # Hard requirement: every represented UTC calendar month must have >=300 trades.
+    if span_days <= 0.0 or trades < 300 or not monthly_counts or min(monthly_counts.values()) < 300:
         return False
-    # Disabled TP/day must not silently steer or block selection.
-    if not cfg.get("use_min_tp_per_day", True):
-        return True
-    required=span_days*target_tp/max(wr, 0.01)
-    # The user's operating goal is at least 7.5 trades/day so a strategy at
-    # roughly 40% WR can plausibly deliver 3+ full TPs/day. This is an evidence
-    # gate, not a weighted fifth performance score, and it never relaxes TP/day.
-    minimum_frequency=span_days*7.5
+    # Disabling TP/day must not disable the user's minimum activity requirement.
+    required=span_days*target_tp/max(wr, 0.01) if cfg.get("use_min_tp_per_day", True) else 0.0
+    # At least 10 closed trades/day, plus >=300 in every represented month.
+    minimum_frequency=span_days*10.0
     return trades >= math.ceil(max(required, minimum_frequency))
 
 
