@@ -15,7 +15,7 @@ on:
       runtime_seconds:
         description: "Maximum research search time in seconds"
         required: false
-        default: "19500"
+        default: "840"
 permissions:
   contents: write
 concurrency:
@@ -54,7 +54,7 @@ jobs:
       FOUNDRY_CANDIDATES: ${{ ((github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]')) || (github.event_name == 'workflow_dispatch' && (github.event.inputs.candidates == '500000' || github.event.inputs.candidates == ''))) && '135000' || github.event_name == 'push' && '1000' || github.event.inputs.candidates || '500000' }}
       FOUNDRY_SEED: ${{ matrix.seed }}
       FOUNDRY_ALGORITHM: "stratified_random"
-      FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
+      FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '840' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
     steps:
       - uses: actions/checkout@v4
         with:
