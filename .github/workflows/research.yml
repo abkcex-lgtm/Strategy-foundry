@@ -17,11 +17,15 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: ethusdt-strategy-factory-research-v097-observable
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   research:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON((github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]')) && '[0,1,2,3]' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.candidates == '500000' || github.event.inputs.candidates == '')) && '[0,1,2,3]' || '[0]') }}
     timeout-minutes: 360
     env:
       # Pushes normally run a bounded real-data smoke test. A commit message containing
@@ -36,8 +40,8 @@ jobs:
       # FULL 500K RUN AUTHORIZED BY OWNER: execute all gates, then full search; preserve results even on failure.
       # The research runner emits SEARCH_HEARTBEAT every 25 unique candidate evaluations
       # so operators can see continuous progress instead of waiting for a whole batch.
-      FOUNDRY_CANDIDATES: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '500000' || github.event_name == 'push' && '1000' || github.event.inputs.candidates || '500000' }}
-      FOUNDRY_SEED: "42"
+      FOUNDRY_CANDIDATES: ${{ ((github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]')) || (github.event_name == 'workflow_dispatch' && (github.event.inputs.candidates == '500000' || github.event.inputs.candidates == ''))) && '135000' || github.event_name == 'push' && '1000' || github.event.inputs.candidates || '500000' }}
+      FOUNDRY_SEED: ${{ 42 + matrix.shard * 1000 }}
       FOUNDRY_ALGORITHM: "surrogate_genetic"
       FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
     steps:
@@ -61,23 +65,58 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: strategy-foundry-research-${{ github.run_id }}
+          name: strategy-foundry-research-${{ github.run_id }}-shard-${{ matrix.shard }}
           path: |
             research-results/progress.json
             research-results/report.json
             research-results/validated_strategies.zip
+            research-results/evaluated_genome_hashes.txt.gz
             research-run/ETHUSDT-1m-202604-202609.csv.gz
           if-no-files-found: warn
           retention-days: 90
-      - name: Commit auditable results to main
+undefined
+  aggregate:
+    needs: research
+    if: always() && needs.research.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install declared dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Download every research shard artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: strategy-foundry-research-${{ github.run_id }}-shard-*
+          path: research-artifacts
+          merge-multiple: false
+      - name: Aggregate globally unique genomes and audited candidates
+        run: python research/aggregate_shards.py
+      - name: Upload combined audit result
+        uses: actions/upload-artifact@v4
+        with:
+          name: strategy-foundry-aggregate-${{ github.run_id }}
+          path: |
+            research-results/report.json
+            research-results/progress.json
+            research-results/validated_strategies.zip
+            research-results/evaluated_genome_hashes.txt.gz
+          if-no-files-found: error
+          retention-days: 90
+      - name: Commit auditable combined result
         if: always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]')))
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add research-results/progress.json
-          if [ -f research-results/report.json ]; then git add research-results/report.json; fi
-          if [ -f research-results/validated_strategies.zip ]; then git add research-results/validated_strategies.zip; fi
+          git add research-results/progress.json research-results/report.json research-results/validated_strategies.zip
           if ! git diff --cached --quiet; then
-            git commit -m "Record ETHUSDT Strategy Factory research results"
-            git push origin HEAD:main
+            git commit -m "Record globally deduplicated Strategy Foundry research result"
+            git push origin HEAD:${GITHUB_REF_NAME}
           fi
