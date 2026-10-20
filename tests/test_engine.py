@@ -26,7 +26,7 @@ def test_search_screening_fails_closed_without_networking_for_ambiguous_exit(mon
     long_signal=np.zeros(len(df),dtype=bool)
     short_signal=np.zeros(len(df),dtype=bool)
     long_signal[20]=True
-    prepared.indicator_arrays=lambda _spec:(atr,long_signal,short_signal)
+    monkeypatch.setattr(type(prepared),"indicator_arrays",lambda self,_spec:(atr,long_signal,short_signal))
     monkeypatch.setattr(engine_module,"_first_exit_candidate",lambda side,opens,highs,lows,start,stop,target:start)
     monkeypatch.setattr(engine_module,"_resolve_bar_exit",lambda *args,**kwargs: (_ for _ in ()).throw(DataIntegrityError("Unresolved same-candle SL/TP ambiguity")))
     monkeypatch.setattr(engine_module,"download_binance_execution_window",lambda *args,**kwargs: pytest.fail("screening must not make 1-second network requests"))
