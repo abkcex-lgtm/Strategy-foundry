@@ -218,8 +218,10 @@ def run(df,data_manifest):
         # prior audited candidates instead of restarting an isolated population.
         size=min(250 if batches==0 else 1000,REQUESTED-completed); seed=SEED+batches*1000003
         prior_pool=sorted(train_pass+train_near,key=lambda x:(
+            not _goal_activity_evidence(x.get("metrics") or {},cfg),
             not _capability_evidence(x.get("metrics") or {}),
             float(x.get("distance",math.inf)),
+            -int((x.get("metrics") or {}).get("trades",0)),
             -float((x.get("metrics") or {}).get("profit_factor") or 0.0),
             -float((x.get("metrics") or {}).get("win_rate_pct",0.0)),
             max(0.0,3.0-float((x.get("metrics") or {}).get("avg_net_tp_per_day",0.0)))))[:192]
@@ -260,11 +262,12 @@ def run(df,data_manifest):
         if result.get("all_passing"): append_unique(train_pass,result.get("results",[]))
         else:
             append_unique(train_near,result.get("results",[]))
+            # Rank evidence-eligible/high-activity candidates before lucky tiny samples.
             train_near=sorted(train_near,key=lambda x:(
+                not _goal_activity_evidence(x.get("metrics",{}),cfg),
                 not _capability_evidence(x.get("metrics",{})),
                 float(x.get("distance",math.inf)),
-                -float(x.get("metrics",{}).get("profit_factor") or 0.0),
-                -float(x.get("metrics",{}).get("win_rate_pct",0.0)),
+                -int(x.get("metrics",{}).get("trades",0)),
                 int(x.get("metrics",{}).get("max_consecutive_losses",10**9)),
                 max(0.0,3.0-float(x.get("metrics",{}).get("avg_net_tp_per_day",0.0)))))[:max(5,min(500,batches*5))]
         zero=zero+1 if actual==0 else 0
