@@ -27,8 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     env:
-      # Pushes normally run a bounded real-data smoke test. A commit message containing
-      # [full-research] intentionally launches the full 500k search. Manual dispatch
+      # Pushes normally run a bounded real-data smoke test. A commit message containing [15m-research] launches a 15-minute bounded 500k-candidate search; [full-research] launches the full search. Manual dispatch
       # retains the 500k / 5h25m defaults and exposes a runtime override.
       # Audited full-research launch requested by project owner; tests run before data/search.
       # Benchmark parity is checked in the research runner.
@@ -39,10 +38,10 @@ jobs:
       # FULL 500K RUN AUTHORIZED BY OWNER: execute all gates, then full search; preserve results even on failure.
       # The research runner emits SEARCH_HEARTBEAT every 25 unique candidate evaluations
       # so operators can see continuous progress instead of waiting for a whole batch.
-      FOUNDRY_CANDIDATES: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '500000' || github.event_name == 'push' && '1000' || github.event.inputs.candidates || '500000' }}
+      FOUNDRY_CANDIDATES: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '500000' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '500000' || github.event_name == 'push' && '1000' || github.event.inputs.candidates || '500000' }}
       FOUNDRY_SEED: "42"
       FOUNDRY_ALGORITHM: "surrogate_genetic"
-      FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
+      FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '900' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
     steps:
       - uses: actions/checkout@v4
         with:
