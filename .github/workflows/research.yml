@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: ${{ fromJSON((github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]')) && '[0,1,2,3]' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.candidates == '500000' || github.event.inputs.candidates == '')) && '[0,1,2,3]' || '[0]') }}
+        include: ${{ fromJSON(((github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]')) || (github.event_name == 'workflow_dispatch' && (github.event.inputs.candidates == '500000' || github.event.inputs.candidates == ''))) && '[{"shard":0,"seed":42},{"shard":1,"seed":1042},{"shard":2,"seed":2042},{"shard":3,"seed":3042}]' || '[{"shard":0,"seed":42}]') }}
     timeout-minutes: 360
     env:
       # Pushes normally run a bounded real-data smoke test. A commit message containing
@@ -42,7 +42,7 @@ jobs:
       # The research runner emits SEARCH_HEARTBEAT every 25 unique candidate evaluations
       # so operators can see continuous progress instead of waiting for a whole batch.
       FOUNDRY_CANDIDATES: ${{ ((github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]')) || (github.event_name == 'workflow_dispatch' && (github.event.inputs.candidates == '500000' || github.event.inputs.candidates == ''))) && '135000' || github.event_name == 'push' && '1000' || github.event.inputs.candidates || '500000' }}
-      FOUNDRY_SEED: ${{ 42 + matrix.shard * 1000 }}
+      FOUNDRY_SEED: ${{ matrix.seed }}
       FOUNDRY_ALGORITHM: "surrogate_genetic"
       FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
     steps:
