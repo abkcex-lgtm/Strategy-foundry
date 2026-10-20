@@ -7,6 +7,7 @@ on:
       - "app/engine.py"
       - "tests/test_search.py"
       - "tests/test_engine.py"
+      - "tests/test_capability_gate.py"
   workflow_dispatch:
     inputs:
       candidates:
