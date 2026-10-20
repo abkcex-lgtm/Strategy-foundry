@@ -25,7 +25,7 @@ CONTRACT = {
     "exit_model": "sl_tp_only",
     "max_consecutive_losses": 13,
     "min_win_rate_pct": 40.0,
-    "min_profit_factor": 1.0,
+    "min_profit_factor": 1.6,
     "min_tp_per_day": 3.0,
     "use_min_win_rate": True,
     "use_min_profit_factor": True,
@@ -807,10 +807,10 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     if prepared_context is not None and prepared_context.source_frame is not frame:
         raise ValueError("Prepared market data can only be reused with its exact source DataFrame")
     names={"ema_crossover":"EMA crossover","channel_breakout":"Price channel breakout","rsi_reversion":"RSI reversion","volume_breakout":"Volume-confirmed breakout","ema_pullback":"EMA trend pullback","macd_crossover":"MACD crossover","bollinger_reversion":"Bollinger mean reversion","inside_bar_breakout":"Inside-bar breakout","engulfing_reversal":"Engulfing candle reversal","momentum_breakout":"Momentum-confirmed breakout","stochastic_reversion":"Stochastic reversion","roc_momentum":"Rate-of-change momentum","adx_trend":"ADX directional trend","keltner_breakout":"Keltner channel breakout","atr_squeeze_breakout":"Volatility squeeze breakout","obv_trend":"OBV volume trend","vwap_reclaim":"VWAP reclaim","pivot_reversal":"Support/resistance pivot reversal","swing_structure_break":"شکست ساختار سوئینگ","failed_breakout_reversal":"برگشت شکست ناموفق","wick_rejection":"رد قیمت با سایه کندل","range_expansion_breakout":"شکست با انبساط دامنه","three_bar_momentum":"مومنتوم سه‌کندلی","volatility_regime_breakout":"شکست در رژیم نوسان","trend_exhaustion_reversal":"برگشت فرسودگی روند","volume_climax_reversal":"برگشت اوج حجم","range_compression_breakout":"شکست پس از فشردگی دامنه","support_resistance_rejection":"رد قیمت حمایت/مقاومت","micro_double_bottom":"کف دوقلوی کوتاه‌مدت","micro_double_top":"سقف دوقلوی کوتاه‌مدت","williams_r_reversion":"Williams %R reversion","donchian_midline_trend":"Donchian midline trend","dual_thrust_breakout":"Dual Thrust breakout","chaikin_money_flow":"Chaikin money-flow trend","money_flow_index_reversion":"Money Flow Index reversion","atr_trend_pullback":"ATR-aware trend pullback","volume_weighted_breakout":"Volume-weighted range breakout","range_midpoint_reversion":"Range midpoint reversion","roc_acceleration":"Rate-of-change acceleration","atr_normalized_momentum":"ATR-normalized momentum"}
-    fast_values=np.array([3,4,5,6,8,9,10,12,14,16,18,21,24,28,32,36,40,48,55,64,72,89],dtype=int)
-    slow_values=np.array([12,16,18,20,24,28,32,36,40,48,55,64,72,89,100,120,144,180,200,240,300,400,500],dtype=int)
-    periods=np.array([5,7,9,10,12,14,16,18,21,24,28,30,40,50],dtype=int)
-    stops=np.array([0.5,0.7,0.8,1.0,1.2,1.5,1.8,2.0,2.5,3.0,3.5,4.0,5.0,6.0],dtype=float)
+    fast_values=np.array([2,3,4,5,6,8,9,10,12,14,16,18,21,24,28,32,36,40,48,55,64,72,89],dtype=int)
+    slow_values=np.array([5,6,7,8,9,10,12,14,16,18,20,24,28,32,36,40,48,55,64,72,89,100,120,144,180,200,240,300,400,500],dtype=int)
+    periods=np.array([3,4,5,6,7,8,9,10,12,14,16,18,21,24,28,30,40,50],dtype=int)
+    stops=np.array([0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.7,0.8,1.0,1.2,1.5,1.8,2.0,2.5,3.0,3.5,4.0,5.0,6.0],dtype=float)
     directions=("both","long","short")
     evaluated:dict[tuple,dict[str,Any]]={}
     errors=0
@@ -841,6 +841,18 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                            "elapsed_seconds":round(time.monotonic()-started_at,2),
                            "family_evaluated_counts":dict(family_counts)})
 
+    def _filter_probabilities(options, kind):
+        # High-frequency hypotheses should not be suppressed by stacking filters.
+        # Preserve every filter option while sampling the unfiltered baseline more often.
+        weights=[]
+        for option in options:
+            if option=="none":
+                weights.append(0.68 if kind=="context" else 0.62)
+            else:
+                weights.append((0.32 if kind=="context" else 0.38)/max(1,len(options)-1))
+        weights=np.asarray(weights,dtype=float)
+        return weights/weights.sum()
+
     def make_spec(family=None, genes=None):
         if genes is not None:
             family,fast,slow,period,stop,direction,context_filter,confirmation_filter,secondary_family,signal_composition=genes
@@ -850,9 +862,9 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             slow=int(rng.choice(slow_values))
             if slow<=fast: slow=int(min(500,fast+max(2,int(rng.choice([4,8,12,16,24,32,48])))))
             period=int(rng.choice(periods)); stop=float(rng.choice(stops)); direction=str(rng.choice(directions))
-            context_filter=str(rng.choice(context_filters)); confirmation_filter=str(rng.choice(confirmation_filters))
-            if len(families)>1 and rng.random()<0.45:
-                signal_composition=str(rng.choice(["and","or","xor"],p=[0.50,0.35,0.15]))
+            context_filter=str(rng.choice(context_filters,p=_filter_probabilities(context_filters, "context"))); confirmation_filter=str(rng.choice(confirmation_filters,p=_filter_probabilities(confirmation_filters, "confirmation")))
+            if len(families)>1 and rng.random()<0.65:
+                signal_composition=str(rng.choice(["and","or","xor"],p=[0.30,0.60,0.10]))
                 secondary_family=str(rng.choice([f for f in families if f!=family]))
             else:
                 signal_composition="single"; secondary_family="none"
@@ -996,8 +1008,8 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 if rng.random()<0.18: direction=str(rng.choice(directions))
                 # Stronger family mutation counters early genetic convergence.
                 if rng.random()<0.28: family=choose_family()
-                if rng.random()<0.25: context_filter=str(rng.choice(context_filters))
-                if rng.random()<0.20: confirmation_filter=str(rng.choice(confirmation_filters))
+                if rng.random()<0.25: context_filter=str(rng.choice(context_filters,p=_filter_probabilities(context_filters, "context")))
+                if rng.random()<0.20: confirmation_filter=str(rng.choice(confirmation_filters,p=_filter_probabilities(confirmation_filters, "confirmation")))
                 spec=make_spec(genes=(family,fast,slow,period,stop,direction,context_filter,confirmation_filter,secondary_family,signal_composition))
         if algorithm=="surrogate_genetic" and len(evaluated)>=32 and (last_model_fit_at<0 or len(evaluated)-last_model_fit_at>=256):
             try:
