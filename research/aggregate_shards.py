@@ -130,6 +130,7 @@ def aggregate(artifact_root: Path, output_dir: Path, target: int = TARGET_UNIQUE
 
     # Find exact standalone export and ledger files for the chosen strategies.
     export_index: dict[str, tuple[Path, str]] = {}
+    export_manifest_index: dict[str, dict[str, Any]] = {}
     for zip_path in zip_sources:
         with zipfile.ZipFile(zip_path, "r") as archive:
             for name in archive.namelist():
@@ -141,6 +142,7 @@ def aggregate(artifact_root: Path, output_dir: Path, target: int = TARGET_UNIQUE
                     "contract": manifest.get("contract", {}),
                 }).encode("utf-8")).hexdigest()
                 export_index.setdefault(key, (zip_path, name[:-len("_manifest.json")]))
+                export_manifest_index.setdefault(key, manifest)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     combined_zip = output_dir / "validated_strategies.zip"
@@ -170,12 +172,13 @@ def aggregate(artifact_root: Path, output_dir: Path, target: int = TARGET_UNIQUE
                     if original_name not in source.namelist():
                         raise RuntimeError(f"Export artifact missing required file: {original_name}")
                     out.writestr(target_prefix + suffix, source.read(original_name))
+            manifest = export_manifest_index[key]
             exports.append({
                 "file": f"strategy_{index:03d}.py",
                 "strategy": item.get("strategy"),
-                "full_run_metrics": item.get("full_run_metrics") or item.get("metrics"),
-                "full_run_hash_sha256": item.get("full_run_hash_sha256"),
-                "full_data_audit_status": item.get("full_data_audit_status"),
+                "full_run_metrics": manifest.get("full_run_metrics"),
+                "full_run_hash_sha256": manifest.get("full_run_hash_sha256"),
+                "full_data_audit_status": manifest.get("full_data_independent_audit", {}).get("status"),
             })
 
     first_report = json.loads(report_paths[0].read_text(encoding="utf-8"))
