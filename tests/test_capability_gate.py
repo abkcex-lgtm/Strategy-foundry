@@ -25,7 +25,8 @@ def test_capability_evidence_outranks_low_sample_near_miss():
     active_candidate = {
         "development_audit_status": "MATCH", "development_distance": 2.0,
         "development_metrics": {
-            "trades": 120, "span_days": 10, "avg_net_tp_per_day": 0.5,
+            "trades": 300, "span_days": 10, "avg_net_tp_per_day": 0.5,
+            "monthly_trade_counts": {"2026-07": 300},
             "win_rate_pct": 25.0, "profit_factor": 0.5,
             "max_consecutive_losses": 12,
         },
@@ -67,8 +68,9 @@ def test_goal_activity_evidence_rejects_sparse_sample():
 def test_goal_activity_evidence_scales_to_target_and_observed_win_rate():
     cfg = normalize_contract()
     sufficient = {
-        "span_days": 10, "trades": 120, "wins": 60,
+        "span_days": 10, "trades": 300, "wins": 150,
         "win_rate_pct": 50.0, "avg_net_tp_per_day": 4.0,
+        "monthly_trade_counts": {"2026-07": 300},
     }
     assert _goal_activity_evidence(sufficient, cfg) is True
 
@@ -88,3 +90,23 @@ def test_candidate_distance_normalizes_profit_factor_like_other_targets():
     assert "profit_factor" in failed
     assert distance == sum(distances.values()) / len(distances)
     assert "insufficient_activity_evidence" in failed
+
+
+
+def test_goal_activity_evidence_requires_300_trades_in_every_month_including_zero_months():
+    cfg = normalize_contract()
+    assert _goal_activity_evidence({
+        "span_days": 60, "trades": 900, "wins": 450,
+        "win_rate_pct": 50.0, "avg_net_tp_per_day": 4.0,
+        "monthly_trade_counts": {"2026-07": 600, "2026-08": 300},
+    }, cfg) is True
+    assert _goal_activity_evidence({
+        "span_days": 60, "trades": 900, "wins": 450,
+        "win_rate_pct": 50.0, "avg_net_tp_per_day": 4.0,
+        "monthly_trade_counts": {"2026-07": 900, "2026-08": 0},
+    }, cfg) is False
+    assert _goal_activity_evidence({
+        "span_days": 30, "trades": 300, "wins": 150,
+        "win_rate_pct": 50.0, "avg_net_tp_per_day": 4.0,
+        "monthly_trade_counts": {"2026-07": 299},
+    }, cfg) is False
