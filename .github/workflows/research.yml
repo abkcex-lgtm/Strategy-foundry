@@ -6,6 +6,8 @@ on:
     paths:
       - ".github/workflows/research.yml"
       - "research/aggregate_shards.py"
+      - "app/engine.py"
+      - "tests/test_search.py"
   workflow_dispatch:
     inputs:
       candidates:
