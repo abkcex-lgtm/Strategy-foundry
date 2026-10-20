@@ -282,6 +282,12 @@ def run(df,data_manifest):
         p={"status":"searching","requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"completed_batches":batches,"failed_candidate_evaluations":failed,"elapsed_seconds":round(time.monotonic()-start,2),"seed":SEED,"algorithm":ALGORITHM,"train_sha256":train_hash,"development_sha256":dev_hash,"train_passing_pool":len(train_pass),"train_near_pool":len(train_near),"last_batch_unique":actual,"preflight_summary":preflight_summary,"preflight_warning":preflight_gate_warning,"prior_candidates_used":result.get("prior_candidates_used",0),"indicator_cache_stats":result.get("indicator_cache_stats")}
         write(PROGRESS,p); print("SEARCH_PROGRESS "+json.dumps(p,sort_keys=True),flush=True)
         if zero>=5: break
+    # Persist the exact evaluated genome set for cross-worker global deduplication.
+    # This is a compressed audit artifact, not a strategy result or a market-data file.
+    genome_hash_path=OUT/"evaluated_genome_hashes.txt.gz"
+    with gzip.open(genome_hash_path,"wt",encoding="ascii") as hash_file:
+        for genome_hash in sorted(seen):
+            hash_file.write(str(genome_hash)+"\\n")
     search_complete=completed>=REQUESTED
     if not search_complete:
         write(PROGRESS,{"status":"partial_search_reported","requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"completed_batches":batches,"failed_candidate_evaluations":failed,"reason":"Runtime budget or candidate-space exhaustion; any result will be explicitly marked incomplete."})
