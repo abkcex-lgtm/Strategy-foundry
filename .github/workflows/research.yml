@@ -1,5 +1,6 @@
 
 name: ETHUSDT Strategy Factory research v0.9.9 optimized checkpointed batches
+# Full audited run re-triggered after fixing the shared market-data manifest test assertion.
 on:
   push:
     paths:
