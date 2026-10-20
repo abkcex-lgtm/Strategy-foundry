@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/research.yml"
       - "app/engine.py"
+      - "research/run_factory.py"
       - "tests/test_search.py"
       - "tests/test_engine.py"
       - "tests/test_capability_gate.py"
