@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - ".github/workflows/research.yml"
+      - "app/engine.py"
+      - "tests/test_search.py"
   workflow_dispatch:
     inputs:
       candidates:
