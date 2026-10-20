@@ -287,7 +287,7 @@ def run(df,data_manifest):
     genome_hash_path=OUT/"evaluated_genome_hashes.txt.gz"
     with gzip.open(genome_hash_path,"wt",encoding="ascii") as hash_file:
         for genome_hash in sorted(seen):
-            hash_file.write(str(genome_hash)+"\\n")
+            hash_file.write(str(genome_hash)+"\n")
     search_complete=completed>=REQUESTED
     if not search_complete:
         write(PROGRESS,{"status":"partial_search_reported","requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"completed_batches":batches,"failed_candidate_evaluations":failed,"reason":"Runtime budget or candidate-space exhaustion; any result will be explicitly marked incomplete."})
