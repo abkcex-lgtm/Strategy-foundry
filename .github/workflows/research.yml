@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - ".github/workflows/research.yml"
+      - "research/aggregate_shards.py"
   workflow_dispatch:
     inputs:
       candidates:
