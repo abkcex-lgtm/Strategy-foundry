@@ -38,6 +38,7 @@ jobs:
       # app.js family labels and displayed counts are included in the same regression suite.
       # Canonical smoke source is pinned to the triggering commit SHA.
       # FULL 500K RUN AUTHORIZED BY OWNER: execute all gates, then full search; preserve results even on failure.
+      # Parallel shard workers are globally deduplicated and aggregated before a result is certified.
       # The research runner emits SEARCH_HEARTBEAT every 25 unique candidate evaluations
       # so operators can see continuous progress instead of waiting for a whole batch.
       FOUNDRY_CANDIDATES: ${{ ((github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]')) || (github.event_name == 'workflow_dispatch' && (github.event.inputs.candidates == '500000' || github.event.inputs.candidates == ''))) && '135000' || github.event_name == 'push' && '1000' || github.event.inputs.candidates || '500000' }}
