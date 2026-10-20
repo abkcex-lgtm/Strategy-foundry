@@ -831,7 +831,22 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         options=[family for family in families if family!=exclude]
         if not options:
             options=list(families)
-        weights=np.asarray([1.0/math.sqrt(1.0+family_counts.get(family,0)) for family in options],dtype=float)
+        # Activity-first proposal distribution: keep the full family registry,
+        # but sample high-frequency families substantially more often. This is
+        # a search-priority change only; no family is excluded and all audit
+        # gates remain unchanged.
+        activity_prior = {
+            "ema_pullback": 7.0, "ema_crossover": 5.0, "macd_crossover": 3.0,
+            "rsi_reversion": 3.0, "roc_momentum": 3.0, "roc_acceleration": 3.0,
+            "atr_normalized_momentum": 3.0, "momentum_breakout": 2.5,
+            "bollinger_reversion": 2.5, "stochastic_reversion": 2.5,
+            "williams_r_reversion": 2.5, "range_midpoint_reversion": 2.0,
+            "atr_trend_pullback": 3.5, "donchian_midline_trend": 2.0,
+        }
+        weights=np.asarray([
+            activity_prior.get(family, 1.0) / math.sqrt(1.0+family_counts.get(family,0))
+            for family in options
+        ],dtype=float)
         weights=weights/weights.sum()
         return str(rng.choice(options,p=weights))
     started_at=time.monotonic()
