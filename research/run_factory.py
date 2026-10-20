@@ -253,7 +253,8 @@ def run(df,data_manifest):
             print("SEARCH_HEARTBEAT "+json.dumps(state,sort_keys=True),flush=True)
         result=search_candidates(train,size,seed,cfg,ALGORITHM,progress_callback=heartbeat,
                                  excluded_genome_hashes=seen,prior_candidates=prior_pool,
-                                 prepared_context=prepared_train)
+                                 prepared_context=prepared_train,
+                                 resolve_ambiguity_during_search=False)
         hashes=result.pop("evaluated_genome_hashes",[]); actual=len(hashes); seen.update(hashes); completed+=actual; batches+=1
         failed+=int(result.get("failed_candidates",0)); generations+=int(result.get("generations",0)); fits+=int(result.get("surrogate_model_fits",0))
         for fam,n in result.get("family_evaluated_counts",{}).items(): family_counts[fam]=family_counts.get(fam,0)+int(n)

@@ -14,6 +14,27 @@ def candles(n=300):
     return pd.DataFrame(rows)
 
 
+def test_search_screening_fails_closed_without_networking_for_ambiguous_exit(monkeypatch):
+    import numpy as np
+    import app.engine as engine_module
+
+    df=candles(100)
+    spec=StrategySpec(fast=5,slow=18,atr_period=7,stop_atr=1.5,direction="long")
+    cfg=normalize_contract()
+    prepared=prepare_backtest_data(df)
+    atr=np.ones(len(df),dtype=float)
+    long_signal=np.zeros(len(df),dtype=bool)
+    short_signal=np.zeros(len(df),dtype=bool)
+    long_signal[20]=True
+    monkeypatch.setattr(type(prepared),"indicator_arrays",lambda self,_spec:(atr,long_signal,short_signal))
+    monkeypatch.setattr(engine_module,"_first_exit_candidate",lambda side,opens,highs,lows,start,stop,target:start)
+    monkeypatch.setattr(engine_module,"_resolve_bar_exit",lambda *args,**kwargs: (_ for _ in ()).throw(DataIntegrityError("Unresolved same-candle SL/TP ambiguity")))
+    monkeypatch.setattr(engine_module,"download_binance_execution_window",lambda *args,**kwargs: pytest.fail("screening must not make 1-second network requests"))
+
+    with pytest.raises(DataIntegrityError,match="candidate-screening policy is fail-closed"):
+        backtest(df,spec,cfg,_prepared_context=prepared,resolve_ambiguity=False)
+
+
 def test_prepared_market_data_preserves_full_backtest_output_and_rejects_other_frame():
     df=candles(800)
     spec=StrategySpec(fast=5,slow=18,atr_period=7,stop_atr=1.5)
