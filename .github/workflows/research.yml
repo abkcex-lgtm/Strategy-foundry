@@ -29,13 +29,13 @@ jobs:
       matrix:
         include:
           - shard: 0
-            seed: 42
+            seed: 6102026
           - shard: 1
-            seed: 1042
+            seed: 7102026
           - shard: 2
-            seed: 2042
+            seed: 8102026
           - shard: 3
-            seed: 3042
+            seed: 9102026
     timeout-minutes: 360
     env:
       # Pushes normally run a bounded real-data smoke test. A commit message containing
@@ -53,7 +53,7 @@ jobs:
       # so operators can see continuous progress instead of waiting for a whole batch.
       FOUNDRY_CANDIDATES: ${{ ((github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]')) || (github.event_name == 'workflow_dispatch' && (github.event.inputs.candidates == '500000' || github.event.inputs.candidates == ''))) && '135000' || github.event_name == 'push' && '1000' || github.event.inputs.candidates || '500000' }}
       FOUNDRY_SEED: ${{ matrix.seed }}
-      FOUNDRY_ALGORITHM: "surrogate_genetic"
+      FOUNDRY_ALGORITHM: "stratified_random"
       FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
     steps:
       - uses: actions/checkout@v4
