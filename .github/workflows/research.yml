@@ -25,7 +25,16 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON((((github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]')) || (github.event_name == 'workflow_dispatch' && (github.event.inputs.candidates == '500000' || github.event.inputs.candidates == ''))) && '{"include":[{"shard":0,"seed":42},{"shard":1,"seed":1042},{"shard":2,"seed":2042},{"shard":3,"seed":3042}]}' || '{"include":[{"shard":0,"seed":42}]}')) }}
+      matrix:
+        include:
+          - shard: 0
+            seed: 42
+          - shard: 1
+            seed: 1042
+          - shard: 2
+            seed: 2042
+          - shard: 3
+            seed: 3042
     timeout-minutes: 360
     env:
       # Pushes normally run a bounded real-data smoke test. A commit message containing
