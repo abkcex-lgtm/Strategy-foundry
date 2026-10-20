@@ -891,16 +891,24 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             # High-frequency baseline lane: test standalone fast moving-average /
             # momentum rules before combining signals, because AND gates can collapse
             # a frequent base signal into only a few trades across the whole dataset.
-            if requested_family is None and rng.random() < 0.45:
-                family=str(rng.choice(["ema_crossover","ema_pullback","macd_crossover","roc_momentum","atr_trend_pullback"]))
-                fast=int(rng.choice([2,3,4,5,6,8]))
-                slow=int(rng.choice([5,6,7,8,9,10,12,14,16,18,20,24,28,32]))
+            if requested_family is None and rng.random() < 0.70:
+                # Activity-focused lane: broaden fast, unfiltered single-signal
+                # hypotheses so the search can actually test the user's minimum
+                # monthly/daily trade-count constraints. The remaining 30% and
+                # family-stratified seeds still cover the full registered space.
+                family=str(rng.choice([
+                    "ema_crossover","ema_pullback","macd_crossover","roc_momentum",
+                    "atr_trend_pullback","rsi_reversion","stochastic_reversion",
+                    "williams_r_reversion","bollinger_reversion","pivot_reversal"
+                ]))
+                fast=int(rng.choice([2,3,4,5,6,7,8,9,10,12,14]))
+                slow=int(rng.choice([5,6,7,8,9,10,12,14,16,18,20,24,28,32,40,48]))
                 if slow <= fast: slow=fast+2
-                period=int(rng.choice([3,4,5,6,7,8,9,10,12,14]))
-                stop=float(rng.choice([0.3,0.4,0.5,0.7,0.8,1.0,1.2,1.5]))
-                direction=str(rng.choice(["both","long","short"],p=[0.70,0.15,0.15]))
-                context_filter="none" if rng.random()<0.80 else str(rng.choice(context_filters))
-                confirmation_filter="none" if rng.random()<0.80 else str(rng.choice(confirmation_filters))
+                period=int(rng.choice([3,4,5,6,7,8,9,10,12,14,16]))
+                stop=float(rng.choice([0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.7,0.8,1.0]))
+                direction=str(rng.choice(["both","long","short"],p=[0.85,0.075,0.075]))
+                context_filter="none" if rng.random()<0.92 else str(rng.choice(context_filters))
+                confirmation_filter="none" if rng.random()<0.92 else str(rng.choice(confirmation_filters))
                 signal_composition="single"; secondary_family="none"
             elif len(families)>1 and rng.random()<0.25:
                 signal_composition=str(rng.choice(["and","or","xor"],p=[0.15,0.75,0.10]))
