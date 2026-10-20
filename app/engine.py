@@ -887,8 +887,22 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             if slow<=fast: slow=int(min(500,fast+max(2,int(rng.choice([4,8,12,16,24,32,48])))))
             period=int(rng.choice(periods)); stop=float(rng.choice(stops)); direction=str(rng.choice(directions))
             context_filter=str(rng.choice(context_filters,p=_filter_probabilities(context_filters, "context"))); confirmation_filter=str(rng.choice(confirmation_filters,p=_filter_probabilities(confirmation_filters, "confirmation")))
-            if len(families)>1 and rng.random()<0.65:
-                signal_composition=str(rng.choice(["and","or","xor"],p=[0.30,0.60,0.10]))
+            # High-frequency baseline lane: test standalone fast moving-average /
+            # momentum rules before combining signals, because AND gates can collapse
+            # a frequent base signal into only a few trades across the whole dataset.
+            if rng.random() < 0.45:
+                family=str(rng.choice(["ema_crossover","ema_pullback","macd_crossover","roc_momentum","atr_trend_pullback"]))
+                fast=int(rng.choice([2,3,4,5,6,8]))
+                slow=int(rng.choice([5,6,7,8,9,10,12,14,16,18,20,24,28,32]))
+                if slow <= fast: slow=fast+2
+                period=int(rng.choice([3,4,5,6,7,8,9,10,12,14]))
+                stop=float(rng.choice([0.3,0.4,0.5,0.7,0.8,1.0,1.2,1.5]))
+                direction=str(rng.choice(["both","long","short"],p=[0.70,0.15,0.15]))
+                context_filter="none" if rng.random()<0.80 else str(rng.choice(context_filters))
+                confirmation_filter="none" if rng.random()<0.80 else str(rng.choice(confirmation_filters))
+                signal_composition="single"; secondary_family="none"
+            elif len(families)>1 and rng.random()<0.25:
+                signal_composition=str(rng.choice(["and","or","xor"],p=[0.15,0.75,0.10]))
                 secondary_family=str(rng.choice([f for f in families if f!=family]))
             else:
                 signal_composition="single"; secondary_family="none"
