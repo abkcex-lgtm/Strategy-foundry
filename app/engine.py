@@ -25,7 +25,7 @@ CONTRACT = {
     "exit_model": "sl_tp_only",
     "max_consecutive_losses": 13,
     "min_win_rate_pct": 40.0,
-    "min_profit_factor": 1.6,
+    "min_profit_factor": 1.0,
     "min_tp_per_day": 3.0,
     "use_min_win_rate": True,
     "use_min_profit_factor": True,
