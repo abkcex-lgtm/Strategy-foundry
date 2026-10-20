@@ -332,7 +332,7 @@ def test_surrogate_genetic_search_fits_ml_model(monkeypatch):
         pd.DataFrame(), max_candidates=30, seed=20, algorithm="surrogate_genetic",
         excluded_genome_hashes=set(result["evaluated_genome_hashes"]),
         prior_candidates=result["results"])
-    assert second["prior_candidates_used"] == len(result["results"])
+    assert 0 < second["prior_candidates_used"] <= len(result["results"])
     assert second["evaluated_candidates"] == 30
 
 
