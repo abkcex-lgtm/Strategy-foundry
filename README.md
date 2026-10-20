@@ -35,7 +35,7 @@ The net target model sizes quantity so modeled SL net loss equals the selected r
 
 ## Equal-weight target selection (release 0.9.9)
 
-When multiple target filters are enabled, each active performance target has equal influence on near-miss ranking: each target's gap is normalized by its configured threshold, then the arithmetic mean of active target distances is used. The default four targets are win rate, profit factor, average net full TPs/day, and maximum consecutive losses. No one of these four is a hidden primary objective; disabled target filters are omitted from the score and pass/fail checks.
+When multiple target filters are enabled, each active performance target has equal influence on near-miss ranking: each target's gap is normalized by its configured threshold, then the arithmetic mean of active target distances is used. The default four targets are win rate, profit factor (default >1.6), average net full TPs/day (default >=3), and maximum consecutive losses. No one of these four is a hidden primary objective; disabled target filters are omitted from the score and pass/fail checks.
 
 Data integrity, independent ledger replay, no open position at the end, and minimum evidence are separate eligibility gates, not extra weighted performance criteria. A strategy is not certified from a sparse sample: at least 100 closed trades are required, and when TP/day is enabled the observed trade count must also be compatible with the requested TP/day rate and observed win rate. If TP/day is disabled, it does not silently steer the evidence gate beyond the 100-trade floor.
 
