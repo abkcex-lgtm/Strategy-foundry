@@ -733,7 +733,11 @@ def _goal_activity_evidence(metrics: dict[str, Any], cfg: dict[str, Any]) -> boo
     if not cfg.get("use_min_tp_per_day", True):
         return True
     required=span_days*target_tp/max(wr, 0.01)
-    return trades >= math.ceil(required)
+    # The user's operating goal is at least 7.5 trades/day so a strategy at
+    # roughly 40% WR can plausibly deliver 3+ full TPs/day. This is an evidence
+    # gate, not a weighted fifth performance score, and it never relaxes TP/day.
+    minimum_frequency=span_days*7.5
+    return trades >= math.ceil(max(required, minimum_frequency))
 
 
 def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[float, list[str], dict[str, float]]:
