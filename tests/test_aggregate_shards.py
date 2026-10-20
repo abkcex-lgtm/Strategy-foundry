@@ -80,7 +80,7 @@ def test_aggregate_globally_deduplicates_and_returns_exact_five_near_misses(tmp_
     assert [item["strategy"]["name"] for item in result["results"]] == ["a", "b", "c", "d", "e"]
     with zipfile.ZipFile(output_dir / "validated_strategies.zip") as archive:
         assert len([name for name in archive.namelist() if name.endswith(".py")]) == 5
-        assert len([name for name in archive.namelist() if name.endswith("_manifest.json")]) == 5
+        assert len([name for name in archive.namelist() if name.startswith("strategy_") and name.endswith("_manifest.json")]) == 5
 
 
 def test_aggregate_rejects_mismatched_data_splits(tmp_path: Path):
