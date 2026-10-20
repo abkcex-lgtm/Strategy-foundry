@@ -6,6 +6,13 @@ import json
 import zipfile
 from pathlib import Path
 from typing import Any
+import sys
+
+# When invoked as `python research/aggregate_shards.py`, Python puts only the
+# research/ directory on sys.path. Add the repository root so `app` imports work.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 from app.engine import normalize_contract, _goal_activity_evidence
 
