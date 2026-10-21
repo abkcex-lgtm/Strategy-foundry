@@ -658,7 +658,7 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
             if base_interval % 1000:
                 raise DataIntegrityError("Base candle interval cannot be resolved with 1-second candles")
     atr_values,long_signal_values,short_signal_values=prepared.indicator_arrays(spec)
-    balance=float(cfg["initial_balance"]); ledger=[]; streak=0; max_streak=0; open_position=None
+    balance=float(cfg["initial_balance"]); ledger=[]; streak=0; max_streak=0; open_position=None; capital_exhausted=False
     # OHLCV arrays come from the fully validated shared frame. Signal/ATR arrays
     # are cached by every signal-affecting parameter, but not stop/direction.
     open_times=df["open_time"].to_numpy(dtype=np.int64)
@@ -683,7 +683,9 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
         if risk_budget<=0: i+=1; continue
         # A trade risking the entire remaining equity or more is not executable.
         # Stop conservatively before fixed-risk losses can drive the account negative.
-        if balance<=risk_budget+1e-9: break
+        if balance<=risk_budget+1e-9:
+            capital_exhausted=True
+            break
         try: qty,target,entry_rate,exit_rate=_size_and_target(entry,stop,side,risk_budget,cfg)
         except ValueError: i+=1; continue
         if qty<=0: i+=1; continue
@@ -750,12 +752,12 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
         monthly_trade_counts[month]=monthly_trade_counts.get(month,0)+1
     evidence_metrics={"span_days":span_days,"trades":len(ledger),"win_rate_pct":wr,
                       "avg_net_tp_per_day":tp_day,"monthly_trade_counts":monthly_trade_counts}
-    passes=(not cfg["use_min_win_rate"] or wr>cfg["min_win_rate_pct"]) and (not cfg["use_min_profit_factor"] or pf>cfg["min_profit_factor"]) and (not cfg["use_min_tp_per_day"] or tp_day>=cfg["min_tp_per_day"]) and (not cfg["use_max_consecutive_losses"] or max_streak<=cfg["max_consecutive_losses"]) and open_position is None and _goal_activity_evidence(evidence_metrics,cfg)
+    passes=(not cfg["use_min_win_rate"] or wr>cfg["min_win_rate_pct"]) and (not cfg["use_min_profit_factor"] or pf>cfg["min_profit_factor"]) and (not cfg["use_min_tp_per_day"] or tp_day>=cfg["min_tp_per_day"]) and (not cfg["use_max_consecutive_losses"] or max_streak<=cfg["max_consecutive_losses"]) and open_position is None and not capital_exhausted and _goal_activity_evidence(evidence_metrics,cfg)
     if execution_frames_used:
         combined_execution=pd.concat(execution_frames_used,ignore_index=True).drop_duplicates(subset=["open_time"]).sort_values("open_time").reset_index(drop=True)
         execution_hash=sha256_bytes(combined_execution.to_csv(index=False,float_format="%.12g").encode())
     execution_resolution="1s_ohlc" if exec_df is not None else ("1s_ohlc_auto" if execution_frames_used else "base_ohlc_only")
-    metrics={"trades":len(ledger),"wins":len(wins),"losses":sum(t["net_pnl"]<=0 for t in ledger),"win_rate_pct":wr,"profit_factor":pf if math.isfinite(pf) else None,"avg_net_tp_per_day":tp_day,"max_consecutive_losses":max_streak,"net_pnl":sum(t["net_pnl"] for t in ledger),"final_balance":balance,"total_costs":sum(t["fees_slippage"] for t in ledger),"data_hash_sha256":data_hash,"execution_data_hash_sha256":execution_hash,"execution_resolution":execution_resolution,"unresolved_as_loss_count":sum(t.get("execution_ambiguity",False) for t in ledger),"open_positions_at_end":1 if open_position else 0,"open_position_unrealized_net_pnl":open_position["unrealized_net_pnl"] if open_position else 0.0,"rows":len(df),"span_days":span_days,"trades_per_day":len(ledger)/span_days,"passes_all_targets":bool(passes)}
+    metrics={"trades":len(ledger),"wins":len(wins),"losses":sum(t["net_pnl"]<=0 for t in ledger),"win_rate_pct":wr,"profit_factor":pf if math.isfinite(pf) else None,"avg_net_tp_per_day":tp_day,"max_consecutive_losses":max_streak,"net_pnl":sum(t["net_pnl"] for t in ledger),"final_balance":balance,"total_costs":sum(t["fees_slippage"] for t in ledger),"data_hash_sha256":data_hash,"execution_data_hash_sha256":execution_hash,"execution_resolution":execution_resolution,"unresolved_as_loss_count":sum(t.get("execution_ambiguity",False) for t in ledger),"open_positions_at_end":1 if open_position else 0,"open_position_unrealized_net_pnl":open_position["unrealized_net_pnl"] if open_position else 0.0,"rows":len(df),"span_days":span_days,"trades_per_day":len(ledger)/span_days,"capital_exhausted":capital_exhausted,"passes_all_targets":bool(passes)}
     run_hash=sha256_bytes(json.dumps({"spec":asdict(spec),"contract":cfg,"data_hash":data_hash,"execution_data_hash":execution_hash,"execution_resolution":execution_resolution},sort_keys=True).encode())
     return {"strategy":asdict(spec),"contract":cfg,"metrics":metrics,"ledger":ledger,"open_position":open_position,"data_report":report,"run_hash_sha256":run_hash}
 
@@ -830,8 +832,18 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
         failed.append("insufficient_activity_evidence")
     if int(metrics.get("open_positions_at_end",0))>0:
         failed.append("open_positions_at_end")
-    # Equal arithmetic mean: every enabled target contributes exactly 1/N.
-    return (sum(distances.values()) / len(distances) if distances else 0.0), failed, distances
+    if bool(metrics.get("capital_exhausted",False)):
+        failed.append("capital_exhausted")
+    # Near-miss scoring is intentionally non-compensatory: frequency and TP/day shortfalls dominate;
+    # capital exhaustion is a hard failure and receives an explicit penalty. Acceptance gates above
+    # remain unchanged; weights affect ordering only, never pass/fail thresholds.
+    weights={"avg_net_tp_per_day":3.0,"trades_per_day":2.5,"win_rate_pct":1.5,
+             "profit_factor":1.5,"max_consecutive_losses":1.0}
+    weighted=[(weights.get(k,1.0)*v) for k,v in distances.items()]
+    score=(sum(weighted)/sum(weights.get(k,1.0) for k in distances) if distances else 0.0)
+    if bool(metrics.get("capital_exhausted",False)):
+        score += 2.0
+    return score, failed, distances
 
 
 _PARALLEL_FRAME = None
