@@ -924,7 +924,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     errors=0
     error_reason_counts={}
     def record_error_reason(error):
-        label=str(error).split(":",1)[0][:100] or "UnknownError"
+        label=str(error)[:180] or "UnknownError"
         error_reason_counts[label]=error_reason_counts.get(label,0)+1
     family_counts={f:0 for f in families}
     duplicate_genomes=0
