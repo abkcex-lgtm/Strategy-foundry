@@ -216,7 +216,8 @@ def run(df,data_manifest):
     while completed<REQUESTED and batches<max_batches and time.monotonic()-start<MAX_SECONDS:
         # Start with a small representative pilot; later batches learn from
         # prior audited candidates instead of restarting an isolated population.
-        size=min(250 if batches==0 else 1000,REQUESTED-completed); seed=SEED+batches*1000003
+        batch_cap=250 if MAX_SECONDS<=900 else 1000
+        size=min(batch_cap,REQUESTED-completed); seed=SEED+batches*1000003
         prior_pool=sorted(train_pass+train_near,key=lambda x:(
             not _goal_activity_evidence(x.get("metrics") or {},cfg),
             not _capability_evidence(x.get("metrics") or {}),
