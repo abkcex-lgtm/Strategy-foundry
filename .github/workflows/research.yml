@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     env:
-      # Pushes normally run a bounded real-data smoke test. A commit message containing [15m-research] launches a 15-minute bounded 500k-candidate search; [full-research] launches the full search. Manual dispatch
+      # Pushes normally run a bounded real-data smoke test. A commit message containing [15m-research] launches a bounded 500k-candidate search with a 480-second search budget to leave time for independent audits and exports; [full-research] launches the full search. Manual dispatch
       # retains the 500k / 5h25m defaults and exposes a runtime override.
       # Audited full-research launch requested by project owner; tests run before data/search.
       # Benchmark parity is checked in the research runner.
@@ -44,7 +44,7 @@ jobs:
       FOUNDRY_SEED: "42"
       # The 15-minute lane avoids repeated surrogate fitting; all families and validation gates remain enabled.
       FOUNDRY_ALGORITHM: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && 'stratified_random' || 'surrogate_genetic' }}
-      FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '900' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
+      FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '480' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
     steps:
       - uses: actions/checkout@v4
         with:
