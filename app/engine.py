@@ -480,10 +480,17 @@ def _resolve_execution_interval(side: str, execution_frame: pd.DataFrame, start_
     first = int(np.searchsorted(times, start_ms, side="left"))
     end_ms = start_ms + interval_ms
     last = int(np.searchsorted(times, end_ms, side="left"))
-    expected = interval_ms // 1000
+    # Binance's 1-second kline endpoint may omit seconds with no trades.
+    # Such empty seconds cannot move the traded price and are not missing OHLC
+    # candles; do not fabricate candles or require 60 rows for a 1-minute window.
+    # Still fail closed on malformed, duplicate, unordered, or out-of-window rows.
+    validate_ohlcv(execution_frame, 1000, strict_gaps=False)
     bars = execution_frame.iloc[first:last]
-    if len(bars) != expected or int(bars.open_time.iloc[0]) != start_ms or int(bars.open_time.iloc[-1]) != end_ms - 1000:
-        raise DataIntegrityError(f"Missing/incomplete 1-second execution data for interval starting {start_ms}; expected {expected} consecutive candles")
+    if len(bars):
+        bar_times = bars["open_time"].to_numpy(dtype=np.int64)
+        if int(bar_times[0]) < start_ms or int(bar_times[-1]) >= end_ms:
+            raise DataIntegrityError(f"1-second execution rows fall outside interval starting {start_ms}")
+    # No trade bars in this interval means no observed price movement or SL/TP touch.
     for bar in bars.itertuples(index=False):
         resolution = _resolve_bar_exit(side, float(bar.open), float(bar.high), float(bar.low), stop, target)
         if resolution is not None:
