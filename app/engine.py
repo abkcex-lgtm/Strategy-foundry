@@ -512,7 +512,7 @@ class _PreparedBacktestData:
     """One-time validated immutable market-data view shared by candidate backtests."""
     __slots__ = ("source_frame", "frame", "base_interval", "report", "data_hash",
                  "indicator_cache", "indicator_cache_hits", "indicator_cache_misses",
-                 "indicator_cache_limit")
+                 "indicator_cache_limit", "exit_range_index")
     def __init__(self, frame):
         df=frame.copy().reset_index(drop=True)
         required=["open_time","open","high","low","close","volume"]
@@ -544,6 +544,7 @@ class _PreparedBacktestData:
         self.indicator_cache_hits=0
         self.indicator_cache_misses=0
         self.indicator_cache_limit=_indicator_cache_limit_for_rows(len(df))
+        self.exit_range_index=_ExitRangeIndex(df["high"].to_numpy(dtype=float),df["low"].to_numpy(dtype=float))
 
     def indicator_arrays(self, spec):
         key=(spec.fast,spec.slow,spec.atr_period,spec.family,spec.context_filter,
@@ -570,7 +571,52 @@ def prepare_backtest_data(frame):
     return _PreparedBacktestData(frame)
 
 
-def _first_exit_candidate(side, opens, highs, lows, start, stop, target):
+class _ExitRangeIndex:
+    """Sparse-table range queries for exact first-touch lookup in O(log N) per trade."""
+    __slots__ = ("n", "logs", "min_lows", "max_highs")
+    def __init__(self, highs, lows):
+        highs=np.asarray(highs,dtype=np.float64); lows=np.asarray(lows,dtype=np.float64)
+        self.n=len(highs)
+        self.logs=np.zeros(self.n+1,dtype=np.uint8)
+        if self.n>1:
+            self.logs[2:]=np.floor(np.log2(np.arange(2,self.n+1))).astype(np.uint8)
+        self.min_lows=[lows.copy()]
+        self.max_highs=[highs.copy()]
+        level=1
+        while (1<<level)<=self.n:
+            half=1<<(level-1)
+            prev_min=self.min_lows[-1]; prev_max=self.max_highs[-1]
+            self.min_lows.append(np.minimum(prev_min[:-half],prev_min[half:]))
+            self.max_highs.append(np.maximum(prev_max[:-half],prev_max[half:]))
+            level+=1
+    def _range_extrema(self,left,right):
+        length=right-left+1; level=int(self.logs[length]); span=1<<level
+        min_low=min(self.min_lows[level][left],self.min_lows[level][right-span+1])
+        max_high=max(self.max_highs[level][left],self.max_highs[level][right-span+1])
+        return min_low,max_high
+    def first_hit(self,side,start,stop,target):
+        start=int(start)
+        if start>=self.n: return None
+        def touched(right):
+            min_low,max_high=self._range_extrema(start,right)
+            return (min_low<=stop or max_high>=target) if side=="LONG" else (max_high>=stop or min_low<=target)
+        if not touched(self.n-1): return None
+        left=start; right=self.n-1
+        while left<right:
+            mid=(left+right)//2
+            if touched(mid): right=mid
+            else: left=mid+1
+        return left
+
+
+def _first_exit_candidate(side, opens, highs, lows, start, stop, target, range_index=None):
+    """Return the first touched bar using exact range-index lookup when available.
+
+    OHLC consistency makes open-gap touches a subset of the high/low touch tests;
+    the scalar resolver still applies the exact open-gap precedence and ambiguity policy.
+    """
+    if range_index is not None:
+        return range_index.first_hit(side,start,stop,target)
     """Return the first touched bar using bounded-memory vectorized chunks.
 
     A full-tail boolean mask for every trade creates large temporary arrays on
@@ -661,7 +707,7 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
         else:
             # Vectorized event detection; scalar resolver still enforces the
             # exact open-gap precedence and same-candle ambiguity policy.
-            j=_first_exit_candidate(side,open_values,high_values,low_values,entry_i,stop,target)
+            j=_first_exit_candidate(side,open_values,high_values,low_values,entry_i,stop,target,prepared.exit_range_index)
             if j is not None:
                 auto_resolved=False
                 try:
