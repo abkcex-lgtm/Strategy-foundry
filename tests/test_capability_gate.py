@@ -88,7 +88,10 @@ def test_candidate_distance_normalizes_profit_factor_like_other_targets():
         "max_consecutive_losses",
     }
     assert "profit_factor" in failed
-    assert distance == sum(distances.values()) / len(distances)
+    weights = {"avg_net_tp_per_day": 3.0, "trades_per_day": 2.5, "win_rate_pct": 1.5,
+               "profit_factor": 1.5, "max_consecutive_losses": 1.0}
+    expected = sum(weights.get(k, 1.0) * v for k, v in distances.items()) / sum(weights.get(k, 1.0) for k in distances)
+    assert distance == expected
     assert "insufficient_activity_evidence" in failed
 
 
