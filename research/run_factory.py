@@ -85,9 +85,19 @@ def near_key(x):
     # Audit, requested TP/day evidence, and the 300-trade TRAIN sample floor are
     # eligibility gates. If none passes all targets, rank high-sample near-misses
     # ahead of sparse lucky samples, then retain the equal-weight target distance.
+    dev_net=float(m.get("net_pnl",0.0) or 0.0)
+    dev_final=float(m.get("final_balance",cfg["initial_balance"]+dev_net) or 0.0)
+    train_net=float(train_m.get("net_pnl",0.0) or 0.0)
+    train_final=float(train_m.get("final_balance",cfg["initial_balance"]+train_net) or 0.0)
+    risk=float(cfg["risk_usd"] if cfg["risk_mode"]=="fixed_usd" else cfg["initial_balance"]*cfg["risk_pct"]/100.0)
+    # Development helps shortlist candidates, but untouched OOS never steers search.
+    # Prefer surviving capital and positive net PnL before distance-only ranking.
     return (0 if x.get("development_audit_status")=="MATCH" else 1,
+            dev_net <= 0.0, dev_final <= risk + 1e-9,
+            train_net <= 0.0, train_final <= risk + 1e-9,
             not _goal_activity_evidence(m,cfg),
             int(train_m.get("trades",0)) < 300,
+            -min(dev_net,train_net),
             float(x.get("development_distance",x.get("distance",math.inf))),
             -int(train_m.get("trades",0)))
 def trade_diagnostics(ledger, span_days):
