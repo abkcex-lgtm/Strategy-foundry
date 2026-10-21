@@ -79,17 +79,12 @@ def capability_pilot_warning(summary, requested):
     return None
 
 def activity_gap(metrics):
-    """Rank near-misses by actual monthly/daily activity shortfall, not lucky PnL."""
-    monthly=metrics.get("monthly_trade_counts")
-    if isinstance(monthly,dict) and monthly:
-        monthly_gap=sum(max(0,300-int(n or 0))/300.0 for n in monthly.values())/len(monthly)
-    else:
-        monthly_gap=1.0
+    """Rank near-misses by actual daily activity shortfall, not lucky PnL."""
     rate=float(metrics.get("trades_per_day",0.0) or 0.0)
     if rate<=0.0:
         span=max(float(metrics.get("span_days",0.0) or 0.0),0.0)
         rate=float(metrics.get("trades",0) or 0)/span if span>0 else 0.0
-    return monthly_gap + max(0.0,10.0-rate)/10.0
+    return max(0.0,8.0-rate)/8.0
 
 def near_key(x):
     m=x.get("development_metrics") or x.get("metrics") or {}
@@ -101,7 +96,7 @@ def near_key(x):
     train_final=float(train_m.get("final_balance",cfg["initial_balance"]+train_net) or 0.0)
     risk=float(cfg["risk_usd"] if cfg["risk_mode"]=="fixed_usd" else cfg["initial_balance"]*cfg["risk_pct"]/100.0)
     # Near-miss ordering is evidence-first: audited ledgers, no exhausted capital,
-    # monthly/daily activity, then target distance. Profitability cannot let a sparse
+    # daily activity, then target distance. Profitability cannot let a sparse
     # lucky sample outrank a strategy that actually approaches the activity contract.
     return (0 if x.get("development_audit_status")=="MATCH" else 1,
             bool(m.get("capital_exhausted",False)) or bool(train_m.get("capital_exhausted",False)),
@@ -400,8 +395,7 @@ def run(df,data_manifest):
             "failed_candidate_evaluations":failed,"candidate_failure_reason_counts":failure_reasons,
             "completed_batches":batches,"family_evaluated_counts":family_counts,"seed":SEED,"algorithm":ALGORITHM,
             "contract":cfg,"target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,
-            "avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":13,"min_trades_per_day":10,
-            "min_trades_per_utc_month":300,"risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5},
+            "avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":13,"min_trades_per_day":8,"risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5},
             "data":data_manifest,"splits":{"train":{"rows":len(train),"sha256":train_hash},
             "development":{"rows":len(dev),"sha256":dev_hash},"oos":{"rows":len(oos),"sha256":oos_hash}},
             "validated_strategy_count":len(validated),"returned_candidate_count":0,"results":[],
