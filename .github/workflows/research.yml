@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     env:
-      # Staged screening lane: [screening-research] runs a bounded 5-minute stratified screen, then reports audited near-misses without relaxing any acceptance criteria.
+      # Staged screening lane: [screening-research] runs a bounded 12-minute stratified screen, then reports audited near-misses without relaxing any acceptance criteria.
       # retains the 500k / 5h25m defaults and exposes a runtime override.
       # Audited full-research launch requested by project owner; tests run before data/search.
       # Benchmark parity is checked in the research runner.
@@ -53,7 +53,7 @@ jobs:
 
       # Screening now uses the existing bounded parallel stratified evaluator; all acceptance and audit gates remain unchanged.
       FOUNDRY_ALGORITHM: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '[screening-research]') || contains(github.event.head_commit.message, '[15m-research]')) && 'stratified_random' || 'surrogate_genetic' }}
-      FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[screening-research]') && '300' || github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '360' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
+      FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[screening-research]') && '720' || github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '360' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
     steps:
       - uses: actions/checkout@v4
         with:
