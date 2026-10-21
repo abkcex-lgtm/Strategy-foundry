@@ -495,7 +495,7 @@ def _resolve_execution_interval(side: str, execution_frame: pd.DataFrame, start_
 # ATR array plus two boolean signal arrays (approximately 10 bytes per candle).
 # This matters on NetRun's 256 MiB instance: a fixed 128-entry cache on a full
 # 263k-candle dataset could otherwise retain roughly 336 MiB before other state.
-INDICATOR_CACHE_BUDGET_BYTES = 16 * 1024 * 1024
+INDICATOR_CACHE_BUDGET_BYTES = 64 * 1024 * 1024
 INDICATOR_CACHE_MAX_ENTRIES = 128
 INDICATOR_BYTES_PER_CANDLE = 8 + 1 + 1
 
@@ -726,23 +726,23 @@ def _capability_evidence(metrics: dict[str, Any]) -> bool:
 
 
 def _goal_activity_evidence(metrics: dict[str, Any], cfg: dict[str, Any]) -> bool:
-    """Reject samples too small to substantiate the requested full-TP/day rate.
+    """Require a meaningful trade sample and enough observed opportunities for the TP/day goal.
 
-    This is a ranking/evidence gate, not an extra acceptance threshold.
+    This is a ranking/evidence gate, not a substitute for the user's acceptance criteria.
+    The minimum sample is 300 closed trades overall; the target-frequency evidence then
+    scales with the observed win rate. Calendar-month minimums and a fixed 10-trades/day
+    rule are intentionally not imposed because neither is part of the user's contract.
     """
     span_days=max(float(metrics.get("span_days", 0.0) or 0.0), 0.0)
     trades=int(metrics.get("trades", 0) or 0)
     wr=max(0.0, min(1.0, float(metrics.get("win_rate_pct", 0.0) or 0.0)/100.0))
-    target_tp=float(cfg.get("min_tp_per_day", 3.0)) if cfg.get("use_min_tp_per_day", True) else 3.0
-    monthly_counts={str(k):int(v) for k,v in (metrics.get("monthly_trade_counts") or {}).items()}
-    # Hard requirement: every represented UTC calendar month must have >=300 trades.
-    if span_days <= 0.0 or trades < 300 or not monthly_counts or min(monthly_counts.values()) < 300:
+    target_tp=float(cfg.get("min_tp_per_day", 3.0)) if cfg.get("use_min_tp_per_day", True) else 0.0
+    if span_days <= 0.0 or trades < 300:
         return False
-    # Disabling TP/day must not disable the user's minimum activity requirement.
-    required=span_days*target_tp/max(wr, 0.01) if cfg.get("use_min_tp_per_day", True) else 0.0
-    # At least 10 closed trades/day, plus >=300 in every represented month.
-    minimum_frequency=span_days*10.0
-    return trades >= math.ceil(max(required, minimum_frequency))
+    # If TP/day is enabled, observed trades must support the requested TP frequency
+    # at the candidate's observed win rate. A 40% WR needs >=7.5 trades/day for 3 TPs/day.
+    required_trades=span_days*target_tp/max(wr, 0.01) if target_tp > 0.0 else 300.0
+    return trades >= max(300, math.ceil(required_trades))
 
 
 def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[float, list[str], dict[str, float]]:
