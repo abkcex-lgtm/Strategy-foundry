@@ -521,3 +521,9 @@ def test_candidate_distance_hard_flags_capital_exhaustion_and_prioritizes_activi
 
 def test_original_contract_keeps_thirteen_consecutive_loss_limit():
     assert CONTRACT["max_consecutive_losses"] == 13
+
+
+def test_contract_defaults_enforce_user_activity_floor_of_ten_trades_per_day():
+    cfg = normalize_contract()
+    assert cfg["min_trades_per_day"] == 10.0
+

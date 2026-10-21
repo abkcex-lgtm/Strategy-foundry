@@ -89,7 +89,7 @@ def activity_gap(metrics):
     if rate<=0.0:
         span=max(float(metrics.get("span_days",0.0) or 0.0),0.0)
         rate=float(metrics.get("trades",0) or 0)/span if span>0 else 0.0
-    return monthly_gap + max(0.0,7.5-rate)/7.5
+    return monthly_gap + max(0.0,10.0-rate)/10.0
 
 def near_key(x):
     m=x.get("development_metrics") or x.get("metrics") or {}

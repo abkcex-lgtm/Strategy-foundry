@@ -501,7 +501,7 @@ async def _run_search_job(job_id:str,dataset_id:str,req:SearchRequest):
         save_job(job_id,'strategy_search',job)
 
 @app.get('/api/search-history')
-def search_history(limit:int=Query(default=30,ge=1,le=200)):
+def search_history(limit:int=Query(default=30,ge=1,le=500)):
     return list_search_history(limit)
 
 @app.get('/api/search-history/{search_id}')

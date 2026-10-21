@@ -28,7 +28,7 @@ CONTRACT = {
     "min_win_rate_pct": 40.0,
     "min_profit_factor": 1.0,
     "min_tp_per_day": 3.0,
-    "min_trades_per_day": 8.0,
+    "min_trades_per_day": 10.0,
     "use_min_win_rate": True,
     "use_min_profit_factor": True,
     "use_min_tp_per_day": True,
@@ -789,7 +789,7 @@ def _goal_activity_evidence(metrics: dict[str, Any], cfg: dict[str, Any]) -> boo
     trades=int(metrics.get("trades", 0) or 0)
     wr=max(0.0, min(1.0, float(metrics.get("win_rate_pct", 0.0) or 0.0)/100.0))
     target_tp=float(cfg.get("min_tp_per_day", 3.0)) if cfg.get("use_min_tp_per_day", True) else 0.0
-    min_trades_per_day=float(cfg.get("min_trades_per_day", 7.5))
+    min_trades_per_day=float(cfg.get("min_trades_per_day", 10.0))
     monthly=metrics.get("monthly_trade_counts")
     if span_days <= 0.0 or trades < 300 or min_trades_per_day <= 0.0:
         return False
@@ -834,7 +834,7 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
         if trade_rate <= 0.0:
             span=max(float(metrics.get("span_days", 0.0) or 0.0),0.0)
             trade_rate=float(metrics.get("trades",0) or 0)/span if span>0 else 0.0
-        min_trade_rate=float(cfg.get("min_trades_per_day",7.5))
+        min_trade_rate=float(cfg.get("min_trades_per_day", 10.0))
         distances["trades_per_day"]=max(0.0,min_trade_rate-trade_rate)/max(min_trade_rate,1.0)
         if trade_rate < min_trade_rate:
             failed.append("trades_per_day")
