@@ -786,26 +786,21 @@ def _capability_evidence(metrics: dict[str, Any]) -> bool:
 
 
 def _goal_activity_evidence(metrics: dict[str, Any], cfg: dict[str, Any]) -> bool:
-    """Require >=300 closed trades and the user's explicit high-frequency activity floor.
+    """Enforce the agreed minimum closed-trade rate without hidden monthly quotas.
 
-    A candidate must close at least 300 trades in every UTC calendar month represented
-    by the evaluated split, as well as enough trades for its observed win rate to support
-    the requested net TP/day. This is applied on TRAIN, Development and OOS independently.
+    The user's activity floor is >=8 closed trades/day. TP/day, WR, PF, loss streak,
+    capital survival, and end-of-split open positions are evaluated independently.
+    Calendar-month counts remain diagnostics only; they are not a separate gate.
     """
     span_days=max(float(metrics.get("span_days", 0.0) or 0.0), 0.0)
+    if span_days <= 0.0:
+        return False
     trades=int(metrics.get("trades", 0) or 0)
-    wr=max(0.0, min(1.0, float(metrics.get("win_rate_pct", 0.0) or 0.0)/100.0))
-    target_tp=float(cfg.get("min_tp_per_day", 3.0)) if cfg.get("use_min_tp_per_day", True) else 0.0
-    min_trades_per_day=float(cfg.get("min_trades_per_day", 10.0))
-    monthly=metrics.get("monthly_trade_counts")
-    if span_days <= 0.0 or trades < 300 or min_trades_per_day <= 0.0:
-        return False
-    if not isinstance(monthly, dict) or not monthly or any(int(n or 0) < 300 for n in monthly.values()):
-        return False
-    required_daily=max(min_trades_per_day, target_tp/max(wr, 0.01) if target_tp > 0.0 else 0.0)
-    required_trades=max(300, math.ceil(span_days*required_daily))
-    return trades >= required_trades
-
+    trade_rate=float(metrics.get("trades_per_day", 0.0) or 0.0)
+    if trade_rate <= 0.0:
+        trade_rate=trades/span_days
+    min_trades_per_day=float(cfg.get("min_trades_per_day", 8.0))
+    return min_trades_per_day > 0.0 and trade_rate >= min_trades_per_day
 
 def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[float, list[str], dict[str, float]]:
     """Weighted normalized distance to active targets; weights affect ranking only."""
@@ -841,7 +836,7 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
         if trade_rate <= 0.0:
             span=max(float(metrics.get("span_days", 0.0) or 0.0),0.0)
             trade_rate=float(metrics.get("trades",0) or 0)/span if span>0 else 0.0
-        min_trade_rate=float(cfg.get("min_trades_per_day", 10.0))
+        min_trade_rate=float(cfg.get("min_trades_per_day", 8.0))
         distances["trades_per_day"]=max(0.0,min_trade_rate-trade_rate)/max(min_trade_rate,1.0)
         if trade_rate < min_trade_rate:
             failed.append("trades_per_day")
