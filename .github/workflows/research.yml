@@ -45,6 +45,7 @@ jobs:
       # The 15-minute lane avoids repeated surrogate fitting; all families and validation gates remain enabled.
       # Joint-score update: explicit capital-exhaustion rejection and activity/TP-day-weighted near-miss ranking; original acceptance thresholds unchanged.
       # [15m-research] Standalone replay and factory engine enforce capital exhaustion and >=300 closed trades per UTC month; monthly metrics are exported identically.
+      # [15m-research] sparse 1-second Binance kline windows are accepted only as returned trade-backed rows; no synthetic candles.
       FOUNDRY_ALGORITHM: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && 'stratified_random' || 'surrogate_genetic' }}
       FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '720' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
     steps:
