@@ -932,11 +932,13 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction,spec.context_filter,spec.confirmation_filter,spec.secondary_family,spec.signal_composition)
 
     def fitness(row):
-        # Evidence/pass status are eligibility gates, separate from the score.
-        # The four selectable performance criteria are ranked only by their
-        # equal-weight normalized distance, with no metric-specific tie-break.
+        # Passing/evidence status and the user's 300-trade minimum are eligibility
+        # gates, separate from the equal-weight score across the four target metrics.
+        # When no genome meets the full evidence gate, retain high-sample candidates
+        # rather than letting lucky low-trade samples crowd them out of the shortlist.
         m=row["metrics"]
         return (not m["passes_all_targets"], not _goal_activity_evidence(m,cfg),
+                int(m.get("trades", 0)) < 300,
                 row["distance"], -int(m["trades"]))
 
     def feature_vector(spec):
