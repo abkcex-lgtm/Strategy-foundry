@@ -391,8 +391,11 @@ def run(df,data_manifest):
     delivery=validated if validated else eligible_near
     if validated:
         outcome="VALIDATED_STRATEGIES_FOUND" if search_complete else "VALIDATED_STRATEGIES_FOUND_SEARCH_INCOMPLETE"
-    elif activity_eligible_near:
-        outcome="NO_STRATEGY_PASSED_ALL_REQUIRED_SPLITS" if search_complete else "INCOMPLETE_SEARCH_NO_CERTIFIED_STRATEGY"
+    elif delivery:
+        if activity_eligible_near:
+            outcome="NO_STRATEGY_PASSED_ALL_REQUIRED_SPLITS" if search_complete else "INCOMPLETE_SEARCH_NO_CERTIFIED_STRATEGY"
+        else:
+            outcome="NO_CANDIDATE_MET_DAILY_ACTIVITY_FLOOR" if search_complete else "INCOMPLETE_SEARCH_NO_ACTIVITY_ELIGIBLE_CANDIDATE"
     else:
         outcome="NO_CANDIDATE_MET_DAILY_ACTIVITY_FLOOR" if search_complete else "INCOMPLETE_SEARCH_NO_ACTIVITY_ELIGIBLE_CANDIDATE"
         # Preserve a truthful, downloadable report instead of exporting low-activity
