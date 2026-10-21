@@ -487,3 +487,19 @@ def test_default_loss_streak_acceptance_preserves_original_thirteen_limit():
     # strategy quality without silently changing the user's criteria.
     assert CONTRACT["max_consecutive_losses"] == 13
     assert normalize_contract()["max_consecutive_losses"] == 13
+
+
+def test_candidate_distance_hard_flags_capital_exhaustion_and_prioritizes_activity():
+    from app.engine import _candidate_distance
+    cfg=normalize_contract()
+    sparse={"win_rate_pct":45.0,"profit_factor":1.2,"avg_net_tp_per_day":0.5,
+            "max_consecutive_losses":4,"trades":40,"span_days":90,"trades_per_day":40/90,
+            "open_positions_at_end":0,"capital_exhausted":True}
+    score, failed, distances = _candidate_distance(sparse,cfg)
+    assert "capital_exhausted" in failed
+    assert score > 1.0
+    assert "insufficient_activity_evidence" in failed
+
+
+def test_original_contract_keeps_thirteen_consecutive_loss_limit():
+    assert CONTRACT["max_consecutive_losses"] == 13
