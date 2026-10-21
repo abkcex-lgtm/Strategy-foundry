@@ -309,10 +309,14 @@ def _resolve_execution_interval_independent(side, execution_frame, start_ms, int
         raise ValueError("Base interval cannot be resolved with 1-second data")
     times=execution_frame["open_time"].to_numpy(dtype=np.int64)
     first=int(np.searchsorted(times,start_ms,side="left")); end_ms=start_ms+interval_ms
-    last=int(np.searchsorted(times,end_ms,side="left")); expected=interval_ms//1000
+    last=int(np.searchsorted(times,end_ms,side="left"))
     bars=execution_frame.iloc[first:last]
-    if len(bars)!=expected or int(bars.open_time.iloc[0])!=start_ms or int(bars.open_time.iloc[-1])!=end_ms-1000:
-        raise ValueError("Missing/incomplete 1-second execution data")
+    # Sparse 1s kline streams can omit seconds with no trades. Accept actual
+    # in-window trade-backed rows only; an empty ambiguous minute remains a hard failure.
+    if bars.empty:
+        raise ValueError("No trade-backed execution candles for ambiguous base candle")
+    if int(bars.open_time.iloc[0]) < start_ms or int(bars.open_time.iloc[-1]) >= end_ms:
+        raise ValueError("1-second execution rows fall outside requested interval")
     for bar in bars.itertuples(index=False):
         result=_resolve_bar_exit_independent(side,float(bar.open),float(bar.high),float(bar.low),stop,target)
         if result is not None:
