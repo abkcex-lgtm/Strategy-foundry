@@ -76,13 +76,16 @@ def capability_pilot_warning(summary, requested):
 
 def near_key(x):
     m=x.get("development_metrics") or x.get("metrics") or {}
+    train_m=x.get("train_metrics") or x.get("metrics") or {}
     cfg=normalize_contract(x.get("contract") or {})
-    # Audit and minimum evidence are eligibility gates. Among eligible items,
-    # use the equal-weight normalized distance across active user criteria only.
+    # Audit, requested TP/day evidence, and the 300-trade TRAIN sample floor are
+    # eligibility gates. If none passes all targets, rank high-sample near-misses
+    # ahead of sparse lucky samples, then retain the equal-weight target distance.
     return (0 if x.get("development_audit_status")=="MATCH" else 1,
             not _goal_activity_evidence(m,cfg),
+            int(train_m.get("trades",0)) < 300,
             float(x.get("development_distance",x.get("distance",math.inf))),
-            -int(m.get("trades",0)))
+            -int(train_m.get("trades",0)))
 def trade_diagnostics(ledger, span_days):
     """Compact diagnostics derived from closed trades; ledger remains the source of truth."""
     rows=list(ledger or [])
@@ -216,10 +219,13 @@ def run(df,data_manifest):
     while completed<REQUESTED and batches<max_batches and time.monotonic()-start<MAX_SECONDS:
         # Start with a small representative pilot; later batches learn from
         # prior audited candidates instead of restarting an isolated population.
-        size=min(250 if batches==0 else 1000,REQUESTED-completed); seed=SEED+batches*1000003
+        batch_cap=250 if MAX_SECONDS<=900 else 1000
+        size=min(batch_cap,REQUESTED-completed); seed=SEED+batches*1000003
         prior_pool=sorted(train_pass+train_near,key=lambda x:(
+            not _goal_activity_evidence(x.get("metrics") or {},cfg),
             not _capability_evidence(x.get("metrics") or {}),
             float(x.get("distance",math.inf)),
+            -int((x.get("metrics") or {}).get("trades",0)),
             -float((x.get("metrics") or {}).get("profit_factor") or 0.0),
             -float((x.get("metrics") or {}).get("win_rate_pct",0.0)),
             max(0.0,3.0-float((x.get("metrics") or {}).get("avg_net_tp_per_day",0.0)))))[:192]
@@ -260,11 +266,13 @@ def run(df,data_manifest):
         if result.get("all_passing"): append_unique(train_pass,result.get("results",[]))
         else:
             append_unique(train_near,result.get("results",[]))
+            # Rank evidence-eligible/high-activity candidates before lucky tiny samples.
             train_near=sorted(train_near,key=lambda x:(
+                not _goal_activity_evidence(x.get("metrics",{}),cfg),
+                int(x.get("metrics",{}).get("trades",0)) < 300,
                 not _capability_evidence(x.get("metrics",{})),
                 float(x.get("distance",math.inf)),
-                -float(x.get("metrics",{}).get("profit_factor") or 0.0),
-                -float(x.get("metrics",{}).get("win_rate_pct",0.0)),
+                -int(x.get("metrics",{}).get("trades",0)),
                 int(x.get("metrics",{}).get("max_consecutive_losses",10**9)),
                 max(0.0,3.0-float(x.get("metrics",{}).get("avg_net_tp_per_day",0.0)))))[:max(5,min(500,batches*5))]
         zero=zero+1 if actual==0 else 0

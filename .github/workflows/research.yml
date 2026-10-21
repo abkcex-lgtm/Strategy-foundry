@@ -4,6 +4,11 @@ on:
   push:
     paths:
       - ".github/workflows/research.yml"
+      - "app/engine.py"
+      - "research/run_factory.py"
+      - "tests/test_search.py"
+      - "tests/test_engine.py"
+      - "tests/test_capability_gate.py"
   workflow_dispatch:
     inputs:
       candidates:
@@ -17,15 +22,14 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: ethusdt-strategy-factory-research-v097-observable
+  group: ethusdt-strategy-factory-research-v098-bounded15m
   cancel-in-progress: true
 jobs:
   research:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     env:
-      # Pushes normally run a bounded real-data smoke test. A commit message containing
-      # [full-research] intentionally launches the full 500k search. Manual dispatch
+      # Pushes normally run a bounded real-data smoke test. A commit message containing [15m-research] launches a bounded 500k-candidate search with a 480-second search budget to leave time for independent audits and exports; [full-research] launches the full search. Manual dispatch
       # retains the 500k / 5h25m defaults and exposes a runtime override.
       # Audited full-research launch requested by project owner; tests run before data/search.
       # Benchmark parity is checked in the research runner.
@@ -36,10 +40,11 @@ jobs:
       # FULL 500K RUN AUTHORIZED BY OWNER: execute all gates, then full search; preserve results even on failure.
       # The research runner emits SEARCH_HEARTBEAT every 25 unique candidate evaluations
       # so operators can see continuous progress instead of waiting for a whole batch.
-      FOUNDRY_CANDIDATES: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '500000' || github.event_name == 'push' && '1000' || github.event.inputs.candidates || '500000' }}
+      FOUNDRY_CANDIDATES: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '500000' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '500000' || github.event_name == 'push' && '1000' || github.event.inputs.candidates || '500000' }}
       FOUNDRY_SEED: "42"
-      FOUNDRY_ALGORITHM: "surrogate_genetic"
-      FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
+      # The 15-minute lane avoids repeated surrogate fitting; all families and validation gates remain enabled.
+      FOUNDRY_ALGORITHM: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && 'stratified_random' || 'surrogate_genetic' }}
+      FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '480' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
     steps:
       - uses: actions/checkout@v4
         with:

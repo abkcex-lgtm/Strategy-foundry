@@ -495,7 +495,7 @@ def _resolve_execution_interval(side: str, execution_frame: pd.DataFrame, start_
 # ATR array plus two boolean signal arrays (approximately 10 bytes per candle).
 # This matters on NetRun's 256 MiB instance: a fixed 128-entry cache on a full
 # 263k-candle dataset could otherwise retain roughly 336 MiB before other state.
-INDICATOR_CACHE_BUDGET_BYTES = 16 * 1024 * 1024
+INDICATOR_CACHE_BUDGET_BYTES = 64 * 1024 * 1024
 INDICATOR_CACHE_MAX_ENTRIES = 128
 INDICATOR_BYTES_PER_CANDLE = 8 + 1 + 1
 
@@ -700,7 +700,14 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
     gp=sum(max(0,t["net_pnl"]) for t in ledger); gl=abs(sum(min(0,t["net_pnl"]) for t in ledger))
     span_days=max((int(df.open_time.iloc[-1])-int(df.open_time.iloc[0]))/86400000,1/1440)
     wr=100*len(wins)/len(ledger) if ledger else 0.0; pf=gp/gl if gl else (math.inf if gp else 0.0); tp_day=len(wins)/span_days
-    evidence_metrics={"span_days":span_days,"trades":len(ledger),"win_rate_pct":wr,"avg_net_tp_per_day":tp_day}
+    # Count entries by UTC calendar month so an average cannot hide inactive months.
+    month_labels=pd.to_datetime(df["open_time"],unit="ms",utc=True).dt.strftime("%Y-%m")
+    monthly_trade_counts={str(month):0 for month in month_labels.drop_duplicates().tolist()}
+    for trade in ledger:
+        month=pd.to_datetime(int(trade["entry_time"]),unit="ms",utc=True).strftime("%Y-%m")
+        monthly_trade_counts[month]=monthly_trade_counts.get(month,0)+1
+    evidence_metrics={"span_days":span_days,"trades":len(ledger),"win_rate_pct":wr,
+                      "avg_net_tp_per_day":tp_day,"monthly_trade_counts":monthly_trade_counts}
     passes=(not cfg["use_min_win_rate"] or wr>cfg["min_win_rate_pct"]) and (not cfg["use_min_profit_factor"] or pf>cfg["min_profit_factor"]) and (not cfg["use_min_tp_per_day"] or tp_day>=cfg["min_tp_per_day"]) and (not cfg["use_max_consecutive_losses"] or max_streak<=cfg["max_consecutive_losses"]) and open_position is None and _goal_activity_evidence(evidence_metrics,cfg)
     if execution_frames_used:
         combined_execution=pd.concat(execution_frames_used,ignore_index=True).drop_duplicates(subset=["open_time"]).sort_values("open_time").reset_index(drop=True)
@@ -719,21 +726,23 @@ def _capability_evidence(metrics: dict[str, Any]) -> bool:
 
 
 def _goal_activity_evidence(metrics: dict[str, Any], cfg: dict[str, Any]) -> bool:
-    """Reject samples too small to substantiate the requested full-TP/day rate.
+    """Require a meaningful trade sample and enough observed opportunities for the TP/day goal.
 
-    This is a ranking/evidence gate, not an extra acceptance threshold.
+    This is a ranking/evidence gate, not a substitute for the user's acceptance criteria.
+    The minimum sample is 300 closed trades overall; the target-frequency evidence then
+    scales with the observed win rate. Calendar-month minimums and a fixed 10-trades/day
+    rule are intentionally not imposed because neither is part of the user's contract.
     """
     span_days=max(float(metrics.get("span_days", 0.0) or 0.0), 0.0)
     trades=int(metrics.get("trades", 0) or 0)
     wr=max(0.0, min(1.0, float(metrics.get("win_rate_pct", 0.0) or 0.0)/100.0))
-    target_tp=float(cfg.get("min_tp_per_day", 3.0)) if cfg.get("use_min_tp_per_day", True) else 3.0
-    if span_days <= 0.0 or trades < 100:
+    target_tp=float(cfg.get("min_tp_per_day", 3.0)) if cfg.get("use_min_tp_per_day", True) else 0.0
+    if span_days <= 0.0 or trades < 300:
         return False
-    # Disabled TP/day must not silently steer or block selection.
-    if not cfg.get("use_min_tp_per_day", True):
-        return True
-    required=span_days*target_tp/max(wr, 0.01)
-    return trades >= math.ceil(required)
+    # If TP/day is enabled, observed trades must support the requested TP frequency
+    # at the candidate's observed win rate. A 40% WR needs >=7.5 trades/day for 3 TPs/day.
+    required_trades=span_days*target_tp/max(wr, 0.01) if target_tp > 0.0 else 300.0
+    return trades >= max(300, math.ceil(required_trades))
 
 
 def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[float, list[str], dict[str, float]]:
@@ -807,10 +816,10 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     if prepared_context is not None and prepared_context.source_frame is not frame:
         raise ValueError("Prepared market data can only be reused with its exact source DataFrame")
     names={"ema_crossover":"EMA crossover","channel_breakout":"Price channel breakout","rsi_reversion":"RSI reversion","volume_breakout":"Volume-confirmed breakout","ema_pullback":"EMA trend pullback","macd_crossover":"MACD crossover","bollinger_reversion":"Bollinger mean reversion","inside_bar_breakout":"Inside-bar breakout","engulfing_reversal":"Engulfing candle reversal","momentum_breakout":"Momentum-confirmed breakout","stochastic_reversion":"Stochastic reversion","roc_momentum":"Rate-of-change momentum","adx_trend":"ADX directional trend","keltner_breakout":"Keltner channel breakout","atr_squeeze_breakout":"Volatility squeeze breakout","obv_trend":"OBV volume trend","vwap_reclaim":"VWAP reclaim","pivot_reversal":"Support/resistance pivot reversal","swing_structure_break":"شکست ساختار سوئینگ","failed_breakout_reversal":"برگشت شکست ناموفق","wick_rejection":"رد قیمت با سایه کندل","range_expansion_breakout":"شکست با انبساط دامنه","three_bar_momentum":"مومنتوم سه‌کندلی","volatility_regime_breakout":"شکست در رژیم نوسان","trend_exhaustion_reversal":"برگشت فرسودگی روند","volume_climax_reversal":"برگشت اوج حجم","range_compression_breakout":"شکست پس از فشردگی دامنه","support_resistance_rejection":"رد قیمت حمایت/مقاومت","micro_double_bottom":"کف دوقلوی کوتاه‌مدت","micro_double_top":"سقف دوقلوی کوتاه‌مدت","williams_r_reversion":"Williams %R reversion","donchian_midline_trend":"Donchian midline trend","dual_thrust_breakout":"Dual Thrust breakout","chaikin_money_flow":"Chaikin money-flow trend","money_flow_index_reversion":"Money Flow Index reversion","atr_trend_pullback":"ATR-aware trend pullback","volume_weighted_breakout":"Volume-weighted range breakout","range_midpoint_reversion":"Range midpoint reversion","roc_acceleration":"Rate-of-change acceleration","atr_normalized_momentum":"ATR-normalized momentum"}
-    fast_values=np.array([3,4,5,6,8,9,10,12,14,16,18,21,24,28,32,36,40,48,55,64,72,89],dtype=int)
-    slow_values=np.array([12,16,18,20,24,28,32,36,40,48,55,64,72,89,100,120,144,180,200,240,300,400,500],dtype=int)
-    periods=np.array([5,7,9,10,12,14,16,18,21,24,28,30,40,50],dtype=int)
-    stops=np.array([0.5,0.7,0.8,1.0,1.2,1.5,1.8,2.0,2.5,3.0,3.5,4.0,5.0,6.0],dtype=float)
+    fast_values=np.array([2,3,4,5,6,8,9,10,12,14,16,18,21,24,28,32,36,40,48,55,64,72,89],dtype=int)
+    slow_values=np.array([5,6,7,8,9,10,12,14,16,18,20,24,28,32,36,40,48,55,64,72,89,100,120,144,180,200,240,300,400,500],dtype=int)
+    periods=np.array([3,4,5,6,7,8,9,10,12,14,16,18,21,24,28,30,40,50],dtype=int)
+    stops=np.array([0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.7,0.8,1.0,1.2,1.5,1.8,2.0,2.5,3.0,3.5,4.0,5.0,6.0],dtype=float)
     directions=("both","long","short")
     evaluated:dict[tuple,dict[str,Any]]={}
     errors=0
@@ -822,7 +831,22 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         options=[family for family in families if family!=exclude]
         if not options:
             options=list(families)
-        weights=np.asarray([1.0/math.sqrt(1.0+family_counts.get(family,0)) for family in options],dtype=float)
+        # Activity-first proposal distribution: keep the full family registry,
+        # but sample high-frequency families substantially more often. This is
+        # a search-priority change only; no family is excluded and all audit
+        # gates remain unchanged.
+        activity_prior = {
+            "ema_pullback": 7.0, "ema_crossover": 5.0, "macd_crossover": 3.0,
+            "rsi_reversion": 3.0, "roc_momentum": 3.0, "roc_acceleration": 3.0,
+            "atr_normalized_momentum": 3.0, "momentum_breakout": 2.5,
+            "bollinger_reversion": 2.5, "stochastic_reversion": 2.5,
+            "williams_r_reversion": 2.5, "range_midpoint_reversion": 2.0,
+            "atr_trend_pullback": 3.5, "donchian_midline_trend": 2.0,
+        }
+        weights=np.asarray([
+            activity_prior.get(family, 1.0) / math.sqrt(1.0+family_counts.get(family,0))
+            for family in options
+        ],dtype=float)
         weights=weights/weights.sum()
         return str(rng.choice(options,p=weights))
     started_at=time.monotonic()
@@ -841,18 +865,53 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                            "elapsed_seconds":round(time.monotonic()-started_at,2),
                            "family_evaluated_counts":dict(family_counts)})
 
+    def _filter_probabilities(options, kind):
+        # Prefer unfiltered hypotheses so high-frequency signals can emerge,
+        # while retaining every supported filter for the broader search.
+        weights=[]
+        for option in options:
+            if option=="none":
+                weights.append(0.68 if kind=="context" else 0.62)
+            else:
+                weights.append((0.32 if kind=="context" else 0.38)/max(1,len(options)-1))
+        weights=np.asarray(weights,dtype=float)
+        return weights/weights.sum()
+
     def make_spec(family=None, genes=None):
         if genes is not None:
             family,fast,slow,period,stop,direction,context_filter,confirmation_filter,secondary_family,signal_composition=genes
         else:
+            requested_family=family
             family=str(family or choose_family())
             fast=int(rng.choice(fast_values))
             slow=int(rng.choice(slow_values))
             if slow<=fast: slow=int(min(500,fast+max(2,int(rng.choice([4,8,12,16,24,32,48])))))
             period=int(rng.choice(periods)); stop=float(rng.choice(stops)); direction=str(rng.choice(directions))
-            context_filter=str(rng.choice(context_filters)); confirmation_filter=str(rng.choice(confirmation_filters))
-            if len(families)>1 and rng.random()<0.45:
-                signal_composition=str(rng.choice(["and","or","xor"],p=[0.50,0.35,0.15]))
+            context_filter=str(rng.choice(context_filters,p=_filter_probabilities(context_filters, "context"))); confirmation_filter=str(rng.choice(confirmation_filters,p=_filter_probabilities(confirmation_filters, "confirmation")))
+            # High-frequency baseline lane: test standalone fast moving-average /
+            # momentum rules before combining signals, because AND gates can collapse
+            # a frequent base signal into only a few trades across the whole dataset.
+            if requested_family is None and rng.random() < 0.70:
+                # Activity-focused lane: broaden fast, unfiltered single-signal
+                # hypotheses so the search can actually test the user's minimum
+                # monthly/daily trade-count constraints. The remaining 30% and
+                # family-stratified seeds still cover the full registered space.
+                family=str(rng.choice([
+                    "ema_crossover","ema_pullback","macd_crossover","roc_momentum",
+                    "atr_trend_pullback","rsi_reversion","stochastic_reversion",
+                    "williams_r_reversion","bollinger_reversion","pivot_reversal"
+                ]))
+                fast=int(rng.choice([2,3,4,5,6,7,8,9,10,12,14]))
+                slow=int(rng.choice([5,6,7,8,9,10,12,14,16,18,20,24,28,32,40,48]))
+                if slow <= fast: slow=fast+2
+                period=int(rng.choice([3,4,5,6,7,8,9,10,12,14,16]))
+                stop=float(rng.choice([0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.7,0.8,1.0]))
+                direction=str(rng.choice(["both","long","short"],p=[0.85,0.075,0.075]))
+                context_filter="none" if rng.random()<0.92 else str(rng.choice(context_filters))
+                confirmation_filter="none" if rng.random()<0.92 else str(rng.choice(confirmation_filters))
+                signal_composition="single"; secondary_family="none"
+            elif len(families)>1 and rng.random()<0.25:
+                signal_composition=str(rng.choice(["and","or","xor"],p=[0.15,0.75,0.10]))
                 secondary_family=str(rng.choice([f for f in families if f!=family]))
             else:
                 signal_composition="single"; secondary_family="none"
@@ -873,11 +932,13 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction,spec.context_filter,spec.confirmation_filter,spec.secondary_family,spec.signal_composition)
 
     def fitness(row):
-        # Evidence/pass status are eligibility gates, separate from the score.
-        # The four selectable performance criteria are ranked only by their
-        # equal-weight normalized distance, with no metric-specific tie-break.
+        # Passing/evidence status and the user's 300-trade minimum are eligibility
+        # gates, separate from the equal-weight score across the four target metrics.
+        # When no genome meets the full evidence gate, retain high-sample candidates
+        # rather than letting lucky low-trade samples crowd them out of the shortlist.
         m=row["metrics"]
         return (not m["passes_all_targets"], not _goal_activity_evidence(m,cfg),
+                int(m.get("trades", 0)) < 300,
                 row["distance"], -int(m["trades"]))
 
     def feature_vector(spec):
@@ -996,8 +1057,8 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 if rng.random()<0.18: direction=str(rng.choice(directions))
                 # Stronger family mutation counters early genetic convergence.
                 if rng.random()<0.28: family=choose_family()
-                if rng.random()<0.25: context_filter=str(rng.choice(context_filters))
-                if rng.random()<0.20: confirmation_filter=str(rng.choice(confirmation_filters))
+                if rng.random()<0.25: context_filter=str(rng.choice(context_filters,p=_filter_probabilities(context_filters, "context")))
+                if rng.random()<0.20: confirmation_filter=str(rng.choice(confirmation_filters,p=_filter_probabilities(confirmation_filters, "confirmation")))
                 spec=make_spec(genes=(family,fast,slow,period,stop,direction,context_filter,confirmation_filter,secondary_family,signal_composition))
         if algorithm=="surrogate_genetic" and len(evaluated)>=32 and (last_model_fit_at<0 or len(evaluated)-last_model_fit_at>=256):
             try:
