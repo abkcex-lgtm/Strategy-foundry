@@ -110,9 +110,9 @@ def _cached_binance_execution_rows(symbol: str, start_ms: int, seconds: int):
             payload = response.json()
     except Exception as exc:
         raise DataIntegrityError(f"Binance USD-M 1-second execution fetch failed for {symbol} at {start_ms}: {exc}") from exc
-    if not isinstance(payload, list) or len(payload) != seconds:
+    if not isinstance(payload, list) or len(payload) > seconds:
         got = len(payload) if isinstance(payload, list) else "non-list response"
-        raise DataIntegrityError(f"Incomplete Binance 1-second execution window for {symbol} at {start_ms}: expected {seconds} candles, got {got}")
+        raise DataIntegrityError(f"Invalid Binance 1-second execution window for {symbol} at {start_ms}: expected at most {seconds} trade-backed candles, got {got}")
     rows = []
     try:
         for item in payload:
@@ -122,9 +122,14 @@ def _cached_binance_execution_rows(symbol: str, start_ms: int, seconds: int):
     except (TypeError, ValueError, IndexError) as exc:
         raise DataIntegrityError(f"Invalid Binance 1-second execution data: {exc}") from exc
     frame = pd.DataFrame(rows, columns=["open_time", "open", "high", "low", "close", "volume"])
-    validate_ohlcv(frame, 1000, strict_gaps=True)
-    if int(frame.open_time.iloc[0]) != start_ms or int(frame.open_time.iloc[-1]) != start_ms + (seconds - 1) * 1000:
-        raise DataIntegrityError("Binance 1-second execution timestamps do not match the requested interval")
+    if frame.empty:
+        # No trade-backed one-second klines means no traded price movement in
+        # the requested interval; preserve the empty result, never synthesize OHLC.
+        return tuple()
+    validate_ohlcv(frame, 1000, strict_gaps=False)
+    times = frame["open_time"].to_numpy(dtype="int64")
+    if (times < start_ms).any() or (times >= start_ms + seconds * 1000).any():
+        raise DataIntegrityError("Binance 1-second execution timestamps fall outside the requested interval")
     return tuple(tuple(row) for row in frame.itertuples(index=False, name=None))
 
 
