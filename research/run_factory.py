@@ -378,6 +378,7 @@ def run(df,data_manifest):
             if rate<8.0:
                 return False
         return True
+    validated=[x for x in validated if activity_eligible(x)]
     eligible_near=sorted([x for x in oos_results if activity_eligible(x)],key=near_key)[:5]
     delivery=validated if validated else eligible_near
     if validated:
