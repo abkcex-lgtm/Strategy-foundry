@@ -484,8 +484,10 @@ def _resolve_execution_interval(side: str, execution_frame: pd.DataFrame, start_
     # Such empty seconds cannot move the traded price and are not missing OHLC
     # candles; do not fabricate candles or require 60 rows for a 1-minute window.
     # Still fail closed on malformed, duplicate, unordered, or out-of-window rows.
-    validate_ohlcv(execution_frame, 1000, strict_gaps=False)
     bars = execution_frame.iloc[first:last]
+    if bars.empty:
+        return None
+    validate_ohlcv(execution_frame, 1000, strict_gaps=False)
     if len(bars):
         bar_times = bars["open_time"].to_numpy(dtype=np.int64)
         if int(bar_times[0]) < start_ms or int(bar_times[-1]) >= end_ms:
