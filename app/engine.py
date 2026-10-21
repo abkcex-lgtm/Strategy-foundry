@@ -1429,3 +1429,5 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                         "Hybrid genetic search with stratified seeds, crossover, mutation, immigrant exploration and independent ledger replay of reported results. This invocation is one 10,000-candidate batch inside the background orchestrator; ranked on TRAIN only. Full 500k runtime is not production-certified.")) }
 
 # Research launch trigger: owner requires a full 1-minute ETHUSDT research run; contract thresholds and execution rules remain unchanged.
+
+# Owner-requested bounded research rerun: 1m ETHUSDT only; preserve all contract gates and independent audits.
