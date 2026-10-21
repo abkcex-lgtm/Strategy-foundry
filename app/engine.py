@@ -1,5 +1,6 @@
 from __future__ import annotations
-import hashlib, json, math, time
+import hashlib, json, math, time, os
+from concurrent.futures import ProcessPoolExecutor
 from collections import OrderedDict
 from dataclasses import dataclass, asdict, replace
 from typing import Any
@@ -781,6 +782,28 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
     return (sum(distances.values()) / len(distances) if distances else 0.0), failed, distances
 
 
+_PARALLEL_FRAME = None
+_PARALLEL_CONTRACT = None
+_PARALLEL_CONTEXT = None
+
+
+def _init_parallel_candidate_worker(frame, contract):
+    global _PARALLEL_FRAME, _PARALLEL_CONTRACT, _PARALLEL_CONTEXT
+    _PARALLEL_FRAME = frame
+    _PARALLEL_CONTRACT = contract
+    _PARALLEL_CONTEXT = prepare_backtest_data(frame)
+
+
+def _parallel_candidate_evaluate(spec):
+    try:
+        result = backtest(_PARALLEL_FRAME, spec, _PARALLEL_CONTRACT,
+                          _prepared_context=_PARALLEL_CONTEXT)
+        return {"strategy": result["strategy"], "contract": result["contract"],
+                "metrics": result["metrics"], "run_hash_sha256": result["run_hash_sha256"]}
+    except (ValueError, DataIntegrityError, IndexError, KeyError, FloatingPointError) as exc:
+        return {"_evaluation_error": str(exc)}
+
+
 def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="surrogate_genetic", search_space=None, progress_callback=None, excluded_genome_hashes=None, prior_candidates=None, prepared_context=None):
     """Deterministic bounded evolutionary search on TRAIN only.
 
@@ -963,6 +986,54 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     last_model_fit_at=-1
     surrogate_fit_count=0
 
+    parallel_workers = 1
+    parallel_pool = None
+    if algorithm == "stratified_random" and len(frame) >= 50000:
+        try:
+            parallel_workers = max(1, min(8, int(os.environ.get("FOUNDRY_WORKERS", "8")),
+                                          os.cpu_count() or 1))
+        except (TypeError, ValueError):
+            parallel_workers = 8
+        if parallel_workers > 1 and prepared_context is not None:
+            parallel_pool = ProcessPoolExecutor(
+                max_workers=parallel_workers,
+                initializer=_init_parallel_candidate_worker,
+                initargs=(frame, cfg))
+    def evaluate_many(specs):
+        nonlocal errors, duplicate_genomes
+        out_by_key = {}
+        eligible = []
+        seen_batch = set()
+        for candidate in specs:
+            key = genome(candidate)
+            key_hash = genome_hash(key)
+            if key in evaluated or key_hash in excluded_genome_hashes or key in seen_batch:
+                duplicate_genomes += 1
+                out_by_key[key] = None
+                continue
+            seen_batch.add(key)
+            eligible.append((candidate, key))
+        if parallel_pool is None:
+            for candidate, key in eligible:
+                out_by_key[key] = evaluate(candidate)
+        else:
+            payloads = list(parallel_pool.map(_parallel_candidate_evaluate,
+                                              [candidate for candidate, _ in eligible]))
+            for (candidate, key), payload in zip(eligible, payloads):
+                if payload.get("_evaluation_error") is not None:
+                    errors += 1
+                    out_by_key[key] = None
+                    continue
+                dist, failed, distances = _candidate_distance(payload["metrics"], cfg)
+                row = {"strategy": payload["strategy"], "contract": cfg,
+                       "metrics": payload["metrics"], "distance": dist,
+                       "failed_conditions": failed, "criterion_distances": distances,
+                       "run_hash_sha256": payload["run_hash_sha256"], "_genome": key}
+                evaluated[key] = row
+                family_counts[candidate.family] += 1
+                out_by_key[key] = row
+        return [(candidate, out_by_key.get(genome(candidate))) for candidate in specs]
+
     def evaluate(spec):
         nonlocal errors,duplicate_genomes
         key=genome(spec)
@@ -1016,15 +1087,44 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             population.append((prior_spec,row)); prior_rows.append(row); seen_prior.add(key_hash)
         except (TypeError,ValueError,KeyError):
             continue
-    for spec in initial:
-        if len(evaluated)>=max_candidates: break
-        row=evaluate(spec)
-        if row is not None: population.append((spec,row))
-        emit_progress()
+    if parallel_pool is not None:
+        for offset in range(0, len(initial), parallel_workers):
+            batch = initial[offset:offset+parallel_workers]
+            for spec, row in evaluate_many(batch):
+                if row is not None: population.append((spec, row))
+                emit_progress()
+    else:
+        for spec in initial:
+            if len(evaluated)>=max_candidates: break
+            row=evaluate(spec)
+            if row is not None: population.append((spec,row))
+            emit_progress()
 
     generation=0
     while len(evaluated)<max_candidates:
         generation+=1
+        if parallel_pool is not None:
+            batch=[]
+            batch_keys=set()
+            attempts=0
+            while len(batch)<parallel_workers and len(evaluated)+len(batch)<max_candidates and attempts<parallel_workers*30:
+                attempts+=1
+                candidate=make_spec()
+                key=genome(candidate)
+                if key in evaluated or key in batch_keys or genome_hash(key) in excluded_genome_hashes:
+                    duplicate_genomes+=1
+                    continue
+                batch.append(candidate); batch_keys.add(key)
+            if not batch:
+                break
+            for candidate, row in evaluate_many(batch):
+                if row is not None:
+                    population.append((candidate,row))
+                    if len(population)>256:
+                        population=sorted(population,key=lambda pair:fitness(pair[1]))[:192]
+                emit_progress()
+            if errors+duplicate_genomes>max_candidates*30: break
+            continue
         if algorithm=="stratified_random" or len(population)<8:
             spec=make_spec()
         else:
@@ -1115,6 +1215,9 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         if errors+duplicate_genomes>max_candidates*30: break
 
     emit_progress(force=True)
+    if parallel_pool is not None:
+        parallel_pool.shutdown(wait=True, cancel_futures=False)
+        parallel_pool = None
     results=list(evaluated.values())
     results.sort(key=fitness)
     passing=[r for r in results if r["metrics"]["passes_all_targets"]]
