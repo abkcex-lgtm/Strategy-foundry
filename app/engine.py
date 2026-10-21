@@ -617,13 +617,7 @@ def _first_exit_candidate(side, opens, highs, lows, start, stop, target, range_i
     """
     if range_index is not None:
         return range_index.first_hit(side,start,stop,target)
-    """Return the first touched bar using bounded-memory vectorized chunks.
-
-    A full-tail boolean mask for every trade creates large temporary arrays on
-    multi-month 1m data. Scan in bounded chunks instead; this preserves the
-    exact first-hit order and leaves gap/SL-TP ambiguity resolution to the
-    scalar reference resolver.
-    """
+    # Compatibility fallback for callers that do not have a prepared index.
     n=len(opens)
     chunk_size=4096
     for chunk_start in range(int(start),n,chunk_size):
@@ -1080,8 +1074,11 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             for candidate, key in eligible:
                 out_by_key[key] = evaluate(candidate)
         else:
+            # Larger task chunks reduce IPC/scheduling overhead while keeping all
+            # candidate evaluations independent and all audit gates unchanged.
             payloads = list(parallel_pool.map(_parallel_candidate_evaluate,
-                                              [candidate for candidate, _ in eligible]))
+                                              [candidate for candidate, _ in eligible],
+                                              chunksize=8))
             for (candidate, key), payload in zip(eligible, payloads):
                 if payload.get("_evaluation_error") is not None:
                     errors += 1
@@ -1174,7 +1171,11 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             batch=[]
             batch_keys=set()
             attempts=0
-            while len(batch)<parallel_workers and len(evaluated)+len(batch)<max_candidates and attempts<parallel_workers*30:
+            # Fill a meaningful queue per worker instead of submitting only one
+            # candidate per process. This amortizes process-pool overhead on the
+            # 131k-row training split without changing candidate evaluation.
+            batch_limit=min(max_candidates-len(evaluated),max(64,parallel_workers*16))
+            while len(batch)<batch_limit and len(evaluated)+len(batch)<max_candidates and attempts<batch_limit*30:
                 attempts+=1
                 candidate=make_spec()
                 key=genome(candidate)
