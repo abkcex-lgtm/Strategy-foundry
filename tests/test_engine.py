@@ -87,8 +87,8 @@ def test_indicator_cache_memory_budget_scales_down_for_full_reference_dataset():
 
     assert 1 <= limit < 128
     assert limit * full_dataset_rows * INDICATOR_BYTES_PER_CANDLE <= INDICATOR_CACHE_BUDGET_BYTES
-    assert limit == 6
-    assert _indicator_cache_limit_for_rows(131040) == 12
+    assert limit == 25
+    assert _indicator_cache_limit_for_rows(131040) == 51
 
 
 def test_preflight_capability_evidence_is_weaker_than_final_acceptance(monkeypatch):
