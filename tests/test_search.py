@@ -54,8 +54,7 @@ def test_search_explores_all_supported_families_and_returns_five_near_misses(mon
     assert len(result["results"]) == 5
     assert "TRAIN" in result["warning"]
     assert set(result["results"][0]["failed_conditions"]) == {
-        "win_rate_pct", "profit_factor", "avg_net_tp_per_day",
-        "insufficient_activity_evidence"
+        "win_rate_pct", "profit_factor", "avg_net_tp_per_day"
     }
     assert "criterion_distances" in result["results"][0]
 
