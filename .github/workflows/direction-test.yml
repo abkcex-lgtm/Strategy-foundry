@@ -25,7 +25,7 @@ jobs:
       - name: Run existing regression tests
         run: python -m pytest -q
       - name: Test the same candidate long, short, and both directions
-        run: python research/test_fixed_direction.py
+        run: PYTHONPATH=. python research/test_fixed_direction.py
       - name: Upload direction comparison report
         if: always()
         uses: actions/upload-artifact@v4
