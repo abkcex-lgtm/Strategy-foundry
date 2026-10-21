@@ -93,20 +93,24 @@ def test_candidate_distance_normalizes_profit_factor_like_other_targets():
 
 
 
-def test_goal_activity_evidence_requires_300_trades_in_every_month_including_zero_months():
+def test_goal_activity_evidence_requires_300_total_trades_not_300_each_month():
     cfg = normalize_contract()
+    # 300 total trades are a floor, but the 3 TP/day goal at 50% WR needs more
+    # trades over a 60-day window, so this sample is correctly insufficient.
     assert _goal_activity_evidence({
-        "span_days": 60, "trades": 900, "wins": 450,
-        "win_rate_pct": 50.0, "avg_net_tp_per_day": 4.0,
-        "monthly_trade_counts": {"2026-07": 600, "2026-08": 300},
+        "span_days": 60, "trades": 300, "wins": 150,
+        "win_rate_pct": 50.0, "avg_net_tp_per_day": 2.5,
+        "monthly_trade_counts": {"2026-07": 180, "2026-08": 120},
+    }, cfg) is False
+    # No artificial per-month minimum: the evidence gate uses total trades and
+    # the required trade frequency implied by target TP/day and observed WR.
+    assert _goal_activity_evidence({
+        "span_days": 10, "trades": 300, "wins": 150,
+        "win_rate_pct": 50.0, "avg_net_tp_per_day": 15.0,
+        "monthly_trade_counts": {"2026-07": 300},
     }, cfg) is True
     assert _goal_activity_evidence({
-        "span_days": 60, "trades": 900, "wins": 450,
-        "win_rate_pct": 50.0, "avg_net_tp_per_day": 4.0,
-        "monthly_trade_counts": {"2026-07": 900, "2026-08": 0},
-    }, cfg) is False
-    assert _goal_activity_evidence({
-        "span_days": 30, "trades": 300, "wins": 150,
-        "win_rate_pct": 50.0, "avg_net_tp_per_day": 4.0,
-        "monthly_trade_counts": {"2026-07": 299},
-    }, cfg) is False
+        "span_days": 90, "trades": 600, "wins": 300,
+        "win_rate_pct": 50.0, "avg_net_tp_per_day": 3.33,
+        "monthly_trade_counts": {"2026-04": 50, "2026-05": 100, "2026-06": 450},
+    }, cfg) is True
