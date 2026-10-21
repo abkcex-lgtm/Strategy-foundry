@@ -442,7 +442,7 @@ def test_fixed_risk_backtest_stops_before_equity_falls_below_risk_budget(monkeyp
                         lambda side, bar_open, bar_high, bar_low, stop, target: ("SL", stop))
     # The scalar resolver is only called on candidate exit bars after vectorization.
     monkeypatch.setattr(engine, "_first_exit_candidate",
-                        lambda side, opens, highs, lows, start, stop, target: start)
+                        lambda side, opens, highs, lows, start, stop, target, range_index=None: start)
     cfg = normalize_contract({
         "initial_balance": 1000.0, "risk_mode": "fixed_usd", "risk_usd": 10.0,
         "commission_pct_per_side": 0.0, "slippage_pct_per_side": 0.0,
