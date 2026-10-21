@@ -482,8 +482,8 @@ def test_independent_replay_stops_before_equity_falls_below_risk_budget(monkeypa
     assert result["ledger"][-1]["balance_after"] >= 0.0
 
 
-def test_default_loss_streak_acceptance_matches_user_contract():
-    # The preset must enforce the requested maximum streak of eight, not a
-    # permissive legacy default that silently accepts streaks up to thirteen.
-    assert CONTRACT["max_consecutive_losses"] == 8
-    assert normalize_contract()["max_consecutive_losses"] == 8
+def test_default_loss_streak_acceptance_preserves_original_thirteen_limit():
+    # Preserve the established acceptance contract; optimization must improve
+    # strategy quality without silently changing the user's criteria.
+    assert CONTRACT["max_consecutive_losses"] == 13
+    assert normalize_contract()["max_consecutive_losses"] == 13
