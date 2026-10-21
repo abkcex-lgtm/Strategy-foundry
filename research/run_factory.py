@@ -423,6 +423,57 @@ def run(df,data_manifest):
             "evaluated_unique_candidates":completed,"validated_strategy_count":len(validated),"returned_candidate_count":0,
             "full_dataset_sha256":full_hash,"report_path":"research-results/report.json","zip_path":"research-results/validated_strategies.zip"},sort_keys=True),flush=True)
         return
+    # Near-misses are not certificates. Preserve their real per-split metrics and audit
+    # evidence without running expensive full-dataset standalone certification for them.
+    # Full-data replay/export remains mandatory for candidates that pass every gate.
+    if not validated:
+        full_hash=frame_hash(df)
+        results=[{k:v for k,v in item.items() if not k.startswith("_")} for item in delivery]
+        report={
+            "schema_version":1,"outcome":outcome,
+            "source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
+            "requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,
+            "candidate_search_complete":search_complete,"failed_candidate_evaluations":failed,
+            "candidate_failure_reason_counts":failure_reasons,"completed_batches":batches,
+            "surrogate_model_fits":fits,"generations":generations,"family_evaluated_counts":family_counts,
+            "speed_benchmark":speed_benchmark,"candidate_search_budget_seconds":MAX_SECONDS,
+            "seed":SEED,"algorithm":ALGORITHM,"preflight_summary":preflight_summary,
+            "preflight_warning":preflight_gate_warning,"contract":cfg,
+            "target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,
+                "avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":13,
+                "min_trades_per_day":8.0,"risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5,
+                "commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,
+                "entry_model":"next_candle_open","exit_model":"SL/TP only","max_positions":1,
+                "loss_streak_resets_only_on_full_TP":True},
+            "data":data_manifest,"splits":{
+                "train":{"rows":len(train),"sha256":train_hash,"used_for_candidate_generation":True},
+                "development":{"rows":len(dev),"sha256":dev_hash,"used_for_selection_and_near_miss_ranking":True},
+                "oos":{"rows":len(oos),"sha256":oos_hash,"used_only_after_selection_frozen":True}},
+            "development_passing_count":len(dev_pass),"development_near_miss_count":len(dev_near),
+            "oos_evaluated_count":len(oos_results),"validated_strategy_count":0,
+            "returned_candidate_count":len(delivery),
+            "activity_eligible_near_miss_count":len(activity_eligible_near),
+            "near_miss_shortfall":max(0,5-len(delivery)),
+            "development_audit_failures":audit_failures,"exports":[],
+            "results":results,
+            "note":"No candidate passed all acceptance gates in this bounded search. Returned candidates are uncertified near-misses with per-split metrics, failed conditions, and independent audit statuses/evidence. Full-data standalone certification is intentionally not run for near-misses; no acceptance threshold was relaxed.",
+            "selection_policy":"Train creates candidates; Development freezes selection; OOS is inspected only after selection is frozen. All required performance/activity gates and independent ledger audits remain mandatory for certification.",
+            "reproducibility":"Dataset/split hashes, strategy specs, per-split metrics, and primary-vs-independent audit evidence are included. Full-data standalone exports are only created for strategies that pass every gate."
+        }
+        write(OUT/"report.json",report)
+        with zipfile.ZipFile(OUT/"validated_strategies.zip","w",zipfile.ZIP_DEFLATED) as z:
+            z.writestr("README.txt","No validated strategy was found. This archive contains the exact Binance data manifest; see report.json for up to five real, uncertified near-misses, their per-split metrics, failed gates, and independent audit evidence. No standalone strategy is certified or exported.")
+            z.writestr("market_data_manifest.json",json.dumps(data_manifest,ensure_ascii=False,sort_keys=True,indent=2))
+        write(PROGRESS,{"status":"completed" if search_complete else "partial_search_reported",
+            "outcome":outcome,"candidate_search_complete":search_complete,
+            "requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,
+            "validated_strategy_count":0,"returned_candidate_count":len(delivery),
+            "report":"research-results/report.json","strategy_zip":"research-results/validated_strategies.zip"})
+        print("FINAL_REPORT "+json.dumps({"outcome":outcome,"requested_candidates":REQUESTED,
+            "evaluated_unique_candidates":completed,"validated_strategy_count":0,
+            "returned_candidate_count":len(delivery),"full_dataset_sha256":full_hash,
+            "report_path":"research-results/report.json","zip_path":"research-results/validated_strategies.zip"},sort_keys=True),flush=True)
+        return
     full_hash=frame_hash(df); prepared_full=prepare_backtest_data(df); template=(ROOT/"app"/"standalone_template.py").read_text(encoding="utf-8")
     zip_path=OUT/"validated_strategies.zip"; exports=[]
     with zipfile.ZipFile(zip_path,"w",zipfile.ZIP_DEFLATED,compresslevel=6) as z:
