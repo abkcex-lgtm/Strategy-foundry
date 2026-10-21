@@ -28,7 +28,7 @@ CONTRACT = {
     "min_win_rate_pct": 40.0,
     "min_profit_factor": 1.0,
     "min_tp_per_day": 3.0,
-    "min_trades_per_day": 10.0,
+    "min_trades_per_day": 8.0,
     "use_min_win_rate": True,
     "use_min_profit_factor": True,
     "use_min_tp_per_day": True,
