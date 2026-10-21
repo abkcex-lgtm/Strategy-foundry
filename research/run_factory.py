@@ -270,7 +270,7 @@ def run(df,data_manifest):
             train_near=sorted(train_near,key=lambda x:(
                 not _goal_activity_evidence(x.get("metrics",{}),cfg),
                 int(x.get("metrics",{}).get("trades",0)) < 300,
-                not _capability_evidence(x.get("metrics",{}),cfg),
+                not _capability_evidence(x.get("metrics",{})),
                 float(x.get("distance",math.inf)),
                 -int(x.get("metrics",{}).get("trades",0)),
                 int(x.get("metrics",{}).get("max_consecutive_losses",10**9)),
