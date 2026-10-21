@@ -85,10 +85,10 @@ def test_candidate_distance_normalizes_profit_factor_like_other_targets():
     distance, failed, distances = _candidate_distance(metrics, cfg)
     assert set(distances) == {
         "win_rate_pct", "profit_factor", "avg_net_tp_per_day",
-        "max_consecutive_losses",
+        "max_consecutive_losses", "monthly_trades",
     }
     assert "profit_factor" in failed
-    weights = {"avg_net_tp_per_day": 3.0, "trades_per_day": 2.5, "win_rate_pct": 1.5,
+    weights = {"avg_net_tp_per_day": 3.0, "trades_per_day": 2.5, "monthly_trades": 2.5, "win_rate_pct": 1.5,
                "profit_factor": 1.5, "max_consecutive_losses": 1.0}
     expected = sum(weights.get(k, 1.0) * v for k, v in distances.items()) / sum(weights.get(k, 1.0) for k in distances)
     assert distance == expected
@@ -96,39 +96,33 @@ def test_candidate_distance_normalizes_profit_factor_like_other_targets():
 
 
 
-def test_goal_activity_evidence_uses_daily_floor_not_monthly_300_quota():
-    cfg = normalize_contract({"min_trades_per_day": 8, "min_tp_per_day": 3})
-    # Daily floor and TP/day feasibility are the only activity thresholds;
-    # monthly distribution is diagnostic, not an extra hidden acceptance gate.
+def test_goal_activity_evidence_enforces_daily_and_each_month_floor():
+    cfg = normalize_contract({"min_trades_per_day": 8, "min_trades_per_month": 300, "min_tp_per_day": 3})
     assert _goal_activity_evidence({
-        "span_days": 10, "trades": 80, "wins": 35,
-        "win_rate_pct": 43.75, "avg_net_tp_per_day": 3.5,
-        "monthly_trade_counts": {"2026-07": 80},
+        "span_days": 30, "trades": 900, "trades_per_day": 30,
+        "wins": 120, "win_rate_pct": 40.0, "avg_net_tp_per_day": 4.0,
+        "monthly_trade_counts": {"2026-04": 300, "2026-05": 300, "2026-06": 300},
     }, cfg) is True
-    # Activity eligibility is only the 8-trades/day floor; TP/day is a separate gate.
+
+    # A high total or daily rate cannot hide a calendar month below 300 trades.
     assert _goal_activity_evidence({
-        "span_days": 10, "trades": 80, "wins": 20,
-        "win_rate_pct": 25.0, "avg_net_tp_per_day": 2.0,
-        "monthly_trade_counts": {"2026-07": 80},
-    }, cfg) is True
-    assert _goal_activity_evidence({
-        "span_days": 10, "trades": 79, "wins": 35,
-        "win_rate_pct": 44.3, "avg_net_tp_per_day": 3.5,
-        "monthly_trade_counts": {"2026-07": 79},
-    }, cfg) is False
-    # Uneven calendar-month distribution alone must not reject a split that meets
-    # the total daily floor and TP/day feasibility threshold.
-    assert _goal_activity_evidence({
-        "span_days": 90, "trades": 900, "wins": 360,
-        "win_rate_pct": 40.0, "avg_net_tp_per_day": 4.0,
+        "span_days": 90, "trades": 900, "trades_per_day": 10,
+        "wins": 360, "win_rate_pct": 40.0, "avg_net_tp_per_day": 4.0,
         "monthly_trade_counts": {"2026-04": 200, "2026-05": 250, "2026-06": 450},
-    }, cfg) is True
+    }, cfg) is False
     assert _goal_activity_evidence({
-        "span_days": 90, "trades": 719, "wins": 360,
-        "win_rate_pct": 50.0, "avg_net_tp_per_day": 4.0,
-        "monthly_trade_counts": {"2026-04": 50, "2026-05": 100, "2026-06": 569},
+        "span_days": 10, "trades": 80, "trades_per_day": 8,
+        "wins": 35, "win_rate_pct": 43.75, "avg_net_tp_per_day": 3.5,
+        "monthly_trade_counts": {"2026-07": 80},
     }, cfg) is False
 
+
+def test_goal_activity_evidence_fails_closed_when_monthly_counts_missing():
+    cfg = normalize_contract()
+    assert _goal_activity_evidence({
+        "span_days": 10, "trades": 300, "trades_per_day": 30,
+        "wins": 150, "win_rate_pct": 50.0, "avg_net_tp_per_day": 15.0,
+    }, cfg) is False
 
 
 def test_near_key_prioritizes_300_trade_train_samples_over_sparse_lucky_samples():
