@@ -1,0 +1,36 @@
+name: ETHUSDT EMA 7/20 pullback test
+on:
+  push:
+    paths:
+      - "research/test_ema_7_20_pullback.py"
+      - ".github/workflows/ema-pullback-test.yml"
+permissions:
+  contents: read
+concurrency:
+  group: ethusdt-ema-7-20-pullback-test
+  cancel-in-progress: true
+jobs:
+  ema-pullback-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+      - name: Install declared dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Run regression tests
+        run: python -m pytest -q
+      - name: Test EMA 7/20 pullback long, short, and both directions
+        run: PYTHONPATH=. python research/test_ema_7_20_pullback.py
+      - name: Upload EMA pullback report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ethusdt-ema-pullback-${{ github.run_id }}
+          path: research-results/ema-7-20-pullback.json
+          if-no-files-found: error
+          retention-days: 90
