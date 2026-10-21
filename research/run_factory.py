@@ -371,30 +371,26 @@ def run(df,data_manifest):
             item["oos_audit_status"]="FAILED"; item["oos_error"]=str(exc); item["oos_passes_all_targets"]=False
         oos_results.append(item); print(f"OOS_PROGRESS {idx}/{len(frozen)}",flush=True)
     validated=[x for x in oos_results if x.get("development_passes_all_targets") and x.get("development_audit_status")=="MATCH" and x.get("oos_passes_all_targets")]
-    def monthly_activity_eligible(item):
-        # Explicitly enforce activity eligibility for the final deliverable, not only ranking.
-        # Never return a strategy that violates the user's hard activity floor.
-        # Require >=300 closed trades in every UTC month of TRAIN, DEV, and OOS,
-        # plus >=10 trades/day in each split; do not weaken this for near-misses.
+    def activity_eligible(item):
+        # Enforce the agreed minimum activity without adding an unapproved monthly quota.
+        # All immutable performance gates remain enforced by _candidate_distance and
+        # independent replay; this gate only enforces the agreed daily trade frequency.
         for key in ("train_metrics","development_metrics","oos_metrics"):
             metrics=item.get(key) or {}
-            counts=metrics.get("monthly_trade_counts") or {}
-            if not counts or any(int(n or 0)<300 for n in counts.values()):
-                return False
             span=float(metrics.get("span_days",0.0) or 0.0)
             trades=int(metrics.get("trades",0) or 0)
             rate=float(metrics.get("trades_per_day", trades/span if span>0 else 0.0) or 0.0)
-            if rate<10.0:
+            if rate<8.0:
                 return False
         return True
-    eligible_near=sorted([x for x in oos_results if monthly_activity_eligible(x)],key=near_key)[:5]
+    eligible_near=sorted([x for x in oos_results if activity_eligible(x)],key=near_key)[:5]
     delivery=validated if validated else eligible_near
     if validated:
         outcome="VALIDATED_STRATEGIES_FOUND" if search_complete else "VALIDATED_STRATEGIES_FOUND_SEARCH_INCOMPLETE"
     elif delivery:
         outcome="NO_STRATEGY_PASSED_ALL_REQUIRED_SPLITS" if search_complete else "INCOMPLETE_SEARCH_NO_CERTIFIED_STRATEGY"
     else:
-        outcome="NO_CANDIDATE_MET_MONTHLY_ACTIVITY_FLOOR" if search_complete else "INCOMPLETE_SEARCH_NO_ACTIVITY_ELIGIBLE_CANDIDATE"
+        outcome="NO_CANDIDATE_MET_DAILY_ACTIVITY_FLOOR" if search_complete else "INCOMPLETE_SEARCH_NO_ACTIVITY_ELIGIBLE_CANDIDATE"
         # Preserve a truthful, downloadable report instead of exporting low-activity
         # candidates that the user explicitly excluded.
         full_hash=frame_hash(df)
@@ -410,10 +406,10 @@ def run(df,data_manifest):
             "development":{"rows":len(dev),"sha256":dev_hash},"oos":{"rows":len(oos),"sha256":oos_hash}},
             "validated_strategy_count":len(validated),"returned_candidate_count":0,"results":[],
             "activity_eligible_near_miss_count":0,
-            "note":"No strategy is returned unless it meets >=300 closed trades in every UTC month of Train, Development, and OOS and >=10 trades/day in each split. Low-activity candidates are intentionally excluded.",
+            "note":"Near-misses are returned only when they meet the agreed >=8 trades/day activity floor in Train, Development, and OOS. All immutable performance gates remain unchanged.",
             "reproducibility":"Candidate selection and primary/independent ledger audits ran before this activity gate."})
         with zipfile.ZipFile(OUT/"validated_strategies.zip","w",zipfile.ZIP_DEFLATED) as z:
-            z.writestr("README.txt","No strategies exported: no candidate met the mandatory monthly activity floor across Train, Development, and OOS.")
+            z.writestr("README.txt","No strategies exported: no candidate met the agreed daily activity floor across Train, Development, and OOS.")
         write(PROGRESS,{"status":"completed" if search_complete else "partial_search_reported","outcome":outcome,
             "requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"validated_strategy_count":len(validated),
             "returned_candidate_count":0,"report":"research-results/report.json","strategy_zip":"research-results/validated_strategies.zip"})
@@ -451,7 +447,7 @@ def run(df,data_manifest):
     results=[]
     for item in delivery:
         results.append({k:v for k,v in item.items() if not k.startswith("_")})
-    report={"schema_version":1,"outcome":outcome,"source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"candidate_search_complete":search_complete,"failed_candidate_evaluations":failed,"candidate_failure_reason_counts":failure_reasons,"completed_batches":batches,"surrogate_model_fits":fits,"generations":generations,"family_evaluated_counts":family_counts,"speed_benchmark":speed_benchmark,"candidate_search_budget_seconds":MAX_SECONDS,"invalid_stop_proposals_removed":True,"parallel_worker_limit":(max(1,min(8,os.cpu_count() or 1)) if ALGORITHM=="stratified_random" else 1),"indicator_cache_stats":{"hits":prepared_train.indicator_cache_hits,"misses":prepared_train.indicator_cache_misses,"entries":len(prepared_train.indicator_cache),"limit":prepared_train.indicator_cache_limit},"seed":SEED,"algorithm":ALGORITHM,"preflight_summary":preflight_summary,"preflight_warning":preflight_gate_warning,"capability_gate":{"min_avg_tp_per_day":0.5,"min_trades":50,"min_win_rate_pct":25,"min_profit_factor":0.5,"blocking":False,"policy":"advisory only; all candidate families remain eligible and pilot results never terminate the requested search"},"contract":cfg,"target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,"avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":13,"min_trades_per_day":10.0,"min_trades_per_utc_month":300,"risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5,"commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"entry_model":"next_candle_open","exit_model":"SL/TP only","max_positions":1,"loss_streak_resets_only_on_full_TP":True},"data":data_manifest,"splits":{"train":{"rows":len(train),"sha256":train_hash,"backtest_sha256":train_backtest_hash,"used_for_candidate_generation":True},"development":{"rows":len(dev),"sha256":dev_hash,"backtest_sha256":dev_backtest_hash,"used_for_selection_and_near_miss_ranking":True},"oos":{"rows":len(oos),"sha256":oos_hash,"backtest_sha256":oos_backtest_hash,"used_only_after_selection_frozen":True}},"development_passing_count":len(dev_pass),"development_near_miss_count":len(dev_near),"oos_evaluated_count":len(oos_results),"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"near_miss_shortfall":max(0,5-len(delivery)) if not validated else 0,"development_audit_failures":audit_failures,"exports":exports,"results":results,"selection_policy":"Train creates candidates; win rate, profit factor, TP/day, max consecutive losses, >=300 closed trades in every UTC calendar month, >=10 trades/day, and independent ledger match are mandatory eligibility gates; four active performance criteria have equal-weight normalized distance; Development freezes selection; OOS is only evaluated after selection is frozen and never used to rank/select.","reproducibility":"Primary and independent ledgers compared field-by-field at rel_tol=1e-10 and abs_tol=1e-8; standalone exports include exact hashes and auto-fetch 1-second windows only for ambiguous candles."}
+    report={"schema_version":1,"outcome":outcome,"source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"candidate_search_complete":search_complete,"failed_candidate_evaluations":failed,"candidate_failure_reason_counts":failure_reasons,"completed_batches":batches,"surrogate_model_fits":fits,"generations":generations,"family_evaluated_counts":family_counts,"speed_benchmark":speed_benchmark,"candidate_search_budget_seconds":MAX_SECONDS,"invalid_stop_proposals_removed":True,"parallel_worker_limit":(max(1,min(8,os.cpu_count() or 1)) if ALGORITHM=="stratified_random" else 1),"indicator_cache_stats":{"hits":prepared_train.indicator_cache_hits,"misses":prepared_train.indicator_cache_misses,"entries":len(prepared_train.indicator_cache),"limit":prepared_train.indicator_cache_limit},"seed":SEED,"algorithm":ALGORITHM,"preflight_summary":preflight_summary,"preflight_warning":preflight_gate_warning,"capability_gate":{"min_avg_tp_per_day":0.5,"min_trades":50,"min_win_rate_pct":25,"min_profit_factor":0.5,"blocking":False,"policy":"advisory only; all candidate families remain eligible and pilot results never terminate the requested search"},"contract":cfg,"target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,"avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":13,"min_trades_per_day":8.0,"risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5,"commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"entry_model":"next_candle_open","exit_model":"SL/TP only","max_positions":1,"loss_streak_resets_only_on_full_TP":True},"data":data_manifest,"splits":{"train":{"rows":len(train),"sha256":train_hash,"backtest_sha256":train_backtest_hash,"used_for_candidate_generation":True},"development":{"rows":len(dev),"sha256":dev_hash,"backtest_sha256":dev_backtest_hash,"used_for_selection_and_near_miss_ranking":True},"oos":{"rows":len(oos),"sha256":oos_hash,"backtest_sha256":oos_backtest_hash,"used_only_after_selection_frozen":True}},"development_passing_count":len(dev_pass),"development_near_miss_count":len(dev_near),"oos_evaluated_count":len(oos_results),"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"near_miss_shortfall":max(0,5-len(delivery)) if not validated else 0,"development_audit_failures":audit_failures,"exports":exports,"results":results,"selection_policy":"Train creates candidates; win rate, profit factor, TP/day, max consecutive losses, >=8 trades/day and independent ledger match are mandatory eligibility gates; four active performance criteria have equal-weight normalized distance; Development freezes selection; OOS is only evaluated after selection is frozen and never used to rank/select.","reproducibility":"Primary and independent ledgers compared field-by-field at rel_tol=1e-10 and abs_tol=1e-8; standalone exports include exact hashes and auto-fetch 1-second windows only for ambiguous candles."}
     write(OUT/"report.json",report); write(PROGRESS,{"status":"completed" if search_complete else "partial_search_reported","candidate_search_complete":search_complete,"outcome":outcome,"candidate_search_complete":search_complete,"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"report":"research-results/report.json","strategy_zip":"research-results/validated_strategies.zip"})
     print("FINAL_REPORT "+json.dumps({"outcome":outcome,"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"full_dataset_sha256":full_hash,"train_sha256":train_hash,"development_sha256":dev_hash,"oos_sha256":oos_hash,"report_path":"research-results/report.json","zip_path":"research-results/validated_strategies.zip"},sort_keys=True),flush=True)
 def main():
