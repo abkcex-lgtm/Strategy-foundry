@@ -1427,3 +1427,5 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             "warning":("Deterministic stratified random baseline; selected results independently replayed; OOS not certified." if algorithm=="stratified_random" else
                        ("Surrogate-assisted genetic search: ExtraTrees model ranks proposal pools; model fits and independent ledger replay are recorded. This is one 10,000-candidate batch inside the resource-managed background search; ranked on TRAIN only. Full 500k runtime has not been production-certified." if algorithm=="surrogate_genetic" else
                         "Hybrid genetic search with stratified seeds, crossover, mutation, immigrant exploration and independent ledger replay of reported results. This invocation is one 10,000-candidate batch inside the background orchestrator; ranked on TRAIN only. Full 500k runtime is not production-certified.")) }
+
+# Research launch trigger: owner requires a full 1-minute ETHUSDT research run; contract thresholds and execution rules remain unchanged.
