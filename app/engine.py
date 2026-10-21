@@ -722,14 +722,18 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
                         raise DataIntegrityError(f"Execution preflight failed at {int(open_times[j])}: {exc}") from exc
                     try:
                         seconds=download_binance_execution_window(cfg.get("symbol","ETHUSDT"),int(open_times[j]),base_interval)
-                    except Exception as fetch_exc:
-                        raise DataIntegrityError(f"Unresolved same-candle SL/TP ambiguity at {int(open_times[j])}; automatic 1-second resolution failed: {fetch_exc}") from fetch_exc
-                    execution_frames_used.append(seconds)
-                    resolution=_resolve_execution_interval(side,seconds,int(open_times[j]),base_interval,stop,target)
-                    if resolution is None:
-                        raise DataIntegrityError(f"1-second data contradicts ambiguous base candle at {int(open_times[j])}")
-                    reason,exit_price,exit_time=resolution; exit_i=j
-                    resolution_status="resolved_1s_ohlc_auto"
+                        execution_frames_used.append(seconds)
+                        resolution=_resolve_execution_interval(side,seconds,int(open_times[j]),base_interval,stop,target)
+                        if resolution is None:
+                            raise DataIntegrityError("1-second data did not resolve ambiguous base candle")
+                        reason,exit_price,exit_time=resolution
+                        resolution_status="resolved_1s_ohlc_auto"
+                    except Exception:
+                        # If finer data is unavailable or inconclusive, conservatively
+                        # count this ambiguous trade as a stop loss and keep searching.
+                        reason,exit_price,exit_time="SL",float(stop),int(open_times[j])
+                        resolution_status="unresolved_as_loss"
+                    exit_i=j
                     auto_resolved=True
                 if resolution is not None and not auto_resolved:
                     reason,exit_price=resolution; exit_i=j; exit_time=int(open_times[j])
