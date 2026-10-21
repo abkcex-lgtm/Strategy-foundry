@@ -413,10 +413,11 @@ def test_execution_interval_accepts_sparse_trade_seconds_without_synthetic_candl
     assert _resolve_execution_interval("LONG", execution, 60_000, 60_000, 98.0, 104.0) == ("TP", 104.0, 63_000)
 
 
-def test_execution_interval_returns_none_for_empty_no_trade_window():
+def test_execution_interval_fails_closed_for_empty_ambiguous_window():
     from app.engine import _resolve_execution_interval
     execution = pd.DataFrame(columns=["open_time", "open", "high", "low", "close", "volume"])
-    assert _resolve_execution_interval("LONG", execution, 60_000, 60_000, 98.0, 104.0) is None
+    with pytest.raises(DataIntegrityError, match="no trade-backed execution candles"):
+        _resolve_execution_interval("LONG", execution, 60_000, 60_000, 98.0, 104.0)
 
 
 def test_search_returns_exactly_five_audited_near_misses_when_no_candidate_passes():
