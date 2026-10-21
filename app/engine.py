@@ -27,6 +27,7 @@ CONTRACT = {
     "min_win_rate_pct": 40.0,
     "min_profit_factor": 1.0,
     "min_tp_per_day": 3.0,
+    "min_trades_per_day": 7.5,
     "use_min_win_rate": True,
     "use_min_profit_factor": True,
     "use_min_tp_per_day": True,
@@ -50,7 +51,7 @@ def normalize_contract(overrides: dict[str, Any] | None = None) -> dict[str, Any
     cfg.update(overrides)
     numeric = ["initial_balance", "risk_usd", "risk_pct", "reward_risk",
                "commission_pct_per_side", "slippage_pct_per_side",
-               "min_win_rate_pct", "min_profit_factor", "min_tp_per_day"]
+               "min_win_rate_pct", "min_profit_factor", "min_tp_per_day", "min_trades_per_day"]
     for key in numeric:
         try: cfg[key] = float(cfg[key])
         except (TypeError, ValueError): raise ValueError(f"{key} must be numeric")
@@ -713,7 +714,7 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
         combined_execution=pd.concat(execution_frames_used,ignore_index=True).drop_duplicates(subset=["open_time"]).sort_values("open_time").reset_index(drop=True)
         execution_hash=sha256_bytes(combined_execution.to_csv(index=False,float_format="%.12g").encode())
     execution_resolution="1s_ohlc" if exec_df is not None else ("1s_ohlc_auto" if execution_frames_used else "base_ohlc_only")
-    metrics={"trades":len(ledger),"wins":len(wins),"losses":sum(t["net_pnl"]<=0 for t in ledger),"win_rate_pct":wr,"profit_factor":pf if math.isfinite(pf) else None,"avg_net_tp_per_day":tp_day,"max_consecutive_losses":max_streak,"net_pnl":sum(t["net_pnl"] for t in ledger),"final_balance":balance,"total_costs":sum(t["fees_slippage"] for t in ledger),"data_hash_sha256":data_hash,"execution_data_hash_sha256":execution_hash,"execution_resolution":execution_resolution,"unresolved_as_loss_count":sum(t.get("execution_ambiguity",False) for t in ledger),"open_positions_at_end":1 if open_position else 0,"open_position_unrealized_net_pnl":open_position["unrealized_net_pnl"] if open_position else 0.0,"rows":len(df),"span_days":span_days,"passes_all_targets":bool(passes)}
+    metrics={"trades":len(ledger),"wins":len(wins),"losses":sum(t["net_pnl"]<=0 for t in ledger),"win_rate_pct":wr,"profit_factor":pf if math.isfinite(pf) else None,"avg_net_tp_per_day":tp_day,"max_consecutive_losses":max_streak,"net_pnl":sum(t["net_pnl"] for t in ledger),"final_balance":balance,"total_costs":sum(t["fees_slippage"] for t in ledger),"data_hash_sha256":data_hash,"execution_data_hash_sha256":execution_hash,"execution_resolution":execution_resolution,"unresolved_as_loss_count":sum(t.get("execution_ambiguity",False) for t in ledger),"open_positions_at_end":1 if open_position else 0,"open_position_unrealized_net_pnl":open_position["unrealized_net_pnl"] if open_position else 0.0,"rows":len(df),"span_days":span_days,"trades_per_day":len(ledger)/span_days,"passes_all_targets":bool(passes)}
     run_hash=sha256_bytes(json.dumps({"spec":asdict(spec),"contract":cfg,"data_hash":data_hash,"execution_data_hash":execution_hash,"execution_resolution":execution_resolution},sort_keys=True).encode())
     return {"strategy":asdict(spec),"contract":cfg,"metrics":metrics,"ledger":ledger,"open_position":open_position,"data_report":report,"run_hash_sha256":run_hash}
 
@@ -726,23 +727,23 @@ def _capability_evidence(metrics: dict[str, Any]) -> bool:
 
 
 def _goal_activity_evidence(metrics: dict[str, Any], cfg: dict[str, Any]) -> bool:
-    """Require a meaningful trade sample and enough observed opportunities for the TP/day goal.
+    """Require >=300 closed trades and the user's explicit high-frequency activity floor.
 
-    This is a ranking/evidence gate, not a substitute for the user's acceptance criteria.
-    The minimum sample is 300 closed trades overall; the target-frequency evidence then
-    scales with the observed win rate. Calendar-month minimums and a fixed 10-trades/day
-    rule are intentionally not imposed because neither is part of the user's contract.
+    A candidate must average at least 7.5 closed trades/day, as well as enough trades
+    for its observed win rate to support the requested net TP/day. This is applied on
+    TRAIN, Development and OOS independently; it cannot be satisfied by a short lucky
+    sample or by averaging away inactive periods in another split.
     """
     span_days=max(float(metrics.get("span_days", 0.0) or 0.0), 0.0)
     trades=int(metrics.get("trades", 0) or 0)
     wr=max(0.0, min(1.0, float(metrics.get("win_rate_pct", 0.0) or 0.0)/100.0))
     target_tp=float(cfg.get("min_tp_per_day", 3.0)) if cfg.get("use_min_tp_per_day", True) else 0.0
-    if span_days <= 0.0 or trades < 300:
+    min_trades_per_day=float(cfg.get("min_trades_per_day", 7.5))
+    if span_days <= 0.0 or trades < 300 or min_trades_per_day <= 0.0:
         return False
-    # If TP/day is enabled, observed trades must support the requested TP frequency
-    # at the candidate's observed win rate. A 40% WR needs >=7.5 trades/day for 3 TPs/day.
-    required_trades=span_days*target_tp/max(wr, 0.01) if target_tp > 0.0 else 300.0
-    return trades >= max(300, math.ceil(required_trades))
+    required_daily=max(min_trades_per_day, target_tp/max(wr, 0.01) if target_tp > 0.0 else 0.0)
+    required_trades=max(300, math.ceil(span_days*required_daily))
+    return trades >= required_trades
 
 
 def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[float, list[str], dict[str, float]]:
