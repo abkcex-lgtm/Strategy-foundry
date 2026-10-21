@@ -66,7 +66,7 @@ def ledger_match(primary,other):
         return False,{"mismatch":"ledger_loss_streak","metric":metrics.get("max_consecutive_losses"),"ledger_max":independent_streak}
     return True,{"primary_trades":len(a),"independent_trades":len(b),"ledger_fields_checked":len(FIELDS),"open_position_checked":True,"aggregate_metrics_checked":list(expected_metrics)}
 def brief(m):
-    keys=("trades","wins","losses","win_rate_pct","profit_factor","avg_net_tp_per_day","max_consecutive_losses","net_pnl","final_balance","total_costs","passes_all_targets","data_hash_sha256","execution_data_hash_sha256","execution_resolution","unresolved_as_loss_count","open_positions_at_end","open_position_unrealized_net_pnl","span_days","rows")
+    keys=("trades","wins","losses","win_rate_pct","profit_factor","avg_net_tp_per_day","max_consecutive_losses","net_pnl","final_balance","total_costs","passes_all_targets","capital_exhausted","monthly_trade_counts","trades_per_day","data_hash_sha256","execution_data_hash_sha256","execution_resolution","unresolved_as_loss_count","open_positions_at_end","open_position_unrealized_net_pnl","span_days","rows")
     return {k:m.get(k) for k in keys}
 def capability_pilot_warning(summary, requested):
     """Return an advisory only; a small pilot must never stop the full search."""
@@ -78,28 +78,39 @@ def capability_pilot_warning(summary, requested):
                 "only: continue the requested search because the pilot cannot prove no strategy exists.")
     return None
 
+def activity_gap(metrics):
+    """Rank near-misses by actual monthly/daily activity shortfall, not lucky PnL."""
+    monthly=metrics.get("monthly_trade_counts")
+    if isinstance(monthly,dict) and monthly:
+        monthly_gap=sum(max(0,300-int(n or 0))/300.0 for n in monthly.values())/len(monthly)
+    else:
+        monthly_gap=1.0
+    rate=float(metrics.get("trades_per_day",0.0) or 0.0)
+    if rate<=0.0:
+        span=max(float(metrics.get("span_days",0.0) or 0.0),0.0)
+        rate=float(metrics.get("trades",0) or 0)/span if span>0 else 0.0
+    return monthly_gap + max(0.0,7.5-rate)/7.5
+
 def near_key(x):
     m=x.get("development_metrics") or x.get("metrics") or {}
     train_m=x.get("train_metrics") or x.get("metrics") or {}
     cfg=normalize_contract(x.get("contract") or {})
-    # Audit, requested TP/day evidence, and the 300-trade TRAIN sample floor are
-    # eligibility gates. If none passes all targets, rank high-sample near-misses
-    # ahead of sparse lucky samples, then retain the equal-weight target distance.
     dev_net=float(m.get("net_pnl",0.0) or 0.0)
     dev_final=float(m.get("final_balance",cfg["initial_balance"]+dev_net) or 0.0)
     train_net=float(train_m.get("net_pnl",0.0) or 0.0)
     train_final=float(train_m.get("final_balance",cfg["initial_balance"]+train_net) or 0.0)
     risk=float(cfg["risk_usd"] if cfg["risk_mode"]=="fixed_usd" else cfg["initial_balance"]*cfg["risk_pct"]/100.0)
-    # Development helps shortlist candidates, but untouched OOS never steers search.
-    # Prefer surviving capital and positive net PnL before distance-only ranking.
+    # Near-miss ordering is evidence-first: audited ledgers, no exhausted capital,
+    # monthly/daily activity, then target distance. Profitability cannot let a sparse
+    # lucky sample outrank a strategy that actually approaches the activity contract.
     return (0 if x.get("development_audit_status")=="MATCH" else 1,
-            dev_net <= 0.0, dev_final <= risk + 1e-9,
-            train_net <= 0.0, train_final <= risk + 1e-9,
-            not _goal_activity_evidence(m,cfg),
-            int(train_m.get("trades",0)) < 300,
-            -min(dev_net,train_net),
+            bool(m.get("capital_exhausted",False)) or bool(train_m.get("capital_exhausted",False)),
+            activity_gap(m)+activity_gap(train_m),
             float(x.get("development_distance",x.get("distance",math.inf))),
-            -int(train_m.get("trades",0)))
+            dev_final <= risk + 1e-9, train_final <= risk + 1e-9,
+            dev_net <= 0.0, train_net <= 0.0,
+            -min(dev_net,train_net),
+            -min(int(m.get("trades",0)),int(train_m.get("trades",0))))
 def trade_diagnostics(ledger, span_days):
     """Compact diagnostics derived from closed trades; ledger remains the source of truth."""
     rows=list(ledger or [])
@@ -233,7 +244,14 @@ def run(df,data_manifest):
     while completed<REQUESTED and batches<max_batches and time.monotonic()-start<MAX_SECONDS:
         # Start with a small representative pilot; later batches learn from
         # prior audited candidates instead of restarting an isolated population.
-        batch_cap=1000 if MAX_SECONDS<=900 else 1000
+        remaining_seconds=MAX_SECONDS-(time.monotonic()-start)
+        if remaining_seconds < 20:
+            break
+        # Candidate batches are not pre-emptible. Shrink the final batch using
+        # observed throughput and reserve time for Development/OOS audits/exports.
+        measured_rate=(completed/max(time.monotonic()-start,1.0)) if completed else 5.0
+        adaptive_cap=1000 if remaining_seconds >= 260 else max(32,min(1000,int((remaining_seconds-20)*measured_rate*0.85)))
+        batch_cap=adaptive_cap
         size=min(batch_cap,REQUESTED-completed); seed=SEED+batches*1000003
         def train_survival_key(x):
             m=x.get("metrics") or {}
@@ -243,10 +261,10 @@ def run(df,data_manifest):
             # TRAIN-only selection: prioritize positive after-cost PnL and survival,
             # then activity evidence and target distance. Never inspect OOS here.
             return (not bool(m.get("passes_all_targets",False)),
-                    net <= 0.0, final <= risk + 1e-9,
-                    not _goal_activity_evidence(m,cfg),
-                    int(m.get("trades",0)) < 300,
-                    -net, float(x.get("distance",math.inf)),
+                    final <= risk + 1e-9,
+                    activity_gap(m),
+                    float(x.get("distance",math.inf)),
+                    net <= 0.0, -net,
                     -int(m.get("trades",0)))
         prior_pool=sorted(train_pass+train_near,key=train_survival_key)[:192]
         batch_started=time.monotonic()
@@ -291,13 +309,12 @@ def run(df,data_manifest):
             # Rank evidence-eligible/high-activity candidates before lucky tiny samples.
             train_near=sorted(train_near,key=lambda x:(
                 not bool((x.get("metrics") or {}).get("passes_all_targets",False)),
-                float((x.get("metrics") or {}).get("net_pnl",0.0) or 0.0) <= 0.0,
+                bool((x.get("metrics") or {}).get("capital_exhausted",False)),
+                activity_gap(x.get("metrics",{})),
+                float(x.get("distance",math.inf)),
                 float((x.get("metrics") or {}).get("final_balance",0.0) or 0.0) <= (
                     float(cfg["risk_usd"] if cfg["risk_mode"]=="fixed_usd" else cfg["initial_balance"]*cfg["risk_pct"]/100.0) + 1e-9),
-                not _goal_activity_evidence(x.get("metrics",{}),cfg),
-                int(x.get("metrics",{}).get("trades",0)) < 300,
-                -float((x.get("metrics") or {}).get("net_pnl",0.0) or 0.0),
-                float(x.get("distance",math.inf)),
+                float((x.get("metrics") or {}).get("net_pnl",0.0) or 0.0) <= 0.0,
                 -int((x.get("metrics") or {}).get("trades",0)),
                 int(x.get("metrics",{}).get("max_consecutive_losses",10**9))))[:max(5,min(500,batches*5))]
         zero=zero+1 if actual==0 else 0
