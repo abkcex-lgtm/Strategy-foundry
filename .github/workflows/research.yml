@@ -44,7 +44,7 @@ jobs:
       FOUNDRY_SEED: "42"
       # The 15-minute lane avoids repeated surrogate fitting; all families and validation gates remain enabled.
       # Joint-score update: explicit capital-exhaustion rejection and activity/TP-day-weighted near-miss ranking; original acceptance thresholds unchanged.
-      # Standalone replay now carries the same capital_exhausted metric and hard rejection as the factory engine.
+      # [15m-research] Standalone replay now carries the same capital_exhausted metric and hard rejection as the factory engine.
       FOUNDRY_ALGORITHM: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && 'stratified_random' || 'surrogate_genetic' }}
       FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '720' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
     steps:
