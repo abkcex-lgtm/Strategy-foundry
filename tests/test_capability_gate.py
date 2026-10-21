@@ -114,3 +114,38 @@ def test_goal_activity_evidence_requires_300_total_trades_not_300_each_month():
         "win_rate_pct": 50.0, "avg_net_tp_per_day": 3.33,
         "monthly_trade_counts": {"2026-04": 50, "2026-05": 100, "2026-06": 450},
     }, cfg) is True
+
+
+
+def test_near_key_prioritizes_300_trade_train_samples_over_sparse_lucky_samples():
+    from research.run_factory import near_key
+
+    high_sample = {
+        "development_audit_status": "MATCH",
+        "development_distance": 4.0,
+        "train_metrics": {
+            "trades": 369, "span_days": 91, "wins": 45,
+            "win_rate_pct": 12.2, "profit_factor": 0.6,
+            "avg_net_tp_per_day": 0.49,
+        },
+        "development_metrics": {
+            "trades": 110, "span_days": 31, "wins": 14,
+            "win_rate_pct": 12.7, "profit_factor": 0.6,
+            "avg_net_tp_per_day": 0.45,
+        },
+    }
+    sparse_lucky = {
+        "development_audit_status": "MATCH",
+        "development_distance": 0.01,
+        "train_metrics": {
+            "trades": 42, "span_days": 91, "wins": 30,
+            "win_rate_pct": 71.4, "profit_factor": 3.0,
+            "avg_net_tp_per_day": 0.33,
+        },
+        "development_metrics": {
+            "trades": 12, "span_days": 31, "wins": 9,
+            "win_rate_pct": 75.0, "profit_factor": 3.0,
+            "avg_net_tp_per_day": 0.29,
+        },
+    }
+    assert near_key(high_sample) < near_key(sparse_lucky)
