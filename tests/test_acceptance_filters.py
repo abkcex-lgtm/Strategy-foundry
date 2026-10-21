@@ -4,7 +4,7 @@ import app.engine as engine
 import app.audit as audit
 
 
-def test_disabled_acceptance_filters_do_not_add_search_distance(monkeypatch):
+def test_disabled_optional_filters_leave_mandatory_monthly_gate_active(monkeypatch):
     def fake_backtest(frame, spec, contract):
         return {
             "strategy": {"name": spec.name, "fast": spec.fast, "slow": spec.slow, "atr_period": spec.atr_period, "stop_atr": spec.stop_atr, "direction": spec.direction, "seed": spec.seed},
@@ -29,7 +29,8 @@ def test_disabled_acceptance_filters_do_not_add_search_distance(monkeypatch):
         "use_max_consecutive_losses": False,
     }
     result = engine.search_candidates(pd.DataFrame(), max_candidates=1, seed=42, contract=cfg)
-    assert result["results"][0]["distance"] == 0.0
+    assert result["results"][0]["distance"] == 1.0
+    assert "monthly_trade_count" in result["results"][0]["failed_conditions"]
 
 
 def test_acceptance_filters_default_to_enabled():
