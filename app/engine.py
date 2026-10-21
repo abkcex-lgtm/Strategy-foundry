@@ -29,6 +29,7 @@ CONTRACT = {
     "min_profit_factor": 1.0,
     "min_tp_per_day": 3.0,
     "min_trades_per_day": 8.0,
+    "min_trades_per_month": 300,
     "use_min_win_rate": True,
     "use_min_profit_factor": True,
     "use_min_tp_per_day": True,
@@ -52,7 +53,7 @@ def normalize_contract(overrides: dict[str, Any] | None = None) -> dict[str, Any
     cfg.update(overrides)
     numeric = ["initial_balance", "risk_usd", "risk_pct", "reward_risk",
                "commission_pct_per_side", "slippage_pct_per_side",
-               "min_win_rate_pct", "min_profit_factor", "min_tp_per_day", "min_trades_per_day"]
+               "min_win_rate_pct", "min_profit_factor", "min_tp_per_day", "min_trades_per_day", "min_trades_per_month"]
     for key in numeric:
         try: cfg[key] = float(cfg[key])
         except (TypeError, ValueError): raise ValueError(f"{key} must be numeric")
@@ -786,11 +787,11 @@ def _capability_evidence(metrics: dict[str, Any]) -> bool:
 
 
 def _goal_activity_evidence(metrics: dict[str, Any], cfg: dict[str, Any]) -> bool:
-    """Enforce the agreed minimum closed-trade rate without hidden monthly quotas.
+    """Enforce both explicit activity requirements: >=8 trades/day and >=300/month.
 
-    The user's activity floor is >=8 closed trades/day. TP/day, WR, PF, loss streak,
-    capital survival, and end-of-split open positions are evaluated independently.
-    Calendar-month counts remain diagnostics only; they are not a separate gate.
+    Monthly counts are computed from actual closed-trade entry timestamps. Missing
+    monthly evidence fails closed; every calendar month represented by the split
+    must independently meet the configured minimum.
     """
     span_days=max(float(metrics.get("span_days", 0.0) or 0.0), 0.0)
     if span_days <= 0.0:
@@ -800,6 +801,12 @@ def _goal_activity_evidence(metrics: dict[str, Any], cfg: dict[str, Any]) -> boo
     if trade_rate <= 0.0:
         trade_rate=trades/span_days
     min_trades_per_day=float(cfg.get("min_trades_per_day", 8.0))
+    monthly=metrics.get("monthly_trade_counts")
+    if not isinstance(monthly, dict) or not monthly:
+        return False
+    min_trades_per_month=int(cfg.get("min_trades_per_month", 300))
+    if min_trades_per_month <= 0 or any(int(count or 0) < min_trades_per_month for count in monthly.values()):
+        return False
     return min_trades_per_day > 0.0 and trade_rate >= min_trades_per_day
 
 def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[float, list[str], dict[str, float]]:
@@ -840,6 +847,18 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
         distances["trades_per_day"]=max(0.0,min_trade_rate-trade_rate)/max(min_trade_rate,1.0)
         if trade_rate < min_trade_rate:
             failed.append("trades_per_day")
+    # Enforce and rank the explicit minimum closed trades in every represented month.
+    monthly=metrics.get("monthly_trade_counts")
+    min_monthly=int(cfg.get("min_trades_per_month",300))
+    if not isinstance(monthly,dict) or not monthly:
+        distances["monthly_trades"]=1.0
+        failed.append("monthly_trade_count")
+    else:
+        counts=[int(v or 0) for v in monthly.values()]
+        shortfall=max([max(0,min_monthly-v)/max(min_monthly,1) for v in counts]+[0.0])
+        distances["monthly_trades"]=shortfall
+        if any(v < min_monthly for v in counts):
+            failed.append("monthly_trade_count")
     # Evidence sufficiency remains a separate hard eligibility gate.
     if not _goal_activity_evidence(metrics,cfg):
         failed.append("insufficient_activity_evidence")
@@ -850,7 +869,7 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
     # Near-miss scoring is intentionally non-compensatory: frequency and TP/day shortfalls dominate;
     # capital exhaustion is a hard failure and receives an explicit penalty. Acceptance gates above
     # remain unchanged; weights affect ordering only, never pass/fail thresholds.
-    weights={"avg_net_tp_per_day":3.0,"trades_per_day":2.5,"win_rate_pct":1.5,
+    weights={"avg_net_tp_per_day":3.0,"trades_per_day":2.5,"monthly_trades":2.5,"win_rate_pct":1.5,
              "profit_factor":1.5,"max_consecutive_losses":1.0}
     weighted=[(weights.get(k,1.0)*v) for k,v in distances.items()]
     score=(sum(weighted)/sum(weights.get(k,1.0) for k in distances) if distances else 0.0)
