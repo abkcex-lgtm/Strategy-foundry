@@ -45,6 +45,7 @@ jobs:
       # The 15-minute lane avoids repeated surrogate fitting; all families and validation gates remain enabled.
       # Joint-score update: explicit capital-exhaustion rejection and activity/TP-day-weighted near-miss ranking; original acceptance thresholds unchanged.
       # [15m-research] Keep the agreed >=8 trades/day activity evidence gate; no unapproved monthly trade quota.
+      # Activity gate is daily-rate-only; monthly trade counts are diagnostics, never a hidden acceptance quota.
       # [15m-research] sparse 1-second Binance kline windows are accepted only as returned trade-backed rows; no synthetic candles.
       # Empty execution windows inside an ambiguous 1m candle remain a hard integrity failure.
       # [15m-research] Primary and independent resolvers share sparse 1s acceptance and fail-closed empty-window behavior.
