@@ -1,0 +1,36 @@
+name: ETHUSDT fixed candidate direction comparison
+on:
+  push:
+    paths:
+      - "research/test_fixed_direction.py"
+      - ".github/workflows/direction-test.yml"
+permissions:
+  contents: read
+concurrency:
+  group: ethusdt-fixed-candidate-direction-test
+  cancel-in-progress: true
+jobs:
+  direction-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+      - name: Install declared dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Run existing regression tests
+        run: python -m pytest -q
+      - name: Test the same candidate long, short, and both directions
+        run: python research/test_fixed_direction.py
+      - name: Upload direction comparison report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ethusdt-direction-comparison-${{ github.run_id }}
+          path: research-results/direction-comparison.json
+          if-no-files-found: error
+          retention-days: 90
