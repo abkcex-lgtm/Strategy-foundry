@@ -105,11 +105,16 @@ def test_goal_activity_evidence_uses_daily_floor_not_monthly_300_quota():
         "win_rate_pct": 43.75, "avg_net_tp_per_day": 3.5,
         "monthly_trade_counts": {"2026-07": 80},
     }, cfg) is True
-    # Eight trades/day is insufficient when observed WR cannot support 3 TP/day.
+    # Activity eligibility is only the 8-trades/day floor; TP/day is a separate gate.
     assert _goal_activity_evidence({
         "span_days": 10, "trades": 80, "wins": 20,
         "win_rate_pct": 25.0, "avg_net_tp_per_day": 2.0,
         "monthly_trade_counts": {"2026-07": 80},
+    }, cfg) is True
+    assert _goal_activity_evidence({
+        "span_days": 10, "trades": 79, "wins": 35,
+        "win_rate_pct": 44.3, "avg_net_tp_per_day": 3.5,
+        "monthly_trade_counts": {"2026-07": 79},
     }, cfg) is False
     # Uneven calendar-month distribution alone must not reject a split that meets
     # the total daily floor and TP/day feasibility threshold.
