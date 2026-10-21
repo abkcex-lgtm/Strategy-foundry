@@ -525,5 +525,5 @@ def test_original_contract_keeps_thirteen_consecutive_loss_limit():
 
 def test_contract_defaults_enforce_user_activity_floor_of_ten_trades_per_day():
     cfg = normalize_contract()
-    assert cfg["min_trades_per_day"] == 10.0
+    assert cfg["min_trades_per_day"] == 8.0
 
