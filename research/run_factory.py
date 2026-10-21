@@ -231,7 +231,7 @@ def run(df,data_manifest):
     prepared_dev=prepare_backtest_data(dev)
     train_backtest_hash=prepared_train.data_hash
     dev_backtest_hash=prepared_dev.data_hash
-    cfg=normalize_contract({"symbol":SYMBOL,"initial_balance":1000,"risk_mode":"fixed_usd","risk_usd":10,"compound":False,"reward_risk":3.5,"target_mode":"net_rr","commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"max_positions":1,"entry_model":"next_candle_open","exit_model":"sl_tp_only","min_win_rate_pct":40,"min_profit_factor":1,"min_tp_per_day":3,"max_consecutive_losses":13,"use_min_win_rate":True,"use_min_profit_factor":True,"use_min_tp_per_day":True,"use_max_consecutive_losses":True,"break_even_enabled":False,"trailing_stop_enabled":False,"partial_exit_enabled":False,"time_exit_enabled":False})
+    cfg=normalize_contract({"symbol":SYMBOL,"initial_balance":1000,"risk_mode":"fixed_usd","risk_usd":10,"compound":False,"reward_risk":3.5,"target_mode":"net_rr","commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"max_positions":1,"entry_model":"next_candle_open","exit_model":"sl_tp_only","min_win_rate_pct":40,"min_profit_factor":1,"min_tp_per_day":3,"max_consecutive_losses":13,"use_min_win_rate":True,"use_min_profit_factor":True,"use_min_tp_per_day":True,"use_max_consecutive_losses":True,"min_trades_per_day":8,"break_even_enabled":False,"trailing_stop_enabled":False,"partial_exit_enabled":False,"time_exit_enabled":False})
     start=time.monotonic(); seen=set(); train_pass=[]; train_near=[]; failed=generations=fits=0; failure_reasons={}; family_counts={}; completed=batches=zero=0
     preflight_summary=None; preflight_gate_warning=None
     max_batches=max(5,math.ceil(REQUESTED/1000)*5)
@@ -379,11 +379,19 @@ def run(df,data_manifest):
                 return False
         return True
     validated=[x for x in validated if activity_eligible(x)]
-    eligible_near=sorted([x for x in oos_results if activity_eligible(x)],key=near_key)[:5]
+    activity_eligible_near=sorted([x for x in oos_results if activity_eligible(x)],key=near_key)[:5]
+    # Never hide all real, audited results just because none reaches the activity
+    # floor. Return up to five honest near-misses with their actual failed gates.
+    # These are explicitly uncertified; this does not relax any acceptance rule.
+    audited_near=sorted([
+        x for x in oos_results
+        if x.get("development_audit_status")=="MATCH" and x.get("oos_audit_status")=="MATCH"
+    ],key=near_key)[:5]
+    eligible_near=activity_eligible_near or audited_near
     delivery=validated if validated else eligible_near
     if validated:
         outcome="VALIDATED_STRATEGIES_FOUND" if search_complete else "VALIDATED_STRATEGIES_FOUND_SEARCH_INCOMPLETE"
-    elif delivery:
+    elif activity_eligible_near:
         outcome="NO_STRATEGY_PASSED_ALL_REQUIRED_SPLITS" if search_complete else "INCOMPLETE_SEARCH_NO_CERTIFIED_STRATEGY"
     else:
         outcome="NO_CANDIDATE_MET_DAILY_ACTIVITY_FLOOR" if search_complete else "INCOMPLETE_SEARCH_NO_ACTIVITY_ELIGIBLE_CANDIDATE"
@@ -400,8 +408,8 @@ def run(df,data_manifest):
             "data":data_manifest,"splits":{"train":{"rows":len(train),"sha256":train_hash},
             "development":{"rows":len(dev),"sha256":dev_hash},"oos":{"rows":len(oos),"sha256":oos_hash}},
             "validated_strategy_count":len(validated),"returned_candidate_count":0,"results":[],
-            "activity_eligible_near_miss_count":0,
-            "note":"Near-misses are returned only when they meet the agreed >=8 trades/day activity floor in Train, Development, and OOS. All immutable performance gates remain unchanged.",
+            "activity_eligible_near_miss_count":len(activity_eligible_near),
+            "note":"If no strategy meets every required gate, up to five candidates with matching independent Development and OOS ledgers are returned as explicitly uncertified near-misses, even if they miss the >=8 trades/day evidence floor. No acceptance threshold is relaxed; inspect failed_conditions and per-split metrics.",
             "reproducibility":"Candidate selection and primary/independent ledger audits ran before this activity gate."})
         with zipfile.ZipFile(OUT/"validated_strategies.zip","w",zipfile.ZIP_DEFLATED) as z:
             z.writestr("README.txt","No strategies exported: no candidate met the agreed daily activity floor across Train, Development, and OOS.")
