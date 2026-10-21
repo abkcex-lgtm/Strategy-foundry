@@ -1431,3 +1431,5 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
 # Research launch trigger: owner requires a full 1-minute ETHUSDT research run; contract thresholds and execution rules remain unchanged.
 
 # Owner-requested bounded research rerun: 1m ETHUSDT only; preserve all contract gates and independent audits.
+
+# Staged screening trigger: prioritize evidence-rich candidate discovery before any long optimization; acceptance contract remains unchanged.
