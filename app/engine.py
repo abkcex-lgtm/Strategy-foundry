@@ -1002,13 +1002,9 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 # hypotheses so the search can actually test the user's minimum
                 # monthly/daily trade-count constraints. The remaining 30% and
                 # family-stratified seeds still cover the full registered space.
-                family=str(rng.choice([
-                    "ema_crossover","ema_pullback","macd_crossover","roc_momentum",
-                    "atr_trend_pullback","rsi_reversion","stochastic_reversion",
-                    "williams_r_reversion","bollinger_reversion","pivot_reversal",
-                    "range_midpoint_reversion","roc_acceleration","atr_normalized_momentum",
-                    "wick_rejection","trend_exhaustion_reversal"
-                ]))
+                # Sample across the complete registry using the activity prior;
+                # do not let a short hand-picked family list starve other families.
+                family=choose_family()
                 # Densely sample fast periods and tight-but-valid stops to find
                 # genuinely active rules; performance and OOS gates remain unchanged.
                 fast=int(rng.choice([2,3,4,5,6,7,8,9,10,12,14,16,18]))
@@ -1018,9 +1014,13 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 # Do not search only ultra-tight stops: test a wider risk envelope too.
                 # Entry/exit contract and 3.5R net target remain unchanged.
                 stop=float(rng.choice([0.2,0.25,0.3,0.35,0.4,0.5,0.6,0.7,0.8,1.0,1.2,1.5,2.0]))
-                direction=str(rng.choice(["both","long","short"],p=[0.90,0.05,0.05]))
-                context_filter="none" if rng.random()<0.96 else str(rng.choice(context_filters))
-                confirmation_filter="none" if rng.random()<0.96 else str(rng.choice(confirmation_filters))
+                # Search both directions and single-sided hypotheses at comparable rates:
+                # a weak side must not drag down an otherwise useful strategy.
+                direction=str(rng.choice(["both","long","short"],p=[0.34,0.33,0.33]))
+                # Retain unfiltered high-frequency baselines while giving trend/momentum
+                # confirmation enough search mass to improve precision at the same 3.5R.
+                context_filter=str(rng.choice(context_filters,p=_filter_probabilities(context_filters,"context")))
+                confirmation_filter=str(rng.choice(confirmation_filters,p=_filter_probabilities(confirmation_filters,"confirmation")))
                 signal_composition="single"; secondary_family="none"
             elif len(families)>1 and rng.random()<0.25:
                 signal_composition=str(rng.choice(["and","or","xor"],p=[0.15,0.75,0.10]))
