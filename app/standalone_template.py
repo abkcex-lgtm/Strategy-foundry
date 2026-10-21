@@ -434,7 +434,7 @@ def replay(df, execution_df=None):
     spec_obj=StrategySpec(**s)
     spec_obj.validate()
     x=indicators(df,spec_obj)
-    balance=float(CFG['initial_balance']); ledger=[]; streak=0; max_streak=0; open_position=None; i=max(s['slow'],s['atr_period'])
+    balance=float(CFG['initial_balance']); ledger=[]; streak=0; max_streak=0; open_position=None; capital_exhausted=False; i=max(s['slow'],s['atr_period'])
     while i<len(x)-1:
         row=x.iloc[i]
         if not np.isfinite(row.atr) or row.atr<=0: i+=1; continue
@@ -445,7 +445,7 @@ def replay(df, execution_df=None):
         risk=risk_budget(balance if (CFG['compound'] or CFG['risk_mode']=='percent_equity') else CFG['initial_balance'])
         if risk<=0: i+=1; continue
         # Never open a trade that risks all remaining equity or more.
-        if balance<=risk+1e-9: break
+        if balance<=risk+1e-9: capital_exhausted=True; break
         try: qty,target,rate=size_target(entry,stop,side,risk)
         except ValueError: i+=1; continue
         exit_i=exit_price=reason=exit_time=None; resolution_status='resolved_base_ohlc'
@@ -498,7 +498,7 @@ def replay(df, execution_df=None):
         combined=pd.concat(execution_frames_used,ignore_index=True).drop_duplicates(subset=['open_time']).sort_values('open_time').reset_index(drop=True)
         execution_hash=digest(combined.to_csv(index=False,float_format='%.12g').encode())
     execution_resolution='1s_ohlc' if execution_df is not None else ('1s_ohlc_auto' if execution_frames_used else 'base_ohlc_only')
-    metrics={'trades':len(ledger),'wins':len(wins),'losses':sum(t['net_pnl']<=0 for t in ledger),'win_rate_pct':wr,'profit_factor':pf if math.isfinite(pf) else None,'avg_net_tp_per_day':tpday,'max_consecutive_losses':max_streak,'net_pnl':sum(t['net_pnl'] for t in ledger),'final_balance':balance,'total_costs':sum(t['fees_slippage'] for t in ledger),'data_hash_sha256':data_hash,'execution_data_hash_sha256':execution_hash,'execution_resolution':execution_resolution,'unresolved_as_loss_count':sum(t.get('execution_ambiguity',False) for t in ledger),'open_positions_at_end':1 if open_position else 0,'open_position_unrealized_net_pnl':open_position['unrealized_net_pnl'] if open_position else 0.0,'rows':len(df),'span_days':span,'trades_per_day':len(ledger)/span,'passes_all_targets':bool((not CFG.get('use_min_win_rate',True) or wr>CFG['min_win_rate_pct']) and (not CFG.get('use_min_profit_factor',True) or pf>CFG['min_profit_factor']) and (not CFG.get('use_min_tp_per_day',True) or tpday>=CFG['min_tp_per_day']) and (not CFG.get('use_max_consecutive_losses',True) or max_streak<=CFG['max_consecutive_losses']) and open_position is None and len(ledger)>=300 and (not CFG.get('use_min_tp_per_day',True) or len(ledger)>=math.ceil(span*max(float(CFG.get('min_trades_per_day',7.5)),float(CFG.get('min_tp_per_day',3.0))/max(wr/100.0,0.01)))))}
+    metrics={'trades':len(ledger),'wins':len(wins),'losses':sum(t['net_pnl']<=0 for t in ledger),'win_rate_pct':wr,'profit_factor':pf if math.isfinite(pf) else None,'avg_net_tp_per_day':tpday,'max_consecutive_losses':max_streak,'net_pnl':sum(t['net_pnl'] for t in ledger),'final_balance':balance,'total_costs':sum(t['fees_slippage'] for t in ledger),'data_hash_sha256':data_hash,'execution_data_hash_sha256':execution_hash,'execution_resolution':execution_resolution,'unresolved_as_loss_count':sum(t.get('execution_ambiguity',False) for t in ledger),'open_positions_at_end':1 if open_position else 0,'open_position_unrealized_net_pnl':open_position['unrealized_net_pnl'] if open_position else 0.0,'rows':len(df),'span_days':span,'trades_per_day':len(ledger)/span,'capital_exhausted':capital_exhausted,'passes_all_targets':bool((not capital_exhausted and not CFG.get('use_min_win_rate',True) or wr>CFG['min_win_rate_pct']) and (not CFG.get('use_min_profit_factor',True) or pf>CFG['min_profit_factor']) and (not CFG.get('use_min_tp_per_day',True) or tpday>=CFG['min_tp_per_day']) and (not CFG.get('use_max_consecutive_losses',True) or max_streak<=CFG['max_consecutive_losses']) and open_position is None and len(ledger)>=300 and (not CFG.get('use_min_tp_per_day',True) or len(ledger)>=math.ceil(span*max(float(CFG.get('min_trades_per_day',7.5)),float(CFG.get('min_tp_per_day',3.0))/max(wr/100.0,0.01)))))}
     run_hash=digest(json.dumps({'spec':s,'contract':CFG,'data_hash':data_hash,'execution_data_hash':execution_hash,'execution_resolution':execution_resolution},sort_keys=True).encode())
     return {'metrics':metrics,'ledger':ledger,'open_position':open_position,'run_hash_sha256':run_hash}
 if __name__=='__main__':
