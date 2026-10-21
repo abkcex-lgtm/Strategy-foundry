@@ -55,7 +55,7 @@ def test_same_second_stop_and_target_still_fails_closed():
         _resolve_execution_interval_independent("LONG",frame,start,60_000,98.0,104.0)
 
 
-def test_primary_backtest_fails_closed_on_unresolved_execution(monkeypatch):
+def test_primary_backtest_uses_conservative_exit_when_execution_unresolved(monkeypatch):
     import pandas as pd
     from app import engine
     from app.engine import StrategySpec, backtest
@@ -80,11 +80,15 @@ def test_primary_backtest_fails_closed_on_unresolved_execution(monkeypatch):
     monkeypatch.setattr(engine, "_resolve_execution_interval",
                         lambda *args, **kwargs: (_ for _ in ()).throw(DataIntegrityError("same-candle SL/TP ambiguity")))
 
-    with pytest.raises(DataIntegrityError, match="Execution preflight failed"):
-        backtest(base, StrategySpec(fast=2, slow=3, atr_period=2, stop_atr=1), execution_frame=one_second_path()[0])
+    result = backtest(base, StrategySpec(fast=2, slow=3, atr_period=2, stop_atr=1), execution_frame=one_second_path()[0])
+    assert result["ledger"]
+    assert result["ledger"][0]["exit_reason"] == "SL"
+    assert result["ledger"][0]["resolution_status"] == "unresolved_as_loss"
+    assert result["ledger"][0]["execution_ambiguity"] is True
+    assert result["metrics"]["unresolved_as_loss_count"] >= 1
 
 
-def test_independent_audit_fails_closed_on_unresolved_execution(monkeypatch):
+def test_independent_audit_uses_conservative_exit_when_execution_unresolved(monkeypatch):
     from app import audit
     start = 1_800_000_000_000
     base = pd.DataFrame({
@@ -108,8 +112,11 @@ def test_independent_audit_fails_closed_on_unresolved_execution(monkeypatch):
     cfg = {"initial_balance": 1000.0, "risk_mode": "fixed_usd", "risk_usd": 10.0,
            "risk_pct": 1.0, "compound": False, "reward_risk": 3.5, "target_mode": "net_rr",
            "commission_pct_per_side": 0.04, "slippage_pct_per_side": 0.02}
-    with pytest.raises(ValueError, match="EXECUTION_PREFLIGHT_FAILED"):
-        audit.independent_replay(base, spec, cfg, execution_frame=one_second_path()[0])
+    result = audit.independent_replay(base, spec, cfg, execution_frame=one_second_path()[0])
+    assert result["ledger"]
+    assert result["ledger"][0]["exit_reason"] == "SL"
+    assert result["ledger"][0]["resolution_status"] == "unresolved_as_loss"
+    assert result["ledger"][0]["execution_ambiguity"] is True
 
 
 
