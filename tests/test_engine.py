@@ -402,6 +402,23 @@ def test_exit_fill_rejects_unresolved_intrabar_sl_tp_ambiguity():
         _resolve_bar_exit("LONG", 100.0, 105.0, 97.0, 98.0, 104.0)
 
 
+def test_execution_interval_accepts_sparse_trade_seconds_without_synthetic_candles():
+    from app.engine import _resolve_execution_interval
+    # Only seconds with actual trade-backed kline rows are supplied. The gap
+    # is valid for sparse 1s data and must not be filled with fabricated bars.
+    execution = pd.DataFrame([
+        {"open_time": 60_000, "open": 100.0, "high": 101.0, "low": 99.5, "close": 100.5, "volume": 1.0},
+        {"open_time": 63_000, "open": 100.5, "high": 105.0, "low": 100.0, "close": 104.5, "volume": 2.0},
+    ])
+    assert _resolve_execution_interval("LONG", execution, 60_000, 60_000, 98.0, 104.0) == ("TP", 104.0, 63_000)
+
+
+def test_execution_interval_returns_none_for_empty_no_trade_window():
+    from app.engine import _resolve_execution_interval
+    execution = pd.DataFrame(columns=["open_time", "open", "high", "low", "close", "volume"])
+    assert _resolve_execution_interval("LONG", execution, 60_000, 60_000, 98.0, 104.0) is None
+
+
 def test_search_returns_exactly_five_audited_near_misses_when_no_candidate_passes():
     from app.engine import search_candidates
     result = search_candidates(
