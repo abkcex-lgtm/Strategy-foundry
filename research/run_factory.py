@@ -14,9 +14,10 @@ EXPECTED={4:43200,5:44640,6:43200,7:44640,8:44640,9:43200}
 REQUESTED=int(os.environ.get("FOUNDRY_CANDIDATES","500000")); SEED=int(os.environ.get("FOUNDRY_SEED","42"))
 ALGORITHM=os.environ.get("FOUNDRY_ALGORITHM","surrogate_genetic")
 MAX_SECONDS=int(os.environ.get("FOUNDRY_MAX_RUNTIME_SECONDS","19500"))
-# The fast lane reserves a strict five-minute candidate-search budget; independent
-# development/OOS audits and exports run afterward and remain mandatory.
-if ALGORITHM == "stratified_random": MAX_SECONDS=min(MAX_SECONDS,300)
+# Use nearly the full 8-minute workflow search allowance while reserving time
+# for mandatory Development/OOS audits, independent ledger replay, and exports.
+# Larger batches avoid repeating per-batch replay/audit overhead every 250 genomes.
+if ALGORITHM == "stratified_random": MAX_SECONDS=min(MAX_SECONDS,420)
 OUT=ROOT/"research-results"; RUN=ROOT/"research-run"; OUT.mkdir(parents=True,exist_ok=True); RUN.mkdir(parents=True,exist_ok=True)
 PROGRESS=OUT/"progress.json"
 def digest(b): return hashlib.sha256(b).hexdigest()
@@ -222,7 +223,7 @@ def run(df,data_manifest):
     while completed<REQUESTED and batches<max_batches and time.monotonic()-start<MAX_SECONDS:
         # Start with a small representative pilot; later batches learn from
         # prior audited candidates instead of restarting an isolated population.
-        batch_cap=250 if MAX_SECONDS<=900 else 1000
+        batch_cap=1000 if MAX_SECONDS<=900 else 1000
         size=min(batch_cap,REQUESTED-completed); seed=SEED+batches*1000003
         prior_pool=sorted(train_pass+train_near,key=lambda x:(
             not _goal_activity_evidence(x.get("metrics") or {},cfg),
