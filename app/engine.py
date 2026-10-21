@@ -772,17 +772,19 @@ def _capability_evidence(metrics: dict[str, Any]) -> bool:
 def _goal_activity_evidence(metrics: dict[str, Any], cfg: dict[str, Any]) -> bool:
     """Require >=300 closed trades and the user's explicit high-frequency activity floor.
 
-    A candidate must average at least 7.5 closed trades/day, as well as enough trades
-    for its observed win rate to support the requested net TP/day. This is applied on
-    TRAIN, Development and OOS independently; it cannot be satisfied by a short lucky
-    sample or by averaging away inactive periods in another split.
+    A candidate must close at least 300 trades in every UTC calendar month represented
+    by the evaluated split, as well as enough trades for its observed win rate to support
+    the requested net TP/day. This is applied on TRAIN, Development and OOS independently.
     """
     span_days=max(float(metrics.get("span_days", 0.0) or 0.0), 0.0)
     trades=int(metrics.get("trades", 0) or 0)
     wr=max(0.0, min(1.0, float(metrics.get("win_rate_pct", 0.0) or 0.0)/100.0))
     target_tp=float(cfg.get("min_tp_per_day", 3.0)) if cfg.get("use_min_tp_per_day", True) else 0.0
     min_trades_per_day=float(cfg.get("min_trades_per_day", 7.5))
+    monthly=metrics.get("monthly_trade_counts")
     if span_days <= 0.0 or trades < 300 or min_trades_per_day <= 0.0:
+        return False
+    if not isinstance(monthly, dict) or not monthly or any(int(n or 0) < 300 for n in monthly.values()):
         return False
     required_daily=max(min_trades_per_day, target_tp/max(wr, 0.01) if target_tp > 0.0 else 0.0)
     required_trades=max(300, math.ceil(span_days*required_daily))
@@ -790,7 +792,7 @@ def _goal_activity_evidence(metrics: dict[str, Any], cfg: dict[str, Any]) -> boo
 
 
 def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[float, list[str], dict[str, float]]:
-    """Equal-weight normalized distance to each active target."""
+    """Weighted normalized distance to active targets; weights affect ranking only."""
     failed: list[str] = []
     distances: dict[str, float] = {}
     if cfg["use_min_win_rate"]:
