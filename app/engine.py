@@ -776,14 +776,15 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
     # Activity rate is an explicit user acceptance condition and a ranking dimension.
     # Include it in near-miss distance so a high-frequency candidate is not buried
     # behind a sparse strategy with superficially better TP/day distance.
-    trade_rate=float(metrics.get("trades_per_day", 0.0) or 0.0)
-    if trade_rate <= 0.0:
-        span=max(float(metrics.get("span_days", 0.0) or 0.0),0.0)
-        trade_rate=float(metrics.get("trades",0) or 0)/span if span>0 else 0.0
-    min_trade_rate=float(cfg.get("min_trades_per_day",7.5))
-    distances["trades_per_day"]=max(0.0,min_trade_rate-trade_rate)/max(min_trade_rate,1.0)
-    if trade_rate < min_trade_rate:
-        failed.append("trades_per_day")
+    if "trades_per_day" in metrics or ("trades" in metrics and "span_days" in metrics):
+        trade_rate=float(metrics.get("trades_per_day", 0.0) or 0.0)
+        if trade_rate <= 0.0:
+            span=max(float(metrics.get("span_days", 0.0) or 0.0),0.0)
+            trade_rate=float(metrics.get("trades",0) or 0)/span if span>0 else 0.0
+        min_trade_rate=float(cfg.get("min_trades_per_day",7.5))
+        distances["trades_per_day"]=max(0.0,min_trade_rate-trade_rate)/max(min_trade_rate,1.0)
+        if trade_rate < min_trade_rate:
+            failed.append("trades_per_day")
     # Evidence sufficiency remains a separate hard eligibility gate.
     if not _goal_activity_evidence(metrics,cfg):
         failed.append("insufficient_activity_evidence")
