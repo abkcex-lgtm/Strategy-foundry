@@ -1088,7 +1088,9 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         except (TypeError,ValueError,KeyError):
             continue
     if parallel_pool is not None:
+        initial = initial[:max_candidates]
         for offset in range(0, len(initial), parallel_workers):
+            if len(evaluated) >= max_candidates: break
             batch = initial[offset:offset+parallel_workers]
             for spec, row in evaluate_many(batch):
                 if row is not None: population.append((spec, row))
