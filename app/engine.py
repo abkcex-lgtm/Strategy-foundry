@@ -773,7 +773,18 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
         # among candidates already under the limit.
         distances["max_consecutive_losses"]=max(0.0,streak)/limit
         if streak>int(cfg["max_consecutive_losses"]): failed.append("max_consecutive_losses")
-    # Evidence sufficiency is an eligibility gate, not a fifth weighted target.
+    # Activity rate is an explicit user acceptance condition and a ranking dimension.
+    # Include it in near-miss distance so a high-frequency candidate is not buried
+    # behind a sparse strategy with superficially better TP/day distance.
+    trade_rate=float(metrics.get("trades_per_day", 0.0) or 0.0)
+    if trade_rate <= 0.0:
+        span=max(float(metrics.get("span_days", 0.0) or 0.0),0.0)
+        trade_rate=float(metrics.get("trades",0) or 0)/span if span>0 else 0.0
+    min_trade_rate=float(cfg.get("min_trades_per_day",7.5))
+    distances["trades_per_day"]=max(0.0,min_trade_rate-trade_rate)/max(min_trade_rate,1.0)
+    if trade_rate < min_trade_rate:
+        failed.append("trades_per_day")
+    # Evidence sufficiency remains a separate hard eligibility gate.
     if not _goal_activity_evidence(metrics,cfg):
         failed.append("insufficient_activity_evidence")
     if int(metrics.get("open_positions_at_end",0))>0:
@@ -843,7 +854,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     fast_values=np.array([2,3,4,5,6,8,9,10,12,14,16,18,21,24,28,32,36,40,48,55,64,72,89],dtype=int)
     slow_values=np.array([5,6,7,8,9,10,12,14,16,18,20,24,28,32,36,40,48,55,64,72,89,100,120,144,180,200,240,300,400,500],dtype=int)
     periods=np.array([3,4,5,6,7,8,9,10,12,14,16,18,21,24,28,30,40,50],dtype=int)
-    stops=np.array([0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.7,0.8,1.0,1.2,1.5,1.8,2.0,2.5,3.0,3.5,4.0,5.0,6.0],dtype=float)
+    stops=np.array([0.2,0.25,0.3,0.4,0.5,0.7,0.8,1.0,1.2,1.5,1.8,2.0,2.5,3.0,3.5,4.0,5.0,6.0],dtype=float)
     directions=("both","long","short")
     evaluated:dict[tuple,dict[str,Any]]={}
     errors=0
@@ -929,7 +940,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 slow=int(rng.choice([5,6,7,8,9,10,12,14,16,18,20,24,28,32,40,48]))
                 if slow <= fast: slow=fast+2
                 period=int(rng.choice([3,4,5,6,7,8,9,10,12,14,16]))
-                stop=float(rng.choice([0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.7,0.8,1.0]))
+                stop=float(rng.choice([0.2,0.25,0.3,0.4,0.5,0.7,0.8,1.0]))
                 direction=str(rng.choice(["both","long","short"],p=[0.85,0.075,0.075]))
                 context_filter="none" if rng.random()<0.92 else str(rng.choice(context_filters))
                 confirmation_filter="none" if rng.random()<0.92 else str(rng.choice(confirmation_filters))
