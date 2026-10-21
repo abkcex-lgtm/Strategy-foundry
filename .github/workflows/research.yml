@@ -50,6 +50,8 @@ jobs:
       # Empty execution windows inside an ambiguous 1m candle remain a hard integrity failure.
       # [15m-research] Primary and independent resolvers share sparse 1s acceptance and fail-closed empty-window behavior.
       # [15m-research] Final batch size adapts to measured throughput; report audited near-misses even when no candidate meets all gates.
+
+      # Screening now uses the existing bounded parallel stratified evaluator; all acceptance and audit gates remain unchanged.
       FOUNDRY_ALGORITHM: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '[screening-research]') || contains(github.event.head_commit.message, '[15m-research]')) && 'stratified_random' || 'surrogate_genetic' }}
       FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[screening-research]') && '900' || github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '360' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
     steps:
