@@ -102,8 +102,7 @@ def test_goal_activity_evidence_requires_300_total_trades_not_300_each_month():
         "win_rate_pct": 50.0, "avg_net_tp_per_day": 2.5,
         "monthly_trade_counts": {"2026-07": 180, "2026-08": 120},
     }, cfg) is False
-    # No artificial per-month minimum: the evidence gate uses total trades and
-    # the required trade frequency implied by target TP/day and observed WR.
+    # No artificial per-month minimum, but the average must still be >=7.5 trades/day.
     assert _goal_activity_evidence({
         "span_days": 10, "trades": 300, "wins": 150,
         "win_rate_pct": 50.0, "avg_net_tp_per_day": 15.0,
@@ -113,6 +112,11 @@ def test_goal_activity_evidence_requires_300_total_trades_not_300_each_month():
         "span_days": 90, "trades": 600, "wins": 300,
         "win_rate_pct": 50.0, "avg_net_tp_per_day": 3.33,
         "monthly_trade_counts": {"2026-04": 50, "2026-05": 100, "2026-06": 450},
+    }, cfg) is False
+    assert _goal_activity_evidence({
+        "span_days": 90, "trades": 720, "wins": 360,
+        "win_rate_pct": 50.0, "avg_net_tp_per_day": 4.0,
+        "monthly_trade_counts": {"2026-04": 200, "2026-05": 250, "2026-06": 270},
     }, cfg) is True
 
 
@@ -124,14 +128,14 @@ def test_near_key_prioritizes_300_trade_train_samples_over_sparse_lucky_samples(
         "development_audit_status": "MATCH",
         "development_distance": 4.0,
         "train_metrics": {
-            "trades": 369, "span_days": 91, "wins": 45,
-            "win_rate_pct": 12.2, "profit_factor": 0.6,
-            "avg_net_tp_per_day": 0.49,
+            "trades": 820, "span_days": 91, "wins": 340,
+            "win_rate_pct": 41.5, "profit_factor": 0.9,
+            "avg_net_tp_per_day": 3.74,
         },
         "development_metrics": {
-            "trades": 110, "span_days": 31, "wins": 14,
-            "win_rate_pct": 12.7, "profit_factor": 0.6,
-            "avg_net_tp_per_day": 0.45,
+            "trades": 310, "span_days": 31, "wins": 130,
+            "win_rate_pct": 41.9, "profit_factor": 0.9,
+            "avg_net_tp_per_day": 4.19,
         },
     }
     sparse_lucky = {
