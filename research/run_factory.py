@@ -372,6 +372,7 @@ def run(df,data_manifest):
         oos_results.append(item); print(f"OOS_PROGRESS {idx}/{len(frozen)}",flush=True)
     validated=[x for x in oos_results if x.get("development_passes_all_targets") and x.get("development_audit_status")=="MATCH" and x.get("oos_passes_all_targets")]
     def monthly_activity_eligible(item):
+        # Explicitly enforce activity eligibility for the final deliverable, not only ranking.
         # Never return a strategy that violates the user's hard activity floor.
         # Require >=300 closed trades in every UTC month of TRAIN, DEV, and OOS,
         # plus >=10 trades/day in each split; do not weaken this for near-misses.
