@@ -1044,21 +1044,26 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction,spec.context_filter,spec.confirmation_filter,spec.secondary_family,spec.signal_composition)
 
     def fitness(row):
-        # TRAIN-only capital survival and net profitability are the first search
-        # objectives after a full pass. net_pnl already includes fees and slippage.
-        # Activity/sample evidence still outranks small target-distance advantages.
+        # TRAIN-only, non-compensatory discovery ranking. A lucky PnL on a sparse
+        # sample must never crowd out a candidate that approaches the user's
+        # activity and performance contract. Passes always rank first; among
+        # failures, reject capital exhaustion first, then rank by the complete
+        # distance-to-contract score before considering PnL as a tie-breaker.
+        # This changes proposal selection only; every hard acceptance gate,
+        # cost, risk, entry/exit rule, and independent audit remains unchanged.
         m=row["metrics"]
         net=float(m.get("net_pnl",0.0) or 0.0)
         final=float(m.get("final_balance",cfg["initial_balance"]+net) or 0.0)
         risk=float(_risk_budget(cfg,cfg["initial_balance"]))
-        solvent=final > risk + 1e-9
+        exhausted=bool(m.get("capital_exhausted",False)) or final <= risk + 1e-9
+        activity_gap=max(0.0,float(cfg.get("min_trades_per_day",8.0))-float(m.get("trades_per_day",0.0) or 0.0))
         return (not bool(m.get("passes_all_targets",False)),
-                net <= 0.0,
-                not solvent,
+                exhausted,
+                activity_gap,
+                float(row.get("distance",math.inf)),
                 not _goal_activity_evidence(m,cfg),
-                int(m.get("trades",0)) < 300,
+                net <= 0.0,
                 -net,
-                row["distance"],
                 -int(m.get("trades",0)))
 
     def feature_vector(spec):
