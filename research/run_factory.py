@@ -235,14 +235,20 @@ def run(df,data_manifest):
         # prior audited candidates instead of restarting an isolated population.
         batch_cap=1000 if MAX_SECONDS<=900 else 1000
         size=min(batch_cap,REQUESTED-completed); seed=SEED+batches*1000003
-        prior_pool=sorted(train_pass+train_near,key=lambda x:(
-            not _goal_activity_evidence(x.get("metrics") or {},cfg),
-            not _capability_evidence(x.get("metrics") or {}),
-            float(x.get("distance",math.inf)),
-            -int((x.get("metrics") or {}).get("trades",0)),
-            -float((x.get("metrics") or {}).get("profit_factor") or 0.0),
-            -float((x.get("metrics") or {}).get("win_rate_pct",0.0)),
-            max(0.0,3.0-float((x.get("metrics") or {}).get("avg_net_tp_per_day",0.0)))))[:192]
+        def train_survival_key(x):
+            m=x.get("metrics") or {}
+            net=float(m.get("net_pnl",0.0) or 0.0)
+            final=float(m.get("final_balance",cfg["initial_balance"]+net) or 0.0)
+            risk=float(cfg["risk_usd"] if cfg["risk_mode"]=="fixed_usd" else cfg["initial_balance"]*cfg["risk_pct"]/100.0)
+            # TRAIN-only selection: prioritize positive after-cost PnL and survival,
+            # then activity evidence and target distance. Never inspect OOS here.
+            return (not bool(m.get("passes_all_targets",False)),
+                    net <= 0.0, final <= risk + 1e-9,
+                    not _goal_activity_evidence(m,cfg),
+                    int(m.get("trades",0)) < 300,
+                    -net, float(x.get("distance",math.inf)),
+                    -int(m.get("trades",0)))
+        prior_pool=sorted(train_pass+train_near,key=train_survival_key)[:192]
         batch_started=time.monotonic()
         def heartbeat(batch_state):
             # Live observability: publish frequent log heartbeats while a batch is
@@ -282,13 +288,16 @@ def run(df,data_manifest):
             append_unique(train_near,result.get("results",[]))
             # Rank evidence-eligible/high-activity candidates before lucky tiny samples.
             train_near=sorted(train_near,key=lambda x:(
+                not bool((x.get("metrics") or {}).get("passes_all_targets",False)),
+                float((x.get("metrics") or {}).get("net_pnl",0.0) or 0.0) <= 0.0,
+                float((x.get("metrics") or {}).get("final_balance",0.0) or 0.0) <= (
+                    float(cfg["risk_usd"] if cfg["risk_mode"]=="fixed_usd" else cfg["initial_balance"]*cfg["risk_pct"]/100.0) + 1e-9),
                 not _goal_activity_evidence(x.get("metrics",{}),cfg),
                 int(x.get("metrics",{}).get("trades",0)) < 300,
-                not _capability_evidence(x.get("metrics",{})),
+                -float((x.get("metrics") or {}).get("net_pnl",0.0) or 0.0),
                 float(x.get("distance",math.inf)),
-                -int(x.get("metrics",{}).get("trades",0)),
-                int(x.get("metrics",{}).get("max_consecutive_losses",10**9)),
-                max(0.0,3.0-float(x.get("metrics",{}).get("avg_net_tp_per_day",0.0)))))[:max(5,min(500,batches*5))]
+                -int((x.get("metrics") or {}).get("trades",0)),
+                int(x.get("metrics",{}).get("max_consecutive_losses",10**9))))[:max(5,min(500,batches*5))]
         zero=zero+1 if actual==0 else 0
         if batches==1:
             preflight_summary=result.get("preflight_summary",{})
