@@ -813,7 +813,7 @@ def _parallel_candidate_evaluate(spec):
         return {"strategy": result["strategy"], "contract": result["contract"],
                 "metrics": result["metrics"], "run_hash_sha256": result["run_hash_sha256"]}
     except (ValueError, DataIntegrityError, IndexError, KeyError, FloatingPointError) as exc:
-        return {"_evaluation_error": str(exc)}
+        return {"_evaluation_error": f"{type(exc).__name__}: {exc}"}
 
 
 def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="surrogate_genetic", search_space=None, progress_callback=None, excluded_genome_hashes=None, prior_candidates=None, prepared_context=None):
@@ -859,6 +859,10 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     directions=("both","long","short")
     evaluated:dict[tuple,dict[str,Any]]={}
     errors=0
+    error_reason_counts={}
+    def record_error_reason(error):
+        label=str(error).split(":",1)[0][:100] or "UnknownError"
+        error_reason_counts[label]=error_reason_counts.get(label,0)+1
     family_counts={f:0 for f in families}
     duplicate_genomes=0
 
@@ -897,6 +901,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         last_progress_count=count
         progress_callback({"status":"running","requested_candidates":max_candidates,
                            "evaluated_candidates":count,"failed_candidates":errors,
+                           "error_reason_counts":dict(error_reason_counts),
                            "duplicate_genomes_skipped":duplicate_genomes,
                            "elapsed_seconds":round(time.monotonic()-started_at,2),
                            "family_evaluated_counts":dict(family_counts)})
@@ -1034,6 +1039,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             for (candidate, key), payload in zip(eligible, payloads):
                 if payload.get("_evaluation_error") is not None:
                     errors += 1
+                    record_error_reason(payload.get("_evaluation_error"))
                     out_by_key[key] = None
                     continue
                 dist, failed, distances = _candidate_distance(payload["metrics"], cfg)
@@ -1064,8 +1070,9 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                  "run_hash_sha256":r["run_hash_sha256"],"_genome":key}
             evaluated[key]=row; family_counts[spec.family]+=1
             return row
-        except (ValueError,DataIntegrityError,IndexError,KeyError,FloatingPointError):
+        except (ValueError,DataIntegrityError,IndexError,KeyError,FloatingPointError) as exc:
             errors+=1
+            record_error_reason(f"{type(exc).__name__}: {exc}")
             return None
 
     initial=[]
@@ -1317,7 +1324,8 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
     }
     for row in results: row.pop("_genome",None)
     return {"requested_candidates":max_candidates,"evaluated_candidates":len(results),
-            "failed_candidates":errors,"duplicate_genomes_skipped":duplicate_genomes,
+            "failed_candidates":errors,"error_reason_counts":dict(error_reason_counts),
+            "duplicate_genomes_skipped":duplicate_genomes,
             "seed":seed,"algorithm":algorithm,"generations":generation,"surrogate_model_fits":surrogate_fit_count,
             "family_evaluated_counts":family_counts,"contract":cfg,"all_passing":all_passing,
             "prior_candidates_used":len(prior_rows),"preflight_summary":preflight_summary,            "indicator_cache_stats":(
