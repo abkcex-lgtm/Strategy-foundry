@@ -22,7 +22,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: ethusdt-strategy-factory-research-v097-observable
+  group: ethusdt-strategy-factory-research-v098-bounded15m
   cancel-in-progress: true
 jobs:
   research:
