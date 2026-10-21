@@ -486,7 +486,7 @@ def _resolve_execution_interval(side: str, execution_frame: pd.DataFrame, start_
     # Still fail closed on malformed, duplicate, unordered, or out-of-window rows.
     bars = execution_frame.iloc[first:last]
     if bars.empty:
-        return None
+        raise DataIntegrityError(f"1-second data contradicts ambiguous base candle at {start_ms}: no trade-backed execution candles")
     validate_ohlcv(execution_frame, 1000, strict_gaps=False)
     if len(bars):
         bar_times = bars["open_time"].to_numpy(dtype=np.int64)
