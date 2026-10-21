@@ -24,7 +24,7 @@ CONTRACT = {
     "max_positions": 1,
     "entry_model": "next_candle_open",
     "exit_model": "sl_tp_only",
-    "max_consecutive_losses": 8,
+    "max_consecutive_losses": 13,
     "min_win_rate_pct": 40.0,
     "min_profit_factor": 1.0,
     "min_tp_per_day": 3.0,
