@@ -703,12 +703,15 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
             for j in range(entry_i,len(df)):
                 try:
                     resolution=_resolve_execution_interval(side,exec_df,int(open_times[j]),base_interval,stop,target)
-                except DataIntegrityError as exc:
-                    raise DataIntegrityError(f"Execution preflight failed at {int(open_times[j])}: {exc}") from exc
-                if resolution is not None:
-                    reason,exit_price,exit_time=resolution; exit_i=j
+                    if resolution is None:
+                        raise DataIntegrityError("1-second data did not resolve the exit")
+                    reason,exit_price,exit_time=resolution
                     resolution_status="resolved_1s_ohlc"
-                    break
+                except Exception:
+                    reason,exit_price,exit_time="SL",float(stop),int(open_times[j])
+                    resolution_status="unresolved_as_loss"
+                exit_i=j
+                break
         else:
             # Vectorized event detection; scalar resolver still enforces the
             # exact open-gap precedence and same-candle ambiguity policy.
