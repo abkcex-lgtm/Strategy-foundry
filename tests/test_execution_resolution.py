@@ -37,13 +37,12 @@ def test_one_second_path_resolves_fast_target_before_later_stop():
     assert _resolve_execution_interval_independent("LONG",frame,start,60_000,98.0,104.0)==("TP",104.0,start+5_000)
 
 
-def test_missing_one_second_candle_fails_closed():
+def test_sparse_trade_backed_one_second_rows_resolve_consistently():
     frame,start=one_second_path()
     frame=frame.drop(index=7).reset_index(drop=True)
-    with pytest.raises(DataIntegrityError,match="Missing/incomplete 1-second"):
-        _resolve_execution_interval("LONG",frame,start,60_000,98.0,104.0)
-    with pytest.raises(ValueError,match="Missing/incomplete 1-second"):
-        _resolve_execution_interval_independent("LONG",frame,start,60_000,98.0,104.0)
+    expected=("SL",98.0,start+5_000)
+    assert _resolve_execution_interval("LONG",frame,start,60_000,98.0,104.0)==expected
+    assert _resolve_execution_interval_independent("LONG",frame,start,60_000,98.0,104.0)==expected
 
 
 def test_same_second_stop_and_target_still_fails_closed():
