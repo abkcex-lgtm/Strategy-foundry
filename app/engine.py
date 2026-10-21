@@ -1019,14 +1019,22 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction,spec.context_filter,spec.confirmation_filter,spec.secondary_family,spec.signal_composition)
 
     def fitness(row):
-        # Passing/evidence status and the user's 300-trade minimum are eligibility
-        # gates, separate from the equal-weight score across the four target metrics.
-        # When no genome meets the full evidence gate, retain high-sample candidates
-        # rather than letting lucky low-trade samples crowd them out of the shortlist.
+        # TRAIN-only capital survival and net profitability are the first search
+        # objectives after a full pass. net_pnl already includes fees and slippage.
+        # Activity/sample evidence still outranks small target-distance advantages.
         m=row["metrics"]
-        return (not m["passes_all_targets"], not _goal_activity_evidence(m,cfg),
-                int(m.get("trades", 0)) < 300,
-                row["distance"], -int(m["trades"]))
+        net=float(m.get("net_pnl",0.0) or 0.0)
+        final=float(m.get("final_balance",cfg["initial_balance"]+net) or 0.0)
+        risk=float(_risk_budget(cfg,cfg["initial_balance"]))
+        solvent=final > risk + 1e-9
+        return (not bool(m.get("passes_all_targets",False)),
+                net <= 0.0,
+                not solvent,
+                not _goal_activity_evidence(m,cfg),
+                int(m.get("trades",0)) < 300,
+                -net,
+                row["distance"],
+                -int(m.get("trades",0)))
 
     def feature_vector(spec):
         vals=[1.0 if spec.family==f else 0.0 for f in all_families]
