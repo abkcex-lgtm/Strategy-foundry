@@ -326,7 +326,9 @@ def run(df,data_manifest):
                                                  sort_keys=True),flush=True)
         p={"status":"searching","requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"completed_batches":batches,"failed_candidate_evaluations":failed,"candidate_failure_reason_counts":failure_reasons,"elapsed_seconds":round(time.monotonic()-start,2),"seed":SEED,"algorithm":ALGORITHM,"train_sha256":train_hash,"development_sha256":dev_hash,"train_passing_pool":len(train_pass),"train_near_pool":len(train_near),"last_batch_unique":actual,"preflight_summary":preflight_summary,"preflight_warning":preflight_gate_warning,"prior_candidates_used":result.get("prior_candidates_used",0),"indicator_cache_stats":result.get("indicator_cache_stats")}
         write(PROGRESS,p); print("SEARCH_PROGRESS "+json.dumps(p,sort_keys=True),flush=True)
-        if zero>=5: break
+        # Never terminate discovery merely because several batches have no passing candidate.
+        # This was the root cause of the previous run stopping after only 1,000 candidates.
+        # Continue until the explicit runtime/candidate budget is reached; report partial searches honestly.
     search_complete=completed>=REQUESTED
     if not search_complete:
         write(PROGRESS,{"status":"partial_search_reported","requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"completed_batches":batches,"failed_candidate_evaluations":failed,"reason":"Runtime budget or candidate-space exhaustion; any result will be explicitly marked incomplete."})
