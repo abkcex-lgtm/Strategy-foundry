@@ -371,12 +371,55 @@ def run(df,data_manifest):
             item["oos_audit_status"]="FAILED"; item["oos_error"]=str(exc); item["oos_passes_all_targets"]=False
         oos_results.append(item); print(f"OOS_PROGRESS {idx}/{len(frozen)}",flush=True)
     validated=[x for x in oos_results if x.get("development_passes_all_targets") and x.get("development_audit_status")=="MATCH" and x.get("oos_passes_all_targets")]
-    delivery=validated if validated else sorted(oos_results,key=near_key)[:5]
+    def monthly_activity_eligible(item):
+        # Never return a strategy that violates the user's hard activity floor.
+        # Require >=300 closed trades in every UTC month of TRAIN, DEV, and OOS,
+        # plus >=10 trades/day in each split; do not weaken this for near-misses.
+        for key in ("train_metrics","development_metrics","oos_metrics"):
+            metrics=item.get(key) or {}
+            counts=metrics.get("monthly_trade_counts") or {}
+            if not counts or any(int(n or 0)<300 for n in counts.values()):
+                return False
+            span=float(metrics.get("span_days",0.0) or 0.0)
+            trades=int(metrics.get("trades",0) or 0)
+            rate=float(metrics.get("trades_per_day", trades/span if span>0 else 0.0) or 0.0)
+            if rate<10.0:
+                return False
+        return True
+    eligible_near=sorted([x for x in oos_results if monthly_activity_eligible(x)],key=near_key)[:5]
+    delivery=validated if validated else eligible_near
     if validated:
         outcome="VALIDATED_STRATEGIES_FOUND" if search_complete else "VALIDATED_STRATEGIES_FOUND_SEARCH_INCOMPLETE"
-    else:
+    elif delivery:
         outcome="NO_STRATEGY_PASSED_ALL_REQUIRED_SPLITS" if search_complete else "INCOMPLETE_SEARCH_NO_CERTIFIED_STRATEGY"
-    if not delivery: raise RuntimeError("No auditable near-misses available; results not fabricated")
+    else:
+        outcome="NO_CANDIDATE_MET_MONTHLY_ACTIVITY_FLOOR" if search_complete else "INCOMPLETE_SEARCH_NO_ACTIVITY_ELIGIBLE_CANDIDATE"
+        # Preserve a truthful, downloadable report instead of exporting low-activity
+        # candidates that the user explicitly excluded.
+        full_hash=frame_hash(df)
+        write(OUT/"report.json",{
+            "schema_version":1,"outcome":outcome,"source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
+            "requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"candidate_search_complete":search_complete,
+            "failed_candidate_evaluations":failed,"candidate_failure_reason_counts":failure_reasons,
+            "completed_batches":batches,"family_evaluated_counts":family_counts,"seed":SEED,"algorithm":ALGORITHM,
+            "contract":cfg,"target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,
+            "avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":13,"min_trades_per_day":10,
+            "min_trades_per_utc_month":300,"risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5},
+            "data":data_manifest,"splits":{"train":{"rows":len(train),"sha256":train_hash},
+            "development":{"rows":len(dev),"sha256":dev_hash},"oos":{"rows":len(oos),"sha256":oos_hash}},
+            "validated_strategy_count":len(validated),"returned_candidate_count":0,"results":[],
+            "activity_eligible_near_miss_count":0,
+            "note":"No strategy is returned unless it meets >=300 closed trades in every UTC month of Train, Development, and OOS and >=10 trades/day in each split. Low-activity candidates are intentionally excluded.",
+            "reproducibility":"Candidate selection and primary/independent ledger audits ran before this activity gate."})
+        with zipfile.ZipFile(OUT/"validated_strategies.zip","w",zipfile.ZIP_DEFLATED) as z:
+            z.writestr("README.txt","No strategies exported: no candidate met the mandatory monthly activity floor across Train, Development, and OOS.")
+        write(PROGRESS,{"status":"completed" if search_complete else "partial_search_reported","outcome":outcome,
+            "requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"validated_strategy_count":len(validated),
+            "returned_candidate_count":0,"report":"research-results/report.json","strategy_zip":"research-results/validated_strategies.zip"})
+        print("FINAL_REPORT "+json.dumps({"outcome":outcome,"requested_candidates":REQUESTED,
+            "evaluated_unique_candidates":completed,"validated_strategy_count":len(validated),"returned_candidate_count":0,
+            "full_dataset_sha256":full_hash,"report_path":"research-results/report.json","zip_path":"research-results/validated_strategies.zip"},sort_keys=True),flush=True)
+        return
     full_hash=frame_hash(df); prepared_full=prepare_backtest_data(df); template=(ROOT/"app"/"standalone_template.py").read_text(encoding="utf-8")
     zip_path=OUT/"validated_strategies.zip"; exports=[]
     with zipfile.ZipFile(zip_path,"w",zipfile.ZIP_DEFLATED,compresslevel=6) as z:
