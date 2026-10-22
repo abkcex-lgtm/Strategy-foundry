@@ -14,6 +14,7 @@ EXPECTED={4:43200,5:44640,6:43200,7:44640,8:44640,9:43200}
 REQUESTED=int(os.environ.get("FOUNDRY_CANDIDATES","500000")); SEED=int(os.environ.get("FOUNDRY_SEED","42"))
 ALGORITHM=os.environ.get("FOUNDRY_ALGORITHM","surrogate_genetic")
 MAX_SECONDS=int(os.environ.get("FOUNDRY_MAX_RUNTIME_SECONDS","19500"))
+# Owner-requested quick-screen lane is selected by the workflow commit tag; retain the same data, execution model, and acceptance gates.
 # Use nearly the full 8-minute workflow search allowance while reserving time
 # for mandatory Development/OOS audits, independent ledger replay, and exports.
 # Larger batches avoid repeating per-batch replay/audit overhead every 250 genomes.
