@@ -51,11 +51,9 @@ jobs:
       # Empty execution windows inside an ambiguous 1m candle remain a hard integrity failure.
       # [15m-research] Primary and independent resolvers share sparse 1s acceptance and fail-closed empty-window behavior.
       # [15m-research] Final batch size adapts to measured throughput; report audited near-misses even when no candidate meets all gates.
-
-      # Screening now uses the existing bounded parallel stratified evaluator; all acceptance and audit gates remain unchanged.
-      # Rerun after cached month-label optimization in the exact backtest path.
-      # Fresh owner-requested 15-minute research search triggered 2026-10-22; keep every acceptance gate unchanged.
-      FOUNDRY_ALGORITHM: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[screening-research]') && 'stratified_random' || github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && 'stratified_random' || 'surrogate_genetic' }}
+      # Goal-directed 15-minute lane uses the adaptive surrogate-genetic engine so later batches can use prior candidates;
+      # the stratified-random lane remains available for screening. No acceptance thresholds are relaxed.
+      FOUNDRY_ALGORITHM: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[screening-research]') && 'stratified_random' || 'surrogate_genetic' }}
       FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[screening-research]') && '720' || github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '720' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
     steps:
       - uses: actions/checkout@v4
