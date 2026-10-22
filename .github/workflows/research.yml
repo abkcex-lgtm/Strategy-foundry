@@ -97,3 +97,5 @@ jobs:
             git commit -m "Record ETHUSDT Strategy Factory research results"
             git push origin HEAD:main
           fi
+
+# Explicit diagnostics rerun trigger; all acceptance gates remain unchanged.
