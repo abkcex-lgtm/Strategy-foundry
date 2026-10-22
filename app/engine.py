@@ -1477,7 +1477,13 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 if prepared_context is not None else {"hits":0,"misses":0,"entries":0,"limit":128}),
             "evaluated_genome_hashes":[genome_hash(key) for key in evaluated.keys()],
             "independent_audit_failures":audit_failures,
-            "results":selected,"requested_near_misses":0 if all_passing else 5,
+            "results":selected,
+            "diagnostic_win_rate_30_candidates":[
+                {"strategy":row.get("strategy"),"contract":row.get("contract",cfg),"metrics":row.get("metrics",{})}
+                for row in results
+                if float((row.get("metrics") or {}).get("win_rate_pct",0.0)) >= 30.0
+            ],
+            "requested_near_misses":0 if all_passing else 5,
             "returned_near_misses":0 if all_passing else len(selected),"near_miss_shortfall":near_miss_shortfall,
             "warning":("Deterministic stratified random baseline; selected results independently replayed; OOS not certified." if algorithm=="stratified_random" else
                        ("Surrogate-assisted genetic search: ExtraTrees model ranks proposal pools; model fits and independent ledger replay are recorded. This is one 10,000-candidate batch inside the resource-managed background search; ranked on TRAIN only. Full 500k runtime has not been production-certified." if algorithm=="surrogate_genetic" else

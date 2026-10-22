@@ -316,6 +316,15 @@ def run(df,data_manifest):
         zero=zero+1 if actual==0 else 0
         if batches==1:
             preflight_summary=result.get("preflight_summary",{})
+            pilot_diagnostics=result.get("diagnostic_win_rate_30_candidates",[])
+            write(OUT/"pilot_win_rate_ge_30.json",{
+                "note":"TRAIN-only first-batch diagnostic candidates; exploratory, not validated; OOS untouched.",
+                "seed":seed,"algorithm":ALGORITHM,"evaluated_candidates":len(hashes),
+                "count_win_rate_ge_30":len(pilot_diagnostics),
+                "target_contract":cfg,
+                "candidates":pilot_diagnostics
+            })
+            print("PILOT_DIAGNOSTICS "+json.dumps({"count_win_rate_ge_30":len(pilot_diagnostics),"path":"research-results/pilot_win_rate_ge_30.json"}),flush=True)
             promising=int(preflight_summary.get("promising_candidates",0))
             capability=int(preflight_summary.get("capability_evidence_candidates",0))
             preflight_gate_warning=capability_pilot_warning(preflight_summary,REQUESTED)

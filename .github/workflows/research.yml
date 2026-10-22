@@ -54,7 +54,7 @@ jobs:
       # Goal-directed 15-minute lane uses the adaptive surrogate-genetic engine so later batches can use prior candidates;
       # the stratified-random lane remains available for screening. No acceptance thresholds are relaxed.
       FOUNDRY_ALGORITHM: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[screening-research]') && 'stratified_random' || 'surrogate_genetic' }}
-      FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[screening-research]') && '720' || github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '720' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
+      FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[screening-research]') && '720' || github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '19500' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -90,6 +90,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+users.noreply.github.com"
           git add research-results/progress.json
+          if [ -f research-results/pilot_win_rate_ge_30.json ]; then git add research-results/pilot_win_rate_ge_30.json; fi
           if [ -f research-results/report.json ]; then git add research-results/report.json; fi
           if [ -f research-results/validated_strategies.zip ]; then git add research-results/validated_strategies.zip; fi
           if ! git diff --cached --quiet; then
