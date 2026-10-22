@@ -94,10 +94,12 @@ class StrategySpec:
     confirmation_filter: str = "none"
     secondary_family: str = "none"
     signal_composition: str = "single"
+    stop_mode: str = "atr"
     def validate(self):
         if not (2 <= self.fast < self.slow <= 500): raise ValueError("Require 2 <= fast < slow <= 500")
         if not (2 <= self.atr_period <= 200): raise ValueError("atr_period must be 2..200")
         if not (0.2 <= self.stop_atr <= 10): raise ValueError("stop_atr must be 0.2..10")
+        if self.stop_mode not in {"atr","signal_candle","swing_3","swing_5"}: raise ValueError("Unsupported stop_mode")
         if self.direction not in {"both","long","short"}: raise ValueError("Invalid direction")
         if self.family not in {"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top","williams_r_reversion","donchian_midline_trend","dual_thrust_breakout","chaikin_money_flow","money_flow_index_reversion","atr_trend_pullback","volume_weighted_breakout","range_midpoint_reversion","roc_acceleration","atr_normalized_momentum"}:
             raise ValueError("Unsupported strategy family")
@@ -691,8 +693,24 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
         if not np.isfinite(atr) or atr<=0: continue
         side="LONG" if bool(long_signal_values[i]) else ("SHORT" if bool(short_signal_values[i]) else None)
         if side is None or (spec.direction=="long" and side=="SHORT") or (spec.direction=="short" and side=="LONG"): continue
-        entry_i=i+1; entry=float(open_values[entry_i]); dist=float(atr*spec.stop_atr)
-        stop=entry-dist if side=="LONG" else entry+dist
+        entry_i=i+1; entry=float(open_values[entry_i])
+        # Structural stops use only the signal candle and prior candles, before
+        # the next-candle-open entry; this avoids look-ahead.
+        if spec.stop_mode=="atr":
+            dist=float(atr*spec.stop_atr)
+            stop=entry-dist if side=="LONG" else entry+dist
+        else:
+            lookback={"signal_candle":1,"swing_3":3,"swing_5":5}[spec.stop_mode]
+            left=max(0,i-lookback+1)
+            if side=="LONG":
+                stop=float(np.min(low_values[left:i+1]))
+            else:
+                stop=float(np.max(high_values[left:i+1]))
+            if (side=="LONG" and stop>=entry) or (side=="SHORT" and stop<=entry):
+                continue
+            dist=abs(entry-stop)
+            if not np.isfinite(dist) or dist<=0:
+                continue
         risk_budget=_risk_budget(cfg,balance if cfg["compound"] or cfg["risk_mode"]=="percent_equity" else cfg["initial_balance"])
         if risk_budget<=0: i+=1; continue
         # A trade risking the entire remaining equity or more is not executable.
@@ -1010,6 +1028,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         return weights/weights.sum()
 
     def make_spec(family=None, genes=None):
+        stop_mode=str(rng.choice(["atr","signal_candle","swing_3","swing_5"]))
         if genes is not None:
             family,fast,slow,period,stop,direction,context_filter,confirmation_filter,secondary_family,signal_composition=genes
         else:
@@ -1066,10 +1085,11 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
             if not options: signal_composition="single"; secondary_family="none"
             else: secondary_family=str(rng.choice(options))
         label=f"{names[family]}"+(f" {signal_composition.upper()} {names[secondary_family]}" if signal_composition!="single" else "")
-        return StrategySpec(f"{label} {fast}/{slow} ATR {period}x{stop:g} {direction} [ctx={context_filter}; confirm={confirmation_filter}]",fast,slow,period,stop,direction,seed,family,context_filter,confirmation_filter,secondary_family,signal_composition)
+        label+=f" [stop={stop_mode}]"
+        return StrategySpec(f"{label} {fast}/{slow} ATR {period}x{stop:g} {direction} [ctx={context_filter}; confirm={confirmation_filter}]",fast,slow,period,stop,direction,seed,family,context_filter,confirmation_filter,secondary_family,signal_composition,stop_mode)
 
     def genome(spec):
-        return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction,spec.context_filter,spec.confirmation_filter,spec.secondary_family,spec.signal_composition)
+        return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction,spec.context_filter,spec.confirmation_filter,spec.secondary_family,spec.signal_composition,spec.stop_mode)
 
     def fitness(row):
         # TRAIN-only, non-compensatory discovery ranking. A lucky PnL on a sparse
@@ -1102,6 +1122,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         vals.extend([1.0 if spec.confirmation_filter==f else 0.0 for f in all_confirmation_filters])
         vals.extend([1.0 if spec.secondary_family==f else 0.0 for f in all_families]+[1.0 if spec.secondary_family=="none" else 0.0])
         vals.extend([1.0 if spec.signal_composition==f else 0.0 for f in ("single","and","or","xor")])
+        vals.extend([1.0 if spec.stop_mode==mode else 0.0 for mode in ("atr","signal_candle","swing_3","swing_5")])
         return vals
 
     def surrogate_target(row):
