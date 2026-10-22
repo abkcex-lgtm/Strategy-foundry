@@ -1,12 +1,175 @@
 {
-  "schema_version": 1,
-  "status": "NOT_A_RESEARCH_REPORT",
-  "source_commit": "31759ed3886a73da63ba14c8365c86b816748ada",
-  "workflow_run_id": 39335957241,
+  "activity_eligible_near_miss_count": 0,
+  "algorithm": "surrogate_genetic",
+  "candidate_failure_reason_counts": {},
+  "candidate_search_complete": false,
+  "completed_batches": 9,
+  "contract": {
+    "break_even_enabled": false,
+    "commission_pct_per_side": 0.04,
+    "compound": false,
+    "entry_model": "next_candle_open",
+    "exit_model": "sl_tp_only",
+    "initial_balance": 1000.0,
+    "max_consecutive_losses": 12,
+    "max_positions": 1,
+    "min_profit_factor": 1.0,
+    "min_tp_per_day": 3.0,
+    "min_trades_per_day": 10.0,
+    "min_trades_per_month": 300.0,
+    "min_win_rate_pct": 40.0,
+    "partial_exit_enabled": false,
+    "profile_name": "ETHUSDT fixed-risk 3.5R (editable preset)",
+    "reward_risk": 3.5,
+    "risk_mode": "fixed_usd",
+    "risk_pct": 1.0,
+    "risk_usd": 10.0,
+    "slippage_pct_per_side": 0.02,
+    "symbol": "ETHUSDT",
+    "target_mode": "net_rr",
+    "time_exit_enabled": false,
+    "trailing_stop_enabled": false,
+    "use_max_consecutive_losses": true,
+    "use_min_profit_factor": true,
+    "use_min_tp_per_day": true,
+    "use_min_win_rate": true
+  },
+  "data": {
+    "csv_sha256": "f2c0bc9ba360a319f8b475322e111b1cbd9d1696183ed38d416e52b266cb22bb",
+    "dataset_sha256": "f2c0bc9ba360a319f8b475322e111b1cbd9d1696183ed38d416e52b266cb22bb",
+    "interval": "1m",
+    "month_rows": {
+      "2026-04": 43200,
+      "2026-05": 44640,
+      "2026-06": 43200,
+      "2026-07": 44640,
+      "2026-08": 44640,
+      "2026-09": 43200
+    },
+    "monthly_archives": [
+      {
+        "archive_sha256": "fd01f08f331a0dcb5d89c718afb199f7cda63f43228b72ddda0bdd08bfd527c7",
+        "month": "2026-04",
+        "rows": 43200,
+        "url": "https://data.binance.vision/data/futures/um/monthly/klines/ETHUSDT/1m/ETHUSDT-1m-2026-04.zip"
+      },
+      {
+        "archive_sha256": "9710b3d1e350bef5bf31b8d1531c5801d35f963d223d0a42e73ae86ddd376e92",
+        "month": "2026-05",
+        "rows": 44640,
+        "url": "https://data.binance.vision/data/futures/um/monthly/klines/ETHUSDT/1m/ETHUSDT-1m-2026-05.zip"
+      },
+      {
+        "archive_sha256": "3b771e114b494805ac4cc677b34befb7e5f332bf5bd3a8a368cd21d65cd99cba",
+        "month": "2026-06",
+        "rows": 43200,
+        "url": "https://data.binance.vision/data/futures/um/monthly/klines/ETHUSDT/1m/ETHUSDT-1m-2026-06.zip"
+      },
+      {
+        "archive_sha256": "5c98ad0cfa152fbe08df59838ead7c8bbfa433af943bbfb4d082626ebee2d83e",
+        "month": "2026-07",
+        "rows": 44640,
+        "url": "https://data.binance.vision/data/futures/um/monthly/klines/ETHUSDT/1m/ETHUSDT-1m-2026-07.zip"
+      },
+      {
+        "archive_sha256": "038b412935c3349e95b4abe3e9cec8a7fd521d16ce73fff3c2f92d605b252b9e",
+        "month": "2026-08",
+        "rows": 44640,
+        "url": "https://data.binance.vision/data/futures/um/monthly/klines/ETHUSDT/1m/ETHUSDT-1m-2026-08.zip"
+      },
+      {
+        "archive_sha256": "c85c7ec631fa7fe3a90c30e4ef6a76aeac0b88be895872388d87a6a8fd3d2892",
+        "month": "2026-09",
+        "rows": 43200,
+        "url": "https://data.binance.vision/data/futures/um/monthly/klines/ETHUSDT/1m/ETHUSDT-1m-2026-09.zip"
+      }
+    ],
+    "source": "Binance USD-M Vision monthly archives",
+    "symbol": "ETHUSDT",
+    "validation": {
+      "first_open_time": 1775001600000,
+      "gap_count": 0,
+      "gaps": [],
+      "last_open_time": 1790812740000,
+      "rows": 263520
+    }
+  },
+  "evaluated_unique_candidates": 7836,
+  "failed_candidate_evaluations": 0,
+  "family_evaluated_counts": {
+    "adx_trend": 102,
+    "atr_normalized_momentum": 247,
+    "atr_squeeze_breakout": 80,
+    "atr_trend_pullback": 243,
+    "bollinger_reversion": 1527,
+    "chaikin_money_flow": 92,
+    "channel_breakout": 115,
+    "donchian_midline_trend": 151,
+    "dual_thrust_breakout": 89,
+    "ema_crossover": 293,
+    "ema_pullback": 417,
+    "engulfing_reversal": 155,
+    "failed_breakout_reversal": 84,
+    "inside_bar_breakout": 101,
+    "keltner_breakout": 84,
+    "macd_crossover": 207,
+    "micro_double_bottom": 187,
+    "micro_double_top": 159,
+    "momentum_breakout": 363,
+    "money_flow_index_reversion": 157,
+    "obv_trend": 83,
+    "pivot_reversal": 106,
+    "range_compression_breakout": 106,
+    "range_expansion_breakout": 90,
+    "range_midpoint_reversion": 177,
+    "roc_acceleration": 244,
+    "roc_momentum": 264,
+    "rsi_reversion": 247,
+    "stochastic_reversion": 223,
+    "support_resistance_rejection": 89,
+    "swing_structure_break": 108,
+    "three_bar_momentum": 165,
+    "trend_exhaustion_reversal": 96,
+    "volatility_regime_breakout": 110,
+    "volume_breakout": 99,
+    "volume_climax_reversal": 166,
+    "volume_weighted_breakout": 97,
+    "vwap_reclaim": 98,
+    "wick_rejection": 181,
+    "williams_r_reversion": 234
+  },
+  "note": "No candidate passed every TRAIN and DEVELOPMENT gate, so OOS was not evaluated and no candidate is returned. Near-misses are not allowed to consume the untouched OOS holdout. No acceptance threshold is relaxed.",
+  "outcome": "INCOMPLETE_SEARCH_NO_ACTIVITY_ELIGIBLE_CANDIDATE",
+  "reproducibility": "Candidate selection and primary/independent ledger audits ran before this activity gate.",
   "requested_candidates": 500000,
-  "evaluated_unique_candidates": 0,
-  "validated_strategy_count": null,
-  "current_source_result_verified": false,
-  "historical_results_archive": "research-results/archive/",
-  "note": "Placeholder only until the canonical current-source run finishes and commits its real report. No performance claims or strategy metrics are available in this placeholder."
+  "results": [],
+  "returned_candidate_count": 0,
+  "schema_version": 1,
+  "seed": 39873889637,
+  "source_commit": "32508ca03195201e3dce4d52e493f89ae8abb701",
+  "splits": {
+    "development": {
+      "rows": 44640,
+      "sha256": "ff8e235e0e08a12049fa9f84ff5726e591bd4eb1ba0e16ea849e914286853f96"
+    },
+    "oos": {
+      "rows": 87840,
+      "sha256": null
+    },
+    "train": {
+      "rows": 131040,
+      "sha256": "041ceeb9f28fb2ca14078bc92b7e677d12c7f4ebb538239bf2f87ce7bc007af4"
+    }
+  },
+  "target_criteria": {
+    "avg_net_tp_per_day_at_least": 3,
+    "initial_balance": 1000,
+    "max_consecutive_losses_at_most": 12,
+    "min_trades_per_day": 10,
+    "net_reward_risk": 3.5,
+    "profit_factor_strictly_greater_than": 1,
+    "risk_usd_fixed": 10,
+    "win_rate_pct_strictly_greater_than": 40
+  },
+  "validated_strategy_count": 0
 }
