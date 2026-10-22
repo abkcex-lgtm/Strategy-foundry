@@ -353,21 +353,25 @@ def run(df,data_manifest):
             item["development_audit_status"]="FAILED"; item["development_error"]=str(exc); audit_failures.append({"split":"development","strategy":item["strategy"],"error":str(exc)})
         if idx%10==0: print(f"DEV_PROGRESS {idx}/{len(pool)}",flush=True)
     dev_pass=sorted(dev_pass,key=near_key); dev_near=sorted(dev_near,key=near_key)
-    frozen=dev_pass+dev_near[:5] if dev_pass else dev_near[:5]
-    if not frozen: raise RuntimeError("No candidate survived Development audit; no strategy certificate")
+    # Strict holdout rule: OOS is not evaluated for near-misses. A candidate must
+    # pass every TRAIN gate and every DEVELOPMENT gate with an independent MATCH
+    # before it is eligible to enter the frozen OOS set.
+    frozen=dev_pass
     print(f"SELECTION_FROZEN dev_pass={len(dev_pass)} dev_near={len(dev_near)} oos_candidates={len(frozen)}",flush=True)
-    # OOS metrics are computed only after the Development candidate set is frozen.
-    oos_hash=frame_hash(oos); prepared_oos=prepare_backtest_data(oos); oos_backtest_hash=prepared_oos.data_hash; oos_results=[]
-    for idx,item in enumerate(frozen,1):
-        try:
-            c=normalize_contract(item.get("contract") or cfg); primary=backtest(oos,item["strategy"],c,_prepared_context=prepared_oos); second=independent_replay(oos,item["strategy"],c)
-            match,evidence=ledger_match(primary,second); distance,miss,distances=_candidate_distance(primary["metrics"],c)
-            item["oos_metrics"]=brief(primary["metrics"]); item["oos_data_sha256"]=primary["metrics"]["data_hash_sha256"]; item["oos_execution_data_sha256"]=primary["metrics"].get("execution_data_hash_sha256")
-            item["oos_audit_status"]="MATCH" if match else "MISMATCH"; item["oos_audit_evidence"]=evidence; item["oos_failed_conditions"]=miss; item["oos_distance"]=float(distance); item["_oos_ledger"]=primary["ledger"]; item["_oos_span_days"]=primary["metrics"]["span_days"]
-            item["oos_passes_all_targets"]=not miss and match
-        except Exception as exc:
-            item["oos_audit_status"]="FAILED"; item["oos_error"]=str(exc); item["oos_passes_all_targets"]=False
-        oos_results.append(item); print(f"OOS_PROGRESS {idx}/{len(frozen)}",flush=True)
+    oos_results=[]; oos_hash=None; oos_backtest_hash=None
+    if frozen:
+        # OOS is only loaded into the backtest engine after all prior gates pass.
+        oos_hash=frame_hash(oos); prepared_oos=prepare_backtest_data(oos); oos_backtest_hash=prepared_oos.data_hash
+        for idx,item in enumerate(frozen,1):
+            try:
+                c=normalize_contract(item.get("contract") or cfg); primary=backtest(oos,item["strategy"],c,_prepared_context=prepared_oos); second=independent_replay(oos,item["strategy"],c)
+                match,evidence=ledger_match(primary,second); distance,miss,distances=_candidate_distance(primary["metrics"],c)
+                item["oos_metrics"]=brief(primary["metrics"]); item["oos_data_sha256"]=primary["metrics"]["data_hash_sha256"]; item["oos_execution_data_sha256"]=primary["metrics"].get("execution_data_hash_sha256")
+                item["oos_audit_status"]="MATCH" if match else "MISMATCH"; item["oos_audit_evidence"]=evidence; item["oos_failed_conditions"]=miss; item["oos_distance"]=float(distance); item["_oos_ledger"]=primary["ledger"]; item["_oos_span_days"]=primary["metrics"]["span_days"]
+                item["oos_passes_all_targets"]=not miss and match
+            except Exception as exc:
+                item["oos_audit_status"]="FAILED"; item["oos_error"]=str(exc); item["oos_passes_all_targets"]=False
+            oos_results.append(item); print(f"OOS_PROGRESS {idx}/{len(frozen)}",flush=True)
     validated=[x for x in oos_results if x.get("development_passes_all_targets") and x.get("development_audit_status")=="MATCH" and x.get("oos_passes_all_targets")]
     def activity_eligible(item):
         # Enforce the agreed minimum activity using the user-approved minimum of 300 closed trades in each calendar month.
