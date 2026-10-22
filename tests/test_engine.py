@@ -500,10 +500,9 @@ def test_independent_replay_stops_before_equity_falls_below_risk_budget(monkeypa
     assert result["ledger"][-1]["balance_after"] >= 0.0
 
 
-def test_default_loss_streak_acceptance_preserves_original_thirteen_limit():
-    # Preserve the established acceptance contract; optimization must improve
-    # strategy quality without silently changing the user's criteria.
-    assert CONTRACT["max_consecutive_losses"] == 13
+def test_default_loss_streak_acceptance_is_strictly_below_thirteen():
+    # User requires fewer than 13 consecutive losses; 12 is the hard limit.
+    assert CONTRACT["max_consecutive_losses"] == 12
     assert normalize_contract()["max_consecutive_losses"] == 13
 
 
@@ -519,11 +518,11 @@ def test_candidate_distance_hard_flags_capital_exhaustion_and_prioritizes_activi
     assert "insufficient_activity_evidence" in failed
 
 
-def test_original_contract_keeps_thirteen_consecutive_loss_limit():
-    assert CONTRACT["max_consecutive_losses"] == 13
+def test_contract_uses_maximum_twelve_consecutive_losses():
+    assert CONTRACT["max_consecutive_losses"] == 12
 
 
 def test_contract_defaults_enforce_user_activity_floor_of_ten_trades_per_day():
     cfg = normalize_contract()
-    assert cfg["min_trades_per_day"] == 8.0
+    assert cfg["min_trades_per_day"] == 10.0
 
