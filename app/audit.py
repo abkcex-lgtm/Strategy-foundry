@@ -364,8 +364,22 @@ def independent_replay(frame: pd.DataFrame, spec: dict[str, Any], cfg: dict[str,
         side="LONG" if bool(long.iloc[i]) else ("SHORT" if bool(short.iloc[i]) else None)
         if side is None or (spec.get("direction","both")=="long" and side=="SHORT") or (spec.get("direction","both")=="short" and side=="LONG"):
             i+=1; continue
-        ei=i+1; entry=float(d.open.iloc[ei]); distance=float(atr.iloc[i]*float(spec["stop_atr"]))
-        stop=entry-distance if side=="LONG" else entry+distance
+        ei=i+1; entry=float(d.open.iloc[ei])
+        stop_mode=str(spec.get("stop_mode","atr"))
+        if stop_mode=="atr":
+            distance=float(atr.iloc[i]*float(spec["stop_atr"]))
+            stop=entry-distance if side=="LONG" else entry+distance
+        else:
+            lookback={"signal_candle":1,"swing_3":3,"swing_5":5}.get(stop_mode)
+            if lookback is None:
+                raise ValueError(f"Unsupported stop_mode in independent replay: {stop_mode}")
+            left=max(0,i-lookback+1)
+            stop=float(d.low.iloc[left:i+1].astype(float).min()) if side=="LONG" else float(d.high.iloc[left:i+1].astype(float).max())
+            if (side=="LONG" and stop>=entry) or (side=="SHORT" and stop<=entry):
+                i+=1; continue
+            distance=abs(entry-stop)
+            if not np.isfinite(distance) or distance<=0:
+                i+=1; continue
         mode=cfg["risk_mode"]
         base=(balance if mode=="percent_equity" or cfg.get("compound") else float(cfg["initial_balance"]))
         risk=float(cfg["risk_usd"]) if mode=="fixed_usd" else base*float(cfg["risk_pct"])/100
