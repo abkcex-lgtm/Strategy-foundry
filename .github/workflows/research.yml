@@ -1,4 +1,3 @@
-
 name: ETHUSDT Strategy Factory research v0.9.9 optimized checkpointed batches
 on:
   push:
@@ -41,7 +40,7 @@ jobs:
       # The research runner emits SEARCH_HEARTBEAT every 25 unique candidate evaluations
       # so operators can see continuous progress instead of waiting for a whole batch.
       FOUNDRY_CANDIDATES: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[screening-research]') && '10000' || github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '500000' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '500000' || github.event_name == 'push' && '1000' || github.event.inputs.candidates || '500000' }}
-      FOUNDRY_SEED: "42"
+      FOUNDRY_SEED: "20261022"
       # The fast lane uses a 10-minute discovery budget plus data checks and independent validation; all families and validation gates remain enabled.
       # Joint-score update: explicit capital-exhaustion rejection and activity/TP-day-weighted near-miss ranking; original acceptance thresholds unchanged.
       # [15m-research] Keep the agreed >=8 trades/day activity evidence gate; no unapproved monthly trade quota.
@@ -87,7 +86,7 @@ jobs:
         if: always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]')))
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+users.noreply.github.com"
           git add research-results/progress.json
           if [ -f research-results/report.json ]; then git add research-results/report.json; fi
           if [ -f research-results/validated_strategies.zip ]; then git add research-results/validated_strategies.zip; fi
