@@ -522,7 +522,7 @@ class _PreparedBacktestData:
     """One-time validated immutable market-data view shared by candidate backtests."""
     __slots__ = ("source_frame", "frame", "base_interval", "report", "data_hash",
                  "indicator_cache", "indicator_cache_hits", "indicator_cache_misses",
-                 "indicator_cache_limit", "exit_range_index")
+                 "indicator_cache_limit", "exit_range_index", "month_labels", "month_names")
     def __init__(self, frame):
         df=frame.copy().reset_index(drop=True)
         required=["open_time","open","high","low","close","volume"]
@@ -548,6 +548,10 @@ class _PreparedBacktestData:
         self.base_interval=base_interval
         self.report=report
         self.data_hash=sha256_bytes(df.to_csv(index=False,float_format="%.12g").encode())
+        # Calendar-month labels depend only on the immutable dataset. Precompute
+        # them once rather than converting 131k timestamps for every genome.
+        self.month_labels=pd.to_datetime(df["open_time"],unit="ms",utc=True).dt.strftime("%Y-%m").to_numpy()
+        self.month_names=tuple(dict.fromkeys(self.month_labels.tolist()))
         # Stop distance and trade direction do not alter signal/ATR arrays. A
         # bounded LRU reuses exact indicator results across those genome variants.
         self.indicator_cache=OrderedDict()
@@ -761,12 +765,15 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
     gp=sum(max(0,t["net_pnl"]) for t in ledger); gl=abs(sum(min(0,t["net_pnl"]) for t in ledger))
     span_days=max((int(df.open_time.iloc[-1])-int(df.open_time.iloc[0]))/86400000,1/1440)
     wr=100*len(wins)/len(ledger) if ledger else 0.0; pf=gp/gl if gl else (math.inf if gp else 0.0); tp_day=len(wins)/span_days
-    # Count entries by UTC calendar month so an average cannot hide inactive months.
-    month_labels=pd.to_datetime(df["open_time"],unit="ms",utc=True).dt.strftime("%Y-%m")
-    monthly_trade_counts={str(month):0 for month in month_labels.drop_duplicates().tolist()}
+    # Count closed entries by UTC calendar month using cached row labels. Since
+    # entry_time is always an OHLCV candle timestamp, binary-search its exact row
+    # and avoid repeated pandas timestamp conversions for every candidate.
+    monthly_trade_counts={str(month):0 for month in prepared.month_names}
     for trade in ledger:
-        month=pd.to_datetime(int(trade["entry_time"]),unit="ms",utc=True).strftime("%Y-%m")
-        monthly_trade_counts[month]=monthly_trade_counts.get(month,0)+1
+        entry_row=int(np.searchsorted(open_times,int(trade["entry_time"]),side="left"))
+        if entry_row < len(prepared.month_labels):
+            month=str(prepared.month_labels[entry_row])
+            monthly_trade_counts[month]=monthly_trade_counts.get(month,0)+1
     evidence_metrics={"span_days":span_days,"trades":len(ledger),"win_rate_pct":wr,
                       "avg_net_tp_per_day":tp_day,"monthly_trade_counts":monthly_trade_counts}
     passes=(not cfg["use_min_win_rate"] or wr>cfg["min_win_rate_pct"]) and (not cfg["use_min_profit_factor"] or pf>cfg["min_profit_factor"]) and (not cfg["use_min_tp_per_day"] or tp_day>=cfg["min_tp_per_day"]) and (not cfg["use_max_consecutive_losses"] or max_streak<=cfg["max_consecutive_losses"]) and open_position is None and not capital_exhausted and _goal_activity_evidence(evidence_metrics,cfg)
