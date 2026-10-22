@@ -503,7 +503,7 @@ def test_independent_replay_stops_before_equity_falls_below_risk_budget(monkeypa
 def test_default_loss_streak_acceptance_is_strictly_below_thirteen():
     # User requires fewer than 13 consecutive losses; 12 is the hard limit.
     assert CONTRACT["max_consecutive_losses"] == 12
-    assert normalize_contract()["max_consecutive_losses"] == 13
+    assert normalize_contract()["max_consecutive_losses"] == 12
 
 
 def test_candidate_distance_hard_flags_capital_exhaustion_and_prioritizes_activity():
