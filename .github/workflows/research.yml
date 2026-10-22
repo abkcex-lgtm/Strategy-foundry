@@ -23,7 +23,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: ethusdt-strategy-factory-research-v098-bounded15m
+  group: ethusdt-strategy-factory-research-v099-equal-weight-holdout
   cancel-in-progress: true
 jobs:
   research:
