@@ -43,8 +43,8 @@ jobs:
       FOUNDRY_SEED: ${{ github.run_id }}
       # The fast lane uses a 10-minute discovery budget plus data checks and independent validation; all families and validation gates remain enabled.
       # Joint-score update: explicit capital-exhaustion rejection and activity/TP-day-weighted near-miss ranking; original acceptance thresholds unchanged.
-      # [15m-research] Keep the agreed >=8 trades/day activity evidence gate; no unapproved monthly trade quota.
-      # Activity gate is daily-rate-only; monthly trade counts are diagnostics, never a hidden acceptance quota.
+      # [15m-research] Enforce owner gates: >=10 trades/day AND >=300 trades in every represented month; loss streak <=12.
+      # Monthly activity is a hard gate as explicitly requested; do not downgrade it to a diagnostic.
       # [15m-research] sparse 1-second Binance kline windows are accepted only as returned trade-backed rows; no synthetic candles.
       # Empty execution windows inside an ambiguous 1m candle remain a hard integrity failure.
       # [15m-research] Primary and independent resolvers share sparse 1s acceptance and fail-closed empty-window behavior.
@@ -53,7 +53,7 @@ jobs:
       # Screening now uses the existing bounded parallel stratified evaluator; all acceptance and audit gates remain unchanged.
       # Rerun after cached month-label optimization in the exact backtest path.
       # Fresh owner-requested 15-minute research search triggered 2026-10-22; keep every acceptance gate unchanged.
-      FOUNDRY_ALGORITHM: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[screening-research]') && 'stratified_random' || github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && 'stratified_random' || 'surrogate_genetic' }}
+      FOUNDRY_ALGORITHM: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[screening-research]') && 'stratified_random' || 'surrogate_genetic' }}
       FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[screening-research]') && '720' || github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '720' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
     steps:
       - uses: actions/checkout@v4
