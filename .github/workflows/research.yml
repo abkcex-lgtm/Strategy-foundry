@@ -5,6 +5,7 @@ on:
       - ".github/workflows/research.yml"
       - "app/engine.py"
       - "app/audit.py"
+      - "app/standalone_template.py"
       - "research/run_factory.py"
       - "tests/test_search.py"
       - "tests/test_engine.py"
