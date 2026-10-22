@@ -30,10 +30,12 @@ class StrategySpec:
     confirmation_filter: str = "none"
     secondary_family: str = "none"
     signal_composition: str = "single"
+    stop_mode: str = "atr"
     def validate(self):
         if not (2 <= self.fast < self.slow <= 500): raise ValueError("Require 2 <= fast < slow <= 500")
         if not (2 <= self.atr_period <= 200): raise ValueError("atr_period must be 2..200")
         if not (0.2 <= self.stop_atr <= 10): raise ValueError("stop_atr must be 0.2..10")
+        if self.stop_mode not in {"atr","signal_candle","swing_3","swing_5"}: raise ValueError("Unsupported stop_mode")
         if self.direction not in {"both","long","short"}: raise ValueError("Invalid direction")
         if self.family not in {"ema_crossover","channel_breakout","rsi_reversion","volume_breakout","ema_pullback","macd_crossover","bollinger_reversion","inside_bar_breakout","engulfing_reversal","momentum_breakout","stochastic_reversion","roc_momentum","adx_trend","keltner_breakout","atr_squeeze_breakout","obv_trend","vwap_reclaim","pivot_reversal","swing_structure_break","failed_breakout_reversal","wick_rejection","range_expansion_breakout","three_bar_momentum","volatility_regime_breakout","trend_exhaustion_reversal","volume_climax_reversal","range_compression_breakout","support_resistance_rejection","micro_double_bottom","micro_double_top","williams_r_reversion","donchian_midline_trend","dual_thrust_breakout","chaikin_money_flow","money_flow_index_reversion","atr_trend_pullback","volume_weighted_breakout","range_midpoint_reversion","roc_acceleration","atr_normalized_momentum"}:
             raise ValueError("Unsupported strategy family")
@@ -440,8 +442,19 @@ def replay(df, execution_df=None):
         if not np.isfinite(row.atr) or row.atr<=0: i+=1; continue
         side='LONG' if bool(row.long_signal) else ('SHORT' if bool(row.short_signal) else None)
         if side is None or (s['direction']=='long' and side=='SHORT') or (s['direction']=='short' and side=='LONG'): i+=1; continue
-        entry_i=i+1; entry=float(x.iloc[entry_i].open); dist=float(row.atr*s['stop_atr'])
-        stop=entry-dist if side=='LONG' else entry+dist
+        entry_i=i+1; entry=float(x.iloc[entry_i].open)
+        stop_mode=s.get('stop_mode','atr')
+        if stop_mode=='atr':
+            dist=float(row.atr*s['stop_atr'])
+            stop=entry-dist if side=='LONG' else entry+dist
+        else:
+            lookback={'signal_candle':1,'swing_3':3,'swing_5':5}.get(stop_mode)
+            if lookback is None: raise ValueError(f'Unsupported stop_mode: {stop_mode}')
+            left=max(0,i-lookback+1)
+            stop=float(x.iloc[left:i+1].low.astype(float).min()) if side=='LONG' else float(x.iloc[left:i+1].high.astype(float).max())
+            if (side=='LONG' and stop>=entry) or (side=='SHORT' and stop<=entry): i+=1; continue
+            dist=abs(entry-stop)
+            if not np.isfinite(dist) or dist<=0: i+=1; continue
         risk=risk_budget(balance if (CFG['compound'] or CFG['risk_mode']=='percent_equity') else CFG['initial_balance'])
         if risk<=0: i+=1; continue
         # Never open a trade that risks all remaining equity or more.
