@@ -241,12 +241,12 @@ def run(df,data_manifest):
         # Start with a small representative pilot; later batches learn from
         # prior audited candidates instead of restarting an isolated population.
         remaining_seconds=MAX_SECONDS-(time.monotonic()-start)
-        if remaining_seconds < 20:
+        if remaining_seconds < 60:
             break
         # Candidate batches are not pre-emptible. Shrink the final batch using
         # observed throughput and reserve time for Development/OOS audits/exports.
-        measured_rate=(completed/max(time.monotonic()-start,1.0)) if completed else 5.0
-        adaptive_cap=1000 if remaining_seconds >= 260 else max(32,min(1000,int((remaining_seconds-20)*measured_rate*0.85)))
+        measured_rate=(completed/max(time.monotonic()-start,1.0)) if completed else 2.5
+        adaptive_cap=max(32,min(1000,int((remaining_seconds-60)*measured_rate*0.75)))
         batch_cap=adaptive_cap
         size=min(batch_cap,REQUESTED-completed); seed=SEED+batches*1000003
         def train_survival_key(x):
