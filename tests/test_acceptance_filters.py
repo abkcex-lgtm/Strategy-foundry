@@ -29,7 +29,7 @@ def test_disabled_optional_filters_leave_mandatory_monthly_gate_active(monkeypat
         "use_max_consecutive_losses": False,
     }
     result = engine.search_candidates(pd.DataFrame(), max_candidates=1, seed=42, contract=cfg)
-    assert result["results"][0]["distance"] == 1.0
+    assert result["results"][0]["distance"] == 0.0  # optional core gates are disabled; monthly gate remains a separate hard failure
     assert "monthly_trade_count" in result["results"][0]["failed_conditions"]
 
 
