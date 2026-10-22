@@ -1023,23 +1023,25 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 # family-stratified seeds still cover the full registered space.
                 # Sample across the complete registry using the activity prior;
                 # do not let a short hand-picked family list starve other families.
-                family=choose_family()
-                # Densely sample fast periods and tight-but-valid stops to find
-                # genuinely active rules; performance and OOS gates remain unchanged.
-                fast=int(rng.choice([2,3,4,5,6,7,8,9,10,12,14,16,18]))
-                slow=int(rng.choice([5,6,7,8,9,10,12,14,16,18,20,24,28,32,40,48,64]))
+                # High-frequency discovery lane: the previous screen's best TRAIN candidate
+                # had only 401 trades in three months. Allocate most proposals to families
+                # whose signal definitions can recur frequently, but retain an all-family lane.
+                frequent_families=["rsi_reversion","stochastic_reversion","williams_r_reversion",
+                    "roc_momentum","roc_acceleration","atr_normalized_momentum","wick_rejection",
+                    "engulfing_reversal","three_bar_momentum","ema_pullback","range_midpoint_reversion",
+                    "micro_double_bottom","micro_double_top","volume_climax_reversal","money_flow_index_reversion"]
+                family=str(rng.choice(frequent_families)) if rng.random()<0.75 else choose_family()
+                fast=int(rng.choice([2,3,4,5,6,7,8,9,10,12,14]))
+                slow=int(rng.choice([5,6,7,8,9,10,12,14,16,18,20,24,28,32,40,48]))
                 if slow <= fast: slow=fast+2
-                period=int(rng.choice([3,4,5,6,7,8,9,10,12,14,16,20,24]))
-                # Do not search only ultra-tight stops: test a wider risk envelope too.
-                # Entry/exit contract and 3.5R net target remain unchanged.
+                period=int(rng.choice([3,4,5,6,7,8,9,10,12,14,16]))
+                # Search broad stop placements; net risk and net 3.5R are immutable.
                 stop=float(rng.choice([0.2,0.25,0.3,0.35,0.4,0.5,0.6,0.7,0.8,1.0,1.2,1.5,2.0]))
-                # Search both directions and single-sided hypotheses at comparable rates:
-                # a weak side must not drag down an otherwise useful strategy.
-                direction=str(rng.choice(["both","long","short"],p=[0.34,0.33,0.33]))
-                # Retain unfiltered high-frequency baselines while giving trend/momentum
-                # confirmation enough search mass to improve precision at the same 3.5R.
-                context_filter=str(rng.choice(context_filters,p=_filter_probabilities(context_filters,"context")))
-                confirmation_filter=str(rng.choice(confirmation_filters,p=_filter_probabilities(confirmation_filters,"confirmation")))
+                # Both directions dominate because the requested system is LONG+SHORT.
+                direction=str(rng.choice(["both","long","short"],p=[0.75,0.125,0.125]))
+                # Most trials isolate the signal so filters cannot silently starve activity.
+                context_filter=str(rng.choice(context_filters,p=[0.75]+[0.25/max(1,len(context_filters)-1)]*(len(context_filters)-1)))
+                confirmation_filter=str(rng.choice(confirmation_filters,p=[0.80]+[0.20/max(1,len(confirmation_filters)-1)]*(len(confirmation_filters)-1)))
                 signal_composition="single"; secondary_family="none"
             elif len(families)>1 and rng.random()<0.25:
                 signal_composition=str(rng.choice(["and","or","xor"],p=[0.15,0.75,0.10]))
