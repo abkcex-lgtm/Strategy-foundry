@@ -739,7 +739,7 @@ def backtest(frame, spec=None, contract=None, execution_frame=None, _prepared_co
                         resolution_status="unresolved_as_loss"
                     exit_i=j
                     auto_resolved=True
-                if resolution is not None and not auto_resolved:
+                if not auto_resolved and resolution is not None:
                     reason,exit_price=resolution; exit_i=j; exit_time=int(open_times[j])
                     resolution_status="resolved_base_ohlc"
         if exit_i is None:
