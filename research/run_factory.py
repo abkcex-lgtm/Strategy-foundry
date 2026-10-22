@@ -101,8 +101,8 @@ def near_key(x):
     # lucky sample outrank a strategy that actually approaches the activity contract.
     return (0 if x.get("development_audit_status")=="MATCH" else 1,
             bool(m.get("capital_exhausted",False)) or bool(train_m.get("capital_exhausted",False)),
-            float(x.get("development_distance",x.get("distance",math.inf))),
             activity_gap(m)+activity_gap(train_m),
+            float(x.get("development_distance",x.get("distance",math.inf))),
             dev_final <= risk + 1e-9, train_final <= risk + 1e-9,
             dev_net <= 0.0, train_net <= 0.0,
             -min(dev_net,train_net),
@@ -258,8 +258,8 @@ def run(df,data_manifest):
             # then activity evidence and target distance. Never inspect OOS here.
             return (not bool(m.get("passes_all_targets",False)),
                     final <= risk + 1e-9,
-                    float(x.get("distance",math.inf)),
                     activity_gap(m),
+                    float(x.get("distance",math.inf)),
                     net <= 0.0, -net,
                     -int(m.get("trades",0)))
         prior_pool=sorted(train_pass+train_near,key=train_survival_key)[:192]
@@ -306,8 +306,8 @@ def run(df,data_manifest):
             train_near=sorted(train_near,key=lambda x:(
                 not bool((x.get("metrics") or {}).get("passes_all_targets",False)),
                 bool((x.get("metrics") or {}).get("capital_exhausted",False)),
-                float(x.get("distance",math.inf)),
                 activity_gap(x.get("metrics",{})),
+                float(x.get("distance",math.inf)),
                 float((x.get("metrics") or {}).get("final_balance",0.0) or 0.0) <= (
                     float(cfg["risk_usd"] if cfg["risk_mode"]=="fixed_usd" else cfg["initial_balance"]*cfg["risk_pct"]/100.0) + 1e-9),
                 float((x.get("metrics") or {}).get("net_pnl",0.0) or 0.0) <= 0.0,
