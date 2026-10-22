@@ -807,7 +807,7 @@ def _goal_activity_evidence(metrics: dict[str, Any], cfg: dict[str, Any]) -> boo
     trade_rate=float(metrics.get("trades_per_day", 0.0) or 0.0)
     if trade_rate <= 0.0:
         trade_rate=trades/span_days
-    min_trades_per_day=float(cfg.get("min_trades_per_day", 8.0))
+    min_trades_per_day=float(cfg.get("min_trades_per_day", 10.0))
     monthly=metrics.get("monthly_trade_counts")
     if not isinstance(monthly, dict) or not monthly:
         return False
@@ -850,7 +850,7 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
         if trade_rate <= 0.0:
             span=max(float(metrics.get("span_days", 0.0) or 0.0),0.0)
             trade_rate=float(metrics.get("trades",0) or 0)/span if span>0 else 0.0
-        min_trade_rate=float(cfg.get("min_trades_per_day", 8.0))
+        min_trade_rate=float(cfg.get("min_trades_per_day", 10.0))
         distances["trades_per_day"]=max(0.0,min_trade_rate-trade_rate)/max(min_trade_rate,1.0)
         if trade_rate < min_trade_rate:
             failed.append("trades_per_day")
@@ -1084,7 +1084,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         final=float(m.get("final_balance",cfg["initial_balance"]+net) or 0.0)
         risk=float(_risk_budget(cfg,cfg["initial_balance"]))
         exhausted=bool(m.get("capital_exhausted",False)) or final <= risk + 1e-9
-        activity_gap=max(0.0,float(cfg.get("min_trades_per_day",8.0))-float(m.get("trades_per_day",0.0) or 0.0))
+        activity_gap=max(0.0,float(cfg.get("min_trades_per_day",10.0))-float(m.get("trades_per_day",0.0) or 0.0))
         return (not bool(m.get("passes_all_targets",False)),
                 exhausted,
                 activity_gap,
