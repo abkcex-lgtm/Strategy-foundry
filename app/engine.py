@@ -1311,7 +1311,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                     training_spec=StrategySpec(**training_row["strategy"])
                     X.append(feature_vector(training_spec)); y.append(surrogate_target(training_row))
                 model=ExtraTreesRegressor(n_estimators=64,min_samples_leaf=2,max_features=0.9,
-                                          random_state=int(seed+len(evaluated)),n_jobs=1)
+                                          random_state=int((int(seed)+len(evaluated)) % (2**32)),n_jobs=1)
                 model.fit(np.asarray(X,dtype=float),np.asarray(y,dtype=float))
                 # Active-learning proposal pool: exploit low predicted loss, explore
                 # model disagreement, and prefer structurally novel genomes.
