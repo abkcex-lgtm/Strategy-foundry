@@ -891,13 +891,14 @@ def _candidate_distance(metrics: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
         failed.append("open_positions_at_end")
     if bool(metrics.get("capital_exhausted",False)):
         failed.append("capital_exhausted")
-    # Near-miss scoring is intentionally non-compensatory: frequency and TP/day shortfalls dominate;
-    # capital exhaustion is a hard failure and receives an explicit penalty. Acceptance gates above
-    # remain unchanged; weights affect ordering only, never pass/fail thresholds.
-    weights={"avg_net_tp_per_day":3.0,"trades_per_day":2.5,"monthly_trades":2.5,"win_rate_pct":1.5,
-             "profit_factor":1.5,"max_consecutive_losses":1.0}
-    weighted=[(weights.get(k,1.0)*v) for k,v in distances.items()]
-    score=(sum(weighted)/sum(weights.get(k,1.0) for k in distances) if distances else 0.0)
+    # The four core performance goals have exactly equal weight in the search
+    # score: win rate, profit factor, net TP/day, and consecutive-loss risk.
+    # Activity (trades/day and monthly count), open positions, and capital survival
+    # remain hard eligibility gates; they are tie-breakers in search ordering, not
+    # hidden extra weights that distort the four-goal score.
+    core_keys=("win_rate_pct","profit_factor","avg_net_tp_per_day","max_consecutive_losses")
+    core=[float(distances[k]) for k in core_keys if k in distances]
+    score=(sum(core)/len(core) if core else 0.0)
     if bool(metrics.get("capital_exhausted",False)):
         score += 2.0
     return score, failed, distances
@@ -1107,9 +1108,9 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         activity_gap=max(0.0,float(cfg.get("min_trades_per_day",10.0))-float(m.get("trades_per_day",0.0) or 0.0))
         return (not bool(m.get("passes_all_targets",False)),
                 exhausted,
-                activity_gap,
-                float(row.get("distance",math.inf)),
                 not _goal_activity_evidence(m,cfg),
+                float(row.get("distance",math.inf)),
+                activity_gap,
                 net <= 0.0,
                 -net,
                 -int(m.get("trades",0)))
