@@ -12,7 +12,7 @@ from research.run_factory import get_data, split_reference_period
 OUT=Path("research-results"); OUT.mkdir(exist_ok=True)
 CONTRACT=normalize_contract({"symbol":"ETHUSDT","initial_balance":1000,"risk_mode":"fixed_usd","risk_usd":10,"compound":False,"reward_risk":3.5,"target_mode":"net_rr","commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"max_positions":1,"entry_model":"next_candle_open","exit_model":"sl_tp_only","min_win_rate_pct":40,"min_profit_factor":1,"min_tp_per_day":3,"max_consecutive_losses":12,"use_min_win_rate":True,"use_min_profit_factor":True,"use_min_tp_per_day":True,"use_max_consecutive_losses":True,"min_trades_per_day":10,"min_trades_per_month":300,"break_even_enabled":False,"trailing_stop_enabled":False,"partial_exit_enabled":False,"time_exit_enabled":False})
 STOPS=("signal_candle","swing_3","swing_5","atr_1.0","atr_1.5","atr_2.0")
-ENTRIES=("breakout_123","pullback_reclaim","higher_low_breakout","trend_pullback_reversal","trend_pullback_cross5","trend_pullback_cross10","trend_pullback_cross20","cross_pullback_breakout5","cross_pullback_breakout10","cross_pullback_breakout20","structure_break_after_pullback","structure_break_pb3_br10","structure_break_pb5_br10","structure_break_pb5_br15","structure_break_pb8_br15","range_break_retest","swing_structure_break","squeeze_breakout","swing_failure_reclaim","atr_expansion_breakout")
+ENTRIES=("breakout_123","pullback_reclaim","higher_low_breakout","trend_pullback_reversal","trend_pullback_cross5","trend_pullback_cross10","trend_pullback_cross20","cross_pullback_breakout5","cross_pullback_breakout10","cross_pullback_breakout20","structure_break_after_pullback","structure_break_pb3_br10","structure_break_pb5_br10","structure_break_pb5_br15","structure_break_pb8_br15","structure_break_pb3_br5","structure_break_pb3_br15","structure_break_pb5_br20","structure_break_pb8_br10","structure_break_pb8_br20","structure_break_pb10_br15","structure_break_pb10_br20","range_break_retest","swing_structure_break","squeeze_breakout","swing_failure_reclaim","atr_expansion_breakout")
 
 def signals(df):
     c=df.close.astype(float); o=df.open.astype(float); h=df.high.astype(float); lo=df.low.astype(float)
@@ -70,10 +70,10 @@ def signals(df):
                                                 (e9<e21)&recent_pullback_short&(c<prior_low)&(c<o))
     # Targeted variants around the prior best candidate: vary pullback window and
     # causal breakout lookback, while keeping next-open entry and the same net SL/TP.
-    for pb_window, breakout_window, name in ((3,10,"structure_break_pb3_br10"),
-                                             (5,10,"structure_break_pb5_br10"),
-                                             (5,15,"structure_break_pb5_br15"),
-                                             (8,15,"structure_break_pb8_br15")):
+    for pb_window, breakout_window, name in ((3,5,"structure_break_pb3_br5"), (3,10,"structure_break_pb3_br10"), (3,15,"structure_break_pb3_br15"),
+                                             (5,10,"structure_break_pb5_br10"), (5,15,"structure_break_pb5_br15"), (5,20,"structure_break_pb5_br20"),
+                                             (8,10,"structure_break_pb8_br10"), (8,15,"structure_break_pb8_br15"), (8,20,"structure_break_pb8_br20"),
+                                             (10,15,"structure_break_pb10_br15"), (10,20,"structure_break_pb10_br20")):
         pb_long=(lo.shift(1).rolling(pb_window,min_periods=pb_window).min()<=e21.shift(1))
         pb_short=(h.shift(1).rolling(pb_window,min_periods=pb_window).max()>=e21.shift(1))
         ref_high=h.shift(1).rolling(breakout_window,min_periods=breakout_window).max()
@@ -133,7 +133,8 @@ def confirmation_filters(df):
     body_ratio=(c-o).abs()/candle_range
     close_location=(c-lo)/candle_range
     slope_atr=(e21-e21.shift(5))/atr.replace(0,np.nan)
-    not_extended=((c-e21).abs()/atr.replace(0,np.nan))<=1.25
+    distance_atr=(c-e21).abs()/atr.replace(0,np.nan)
+    not_extended=distance_atr<=1.25
     # Additional causal quality filters: no future bars are used.
     long_body=(body_ratio>=0.50)&(close_location>=0.70)
     short_body=(body_ratio>=0.50)&(close_location<=0.30)
@@ -154,6 +155,9 @@ def confirmation_filters(df):
       "ema21_slope5_atr": (long_slope,short_slope),
       "rsi_tight_momentum": ((rsi>=52)&(rsi<=68),(rsi<=48)&(rsi>=32)),
       "avoid_extended_entry": (not_extended,not_extended),
+      "distance_to_ema_atr_0_75": (distance_atr<=0.75,distance_atr<=0.75),
+      "distance_to_ema_atr_1_0": (distance_atr<=1.0,distance_atr<=1.0),
+      "distance_to_ema_atr_1_5": (distance_atr<=1.5,distance_atr<=1.5),
       "body_plus_adx22": (long_body&long_adx,short_body&short_adx),
       "slope_adx_candle_stack": (long_slope&long_adx&long_body,short_slope&short_adx&short_body),
       "trend_quality_stack": (long_slope&long_adx&long_body&(rsi>=52)&(rsi<=68)&not_extended,
@@ -277,7 +281,7 @@ async def main():
             raw_long,raw_short=sigs[ent]
             if ent.startswith("trend_pullback_cross") or ent.startswith("cross_pullback_breakout") or ent.startswith("structure_break_pb") or ent in ("structure_break_after_pullback","range_break_retest","swing_structure_break"):
                 filter_names=("baseline","volume_above_sma20","rsi_tight_momentum","adx22_directional",
-                              "strong_candle_close","avoid_extended_entry","slope_plus_adx","trend_quality_stack","slope_adx_candle_stack")
+                              "strong_candle_close","avoid_extended_entry","distance_to_ema_atr_0_75","distance_to_ema_atr_1_0","distance_to_ema_atr_1_5","ema21_slope5_atr","slope_plus_adx","trend_quality_stack","slope_adx_candle_stack")
                 active_filters=((name,filters[name]) for name in filter_names)
             else:
                 active_filters=filters.items()
