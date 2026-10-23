@@ -1093,24 +1093,35 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction,spec.context_filter,spec.confirmation_filter,spec.secondary_family,spec.signal_composition,spec.stop_mode)
 
     def fitness(row):
-        # TRAIN-only, non-compensatory discovery ranking. A lucky PnL on a sparse
-        # sample must never crowd out a candidate that approaches the user's
-        # activity and performance contract. Passes always rank first; among
-        # failures, reject capital exhaustion first, then rank by the complete
-        # distance-to-contract score before considering PnL as a tie-breaker.
-        # This changes proposal selection only; every hard acceptance gate,
-        # cost, risk, entry/exit rule, and independent audit remains unchanged.
+        # TRAIN-only, non-compensatory discovery ranking. Activity is a primary
+        # objective, not a late tie-breaker: the previous ordering ranked sparse
+        # high-PF samples above active candidates because distance omits activity
+        # from its four equal-weight core metrics.
+        # Passing candidates still rank first; exhausted-capital candidates are
+        # rejected next; then rank by daily and monthly activity shortfall before
+        # performance distance. Acceptance gates and execution assumptions do
+        # not change.
         m=row["metrics"]
         net=float(m.get("net_pnl",0.0) or 0.0)
         final=float(m.get("final_balance",cfg["initial_balance"]+net) or 0.0)
         risk=float(_risk_budget(cfg,cfg["initial_balance"]))
         exhausted=bool(m.get("capital_exhausted",False)) or final <= risk + 1e-9
-        activity_gap=max(0.0,float(cfg.get("min_trades_per_day",10.0))-float(m.get("trades_per_day",0.0) or 0.0))
+        min_daily=max(float(cfg.get("min_trades_per_day",10.0)),1.0)
+        trade_rate=float(m.get("trades_per_day",0.0) or 0.0)
+        if trade_rate<=0.0:
+            span=max(float(m.get("span_days",0.0) or 0.0),0.0)
+            trade_rate=float(m.get("trades",0) or 0)/span if span>0 else 0.0
+        daily_gap=max(0.0,min_daily-trade_rate)/min_daily
+        min_monthly=max(int(cfg.get("min_trades_per_month",300)),1)
+        monthly=m.get("monthly_trade_counts")
+        monthly_gap=(max([max(0.0,min_monthly-int(v or 0))/min_monthly for v in monthly.values()]+[0.0])
+                     if isinstance(monthly,dict) and monthly else 1.0)
         return (not bool(m.get("passes_all_targets",False)),
                 exhausted,
+                daily_gap,
+                monthly_gap,
                 not _goal_activity_evidence(m,cfg),
                 float(row.get("distance",math.inf)),
-                activity_gap,
                 net <= 0.0,
                 -net,
                 -int(m.get("trades",0)))
@@ -1128,11 +1139,23 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
 
     def surrogate_target(row):
         m=row["metrics"]
-        # Learn the same equal-weight score as final ranking. Evidence and
-        # pass status are separate penalties, not hidden metric-specific weights.
+        # Teach the surrogate the actual non-compensatory activity objective.
+        # The old target added a flat evidence penalty, so sparse 2-4 trade
+        # samples and high-activity candidates were nearly indistinguishable to
+        # the model even though daily/monthly activity is mandatory.
         evidence_penalty=0.0 if _goal_activity_evidence(m,cfg) else 2.0
         pass_penalty=0.0 if m["passes_all_targets"] else 1.0
-        return float(row["distance"])+evidence_penalty+pass_penalty
+        min_daily=max(float(cfg.get("min_trades_per_day",10.0)),1.0)
+        trade_rate=float(m.get("trades_per_day",0.0) or 0.0)
+        if trade_rate<=0.0:
+            span=max(float(m.get("span_days",0.0) or 0.0),0.0)
+            trade_rate=float(m.get("trades",0) or 0)/span if span>0 else 0.0
+        daily_gap=max(0.0,min_daily-trade_rate)/min_daily
+        min_monthly=max(int(cfg.get("min_trades_per_month",300)),1)
+        monthly=m.get("monthly_trade_counts")
+        monthly_gap=(max([max(0.0,min_monthly-int(v or 0))/min_monthly for v in monthly.values()]+[0.0])
+                     if isinstance(monthly,dict) and monthly else 1.0)
+        return float(row["distance"])+evidence_penalty+pass_penalty+2.0*daily_gap+2.0*monthly_gap
 
     last_model_fit_at=-1
     surrogate_fit_count=0
