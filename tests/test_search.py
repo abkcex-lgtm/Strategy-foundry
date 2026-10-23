@@ -252,3 +252,38 @@ def test_persian_ui_exposes_all_40_searchable_families():
     assert all(family in script for family in expected)
     assert "۴۰ خانوادهٔ اجرایی" in script
     assert "۳۰ خانوادهٔ اجرایی" not in script
+
+
+
+def test_activity_search_prioritizes_bidirectional_and_samples_composites(monkeypatch):
+    directions = []
+    compositions = []
+
+    def fake_backtest(frame, spec, contract):
+        directions.append(spec.direction)
+        compositions.append(spec.signal_composition)
+        metrics = {
+            "trades": 80, "wins": 24, "losses": 56, "win_rate_pct": 30.0,
+            "profit_factor": 0.8, "avg_net_tp_per_day": 0.5,
+            "max_consecutive_losses": 10, "net_pnl": -20.0,
+            "final_balance": 980.0, "total_costs": 10.0,
+            "data_hash_sha256": "e" * 64, "rows": 5000, "span_days": 30.0,
+            "trades_per_day": 80 / 30, "monthly_trade_counts": {"2026-01": 80},
+            "passes_all_targets": False,
+        }
+        return {
+            "strategy": engine.asdict(spec), "contract": contract, "metrics": metrics,
+            "run_hash_sha256": hashlib.sha256(repr(spec).encode()).hexdigest(),
+            "ledger": [],
+        }
+
+    monkeypatch.setattr(engine, "backtest", fake_backtest)
+    monkeypatch.setattr(audit, "independent_replay", lambda frame, spec, cfg: {"ledger": []})
+    search_candidates(pd.DataFrame(), max_candidates=200, seed=20261023,
+                      contract=normalize_contract(), algorithm="stratified_random")
+
+    # A small initial family-stratification seed can include directional controls;
+    # the larger activity-discovery lane must overwhelmingly be LONG+SHORT.
+    assert directions.count("both") / len(directions) >= 0.70
+    assert set(directions) <= {"both", "long", "short"}
+    assert any(composition in {"and", "or", "xor"} for composition in compositions)

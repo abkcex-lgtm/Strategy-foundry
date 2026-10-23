@@ -391,7 +391,8 @@ def run(df,data_manifest):
             span=float(metrics.get("span_days",0.0) or 0.0)
             trades=int(metrics.get("trades",0) or 0)
             rate=float(metrics.get("trades_per_day", trades/span if span>0 else 0.0) or 0.0)
-            if rate<8.0:
+            # Keep diagnostic activity eligibility aligned with the actual hard gate.
+            if rate<10.0:
                 return False
         return True
     validated=[x for x in validated if activity_eligible(x)]

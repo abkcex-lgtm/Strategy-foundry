@@ -1064,12 +1064,20 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 period=int(rng.choice([3,4,5,6,7,8,9,10,12,14,16]))
                 # Search broad stop placements; net risk and net 3.5R are immutable.
                 stop=float(rng.choice([0.2,0.25,0.3,0.35,0.4,0.5,0.6,0.7,0.8,1.0,1.2,1.5,2.0]))
-                # Both directions dominate because the requested system is LONG+SHORT.
-                direction=str(rng.choice(["both","long","short"],p=[0.75,0.125,0.125]))
-                # Most trials isolate the signal so filters cannot silently starve activity.
+                # The production hypothesis is explicitly bidirectional: every activity-lane
+                # candidate may take LONG and SHORT entries from its respective signal.
+                # Do not spend most of the budget testing one-sided variants.
+                direction="both"
+                # Keep a strong unfiltered single-signal lane for activity, but reserve
+                # 20% for multi-signal combinations; OR is favored for activity while
+                # AND/XOR still test whether confirmation improves net edge.
                 context_filter=str(rng.choice(context_filters,p=[0.75]+[0.25/max(1,len(context_filters)-1)]*(len(context_filters)-1)))
                 confirmation_filter=str(rng.choice(confirmation_filters,p=[0.80]+[0.20/max(1,len(confirmation_filters)-1)]*(len(confirmation_filters)-1)))
-                signal_composition="single"; secondary_family="none"
+                if rng.random() < 0.20:
+                    signal_composition=str(rng.choice(["or","and","xor"],p=[0.75,0.15,0.10]))
+                    secondary_family=str(rng.choice([f for f in families if f != family]))
+                else:
+                    signal_composition="single"; secondary_family="none"
             elif len(families)>1 and rng.random()<0.25:
                 signal_composition=str(rng.choice(["and","or","xor"],p=[0.15,0.75,0.10]))
                 secondary_family=str(rng.choice([f for f in families if f!=family]))
