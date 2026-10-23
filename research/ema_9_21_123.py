@@ -75,6 +75,18 @@ def confirmation_filters(df):
     volmean=v.rolling(20,min_periods=20).mean()
     atrpct=atr/c
     volrank=atrpct.rolling(240,min_periods=60).rank(pct=True)
+    candle_range=(h-lo).replace(0,np.nan)
+    body_ratio=(c-o).abs()/candle_range
+    close_location=(c-lo)/candle_range
+    slope_atr=(e21-e21.shift(5))/atr.replace(0,np.nan)
+    not_extended=((c-e21).abs()/atr.replace(0,np.nan))<=1.25
+    # Additional causal quality filters: no future bars are used.
+    long_body=(body_ratio>=0.50)&(close_location>=0.70)
+    short_body=(body_ratio>=0.50)&(close_location<=0.30)
+    long_adx=(adx>=22)&(plus_di>minus_di)
+    short_adx=(adx>=22)&(minus_di>plus_di)
+    long_slope=slope_atr>=0.08
+    short_slope=slope_atr<=-0.08
     return {
       "baseline": (pd.Series(True,index=df.index),pd.Series(True,index=df.index)),
       "ema21_slope3": ((e21>e21.shift(3)),(e21<e21.shift(3))),
@@ -83,6 +95,15 @@ def confirmation_filters(df):
       "volume_above_sma20": ((v>volmean),(v>volmean)),
       "atr_midrange": ((volrank>=0.2)&(volrank<=0.8),(volrank>=0.2)&(volrank<=0.8)),
       "slope_plus_adx": ((e21>e21.shift(3))&(adx>=18)&(plus_di>minus_di),(e21<e21.shift(3))&(adx>=18)&(minus_di>plus_di)),
+      "strong_candle_close": (long_body,short_body),
+      "adx22_directional": (long_adx,short_adx),
+      "ema21_slope5_atr": (long_slope,short_slope),
+      "rsi_tight_momentum": ((rsi>=52)&(rsi<=68),(rsi<=48)&(rsi>=32)),
+      "avoid_extended_entry": (not_extended,not_extended),
+      "body_plus_adx22": (long_body&long_adx,short_body&short_adx),
+      "slope_adx_candle_stack": (long_slope&long_adx&long_body,short_slope&short_adx&short_body),
+      "trend_quality_stack": (long_slope&long_adx&long_body&(rsi>=52)&(rsi<=68)&not_extended,
+                              short_slope&short_adx&short_body&(rsi<=48)&(rsi>=32)&not_extended),
     }
 
 def run_one(df, sig, atr, side, stopmode):
