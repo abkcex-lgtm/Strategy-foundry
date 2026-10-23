@@ -1101,12 +1101,11 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction,spec.context_filter,spec.confirmation_filter,spec.secondary_family,spec.signal_composition,spec.stop_mode)
 
     def fitness(row):
-        # TRAIN-only, non-compensatory discovery ranking. First keep capital-
-        # surviving candidates; then optimize the actual strategy gates (WR, PF,
-        # TP/day and loss streak) together, before activity shortfalls. This
-        # changes search guidance only: no target, execution rule, or acceptance
-        # threshold changes. Activity remains an explicit hard gate and a
-        # separately weighted surrogate penalty.
+        # TRAIN-only, non-compensatory discovery ranking. Activity evidence
+        # comes before performance distance so a high PF from a handful of trades
+        # cannot dominate a plausible high-frequency candidate. Among activity-
+        # comparable candidates, optimize WR/PF/TP-day/loss-streak distance.
+        # Acceptance gates and execution assumptions remain unchanged.
         m=row["metrics"]
         net=float(m.get("net_pnl",0.0) or 0.0)
         final=float(m.get("final_balance",cfg["initial_balance"]+net) or 0.0)
@@ -1124,10 +1123,10 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                      if isinstance(monthly,dict) and monthly else 1.0)
         return (not bool(m.get("passes_all_targets",False)),
                 exhausted,
-                float(row.get("distance",math.inf)),
                 daily_gap,
                 monthly_gap,
                 not _goal_activity_evidence(m,cfg),
+                float(row.get("distance",math.inf)),
                 net <= 0.0,
                 -net,
                 -int(m.get("trades",0)))
