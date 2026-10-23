@@ -263,9 +263,14 @@ async def main():
                 long_sig=raw_long & long_filter
                 short_sig=raw_short & short_filter
                 for stop in STOPS:
-                    cooldowns = (0, 5, 10, 20) if ent in ("structure_break_after_pullback","swing_failure_reclaim","range_break_retest") else (0,)
-                    for cooldown in cooldowns:
-                        m,ledger=run_combined(part,long_sig,short_sig,atr,stop,loss_cooldown_bars=cooldown,cooldown_trigger_losses=2)
+                    # Targeted cooldown sweep only on the promising structure-break family:
+                    # vary trigger loss streak and wait bars, while preserving all trade rules.
+                    if ent == "structure_break_after_pullback" and filter_name in ("baseline","volume_above_sma20","strong_candle_close","slope_plus_adx") and stop in ("swing_3","swing_5","atr_1.5"):
+                        cooldown_configs=[(0,0)]+[(bars,trigger) for trigger in (1,2,3) for bars in (1,2,3,5,8,13,20,30)]
+                    else:
+                        cooldown_configs=[(bars,2) for bars in ((0,5,10,20) if ent in ("structure_break_after_pullback","swing_failure_reclaim","range_break_retest") else (0,))]
+                    for cooldown,trigger_losses in cooldown_configs:
+                        m,ledger=run_combined(part,long_sig,short_sig,atr,stop,loss_cooldown_bars=cooldown,cooldown_trigger_losses=trigger_losses)
                         results.append({"split":split,"entry_method":ent,"confirmation_filter":filter_name,"side":"LONG+SHORT_SHARED_SINGLE_POSITION","stop_method":stop,"metrics":m,
                                         "ledger_sha256":hashlib.sha256(json.dumps(ledger,sort_keys=True,separators=(",",":")).encode()).hexdigest()})
                         print("EMA123_COMBINED_RESULT "+json.dumps(results[-1],sort_keys=True),flush=True)
@@ -274,7 +279,7 @@ async def main():
         # No target relaxed; rank diagnostic misses by closest overall gates, then PnL.
         gaps=sum([max(0,40.0001-m["win_rate_pct"])/40, max(0,1.0001-(m["profit_factor"] or 0)),max(0,3-m["tp_per_day"])/3,max(0,10-m["trades_per_day"])/10,max(0,m["max_consecutive_losses"]-12)/12,1 if m["capital_exhausted"] else 0])
         return (not m["passes_all_user_targets"],gaps,-m["net_pnl"],-m["trades"])
-    output={"schema":"ema9_21_post_cross_123_filtered_shared_single_position_v3","data":manifest,"data_scope":"Binance USD-M ETHUSDT 1m Apr-Sep 2026; OOS not evaluated","split_rows":{"train":len(splits["train"]),"development":len(splits["development"]),"oos":len(splits["oos"])},"fixed_contract":CONTRACT,"entry_methods":list(ENTRIES),"confirmation_filters":list(confirmation_filters(splits["development"]).keys()),"stop_methods":list(STOPS),"loss_cooldown_variants":{"trigger_after_consecutive_losses":2,"bars":[0,5,10,20]},"execution_mode":"shared chronological LONG+SHORT ledger; one position across both sides","result_count":len(results),"validated_count":sum(x["metrics"]["passes_all_user_targets"] for x in results),"top_by_split":{},"results":results}
+    output={"schema":"ema9_21_post_cross_123_filtered_shared_single_position_v3","data":manifest,"data_scope":"Binance USD-M ETHUSDT 1m Apr-Sep 2026; OOS not evaluated","split_rows":{"train":len(splits["train"]),"development":len(splits["development"]),"oos":len(splits["oos"])},"fixed_contract":CONTRACT,"entry_methods":list(ENTRIES),"confirmation_filters":list(confirmation_filters(splits["development"]).keys()),"stop_methods":list(STOPS),"loss_cooldown_variants":{"legacy":{"trigger_after_consecutive_losses":2,"bars":[0,5,10,20]},"targeted_structure_break_sweep":{"triggers":[1,2,3],"bars":[1,2,3,5,8,13,20,30],"stops":["swing_3","swing_5","atr_1.5"],"filters":["baseline","volume_above_sma20","strong_candle_close","slope_plus_adx"]}},"execution_mode":"shared chronological LONG+SHORT ledger; one position across both sides","result_count":len(results),"validated_count":sum(x["metrics"]["passes_all_user_targets"] for x in results),"top_by_split":{},"results":results}
     for split in ("train","development"):
         subset=sorted([x for x in results if x["split"]==split],key=rank)
         output["top_by_split"][split]=subset[:10]
