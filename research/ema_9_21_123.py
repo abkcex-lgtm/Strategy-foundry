@@ -299,6 +299,22 @@ async def main():
                         results.append({"split":split,"entry_method":ent,"confirmation_filter":filter_name,"side":"LONG+SHORT_SHARED_SINGLE_POSITION","stop_method":stop,"metrics":m,
                                         "ledger_sha256":hashlib.sha256(json.dumps(ledger,sort_keys=True,separators=(",",":")).encode()).hexdigest()})
                         print("EMA123_COMBINED_RESULT "+json.dumps(results[-1],sort_keys=True),flush=True)
+    # Follow-up: asymmetric LONG/SHORT confirmation filters on the two closest
+    # structural-break families. This tests whether one shared filter was suppressing
+    # a stronger side; contract, next-open entry, SL/TP-only, and net 3.5R stay fixed.
+    for split in ("train", "development"):
+        part=splits[split]; sigs,atr=signals(part); filters=confirmation_filters(part)
+        for ent in ("structure_break_after_pullback", "structure_break_pb8_br15"):
+            raw_long,raw_short=sigs[ent]
+            for long_filter_name,(long_filter,_) in filters.items():
+                for short_filter_name,(_,short_filter) in filters.items():
+                    long_sig=raw_long & long_filter
+                    short_sig=raw_short & short_filter
+                    for stop in ("swing_3", "swing_5"):
+                        m,ledger=run_combined(part,long_sig,short_sig,atr,stop,loss_cooldown_bars=0,cooldown_trigger_losses=2)
+                        results.append({"split":split,"entry_method":ent,"confirmation_filter":f"asym_long-{long_filter_name}__short-{short_filter_name}","side":"LONG+SHORT_SHARED_SINGLE_POSITION","stop_method":stop,"metrics":m,
+                                        "ledger_sha256":hashlib.sha256(json.dumps(ledger,sort_keys=True,separators=(",",":")).encode()).hexdigest()})
+                        print("EMA123_ASYMMETRIC_RESULT "+json.dumps(results[-1],sort_keys=True),flush=True)
     def rank(x):
         m=x["metrics"]
         # No target relaxed; rank diagnostic misses by closest overall gates, then PnL.
