@@ -1,0 +1,37 @@
+name: EMA pair sweep (fast, fixed contract)
+on:
+  push:
+    paths:
+      - "research/ema_pair_sweep.py"
+      - ".github/workflows/ema-pair-sweep.yml"
+      - "research/ema_9_21_123.py"
+      - "research/run_factory.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ema-pair-sweep
+  cancel-in-progress: true
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Run EMA pair sweep
+        run: python -m compileall -q app research && PYTHONPATH=. python research/ema_pair_sweep.py
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-pair-sweep-results
+          path: research-results/ema_pair_sweep_report.json
+          if-no-files-found: warn
+          retention-days: 90
