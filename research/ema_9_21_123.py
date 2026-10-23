@@ -12,7 +12,7 @@ from research.run_factory import get_data, split_reference_period
 OUT=Path("research-results"); OUT.mkdir(exist_ok=True)
 CONTRACT=normalize_contract({"symbol":"ETHUSDT","initial_balance":1000,"risk_mode":"fixed_usd","risk_usd":10,"compound":False,"reward_risk":3.5,"target_mode":"net_rr","commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"max_positions":1,"entry_model":"next_candle_open","exit_model":"sl_tp_only","min_win_rate_pct":40,"min_profit_factor":1,"min_tp_per_day":3,"max_consecutive_losses":12,"use_min_win_rate":True,"use_min_profit_factor":True,"use_min_tp_per_day":True,"use_max_consecutive_losses":True,"min_trades_per_day":10,"min_trades_per_month":300,"break_even_enabled":False,"trailing_stop_enabled":False,"partial_exit_enabled":False,"time_exit_enabled":False})
 STOPS=("signal_candle","swing_3","swing_5","atr_1.0","atr_1.5","atr_2.0")
-ENTRIES=("breakout_123","pullback_reclaim","higher_low_breakout","trend_pullback_reversal","squeeze_breakout","swing_failure_reclaim","atr_expansion_breakout")
+ENTRIES=("breakout_123","pullback_reclaim","higher_low_breakout","trend_pullback_reversal","trend_pullback_cross5","trend_pullback_cross10","trend_pullback_cross20","squeeze_breakout","swing_failure_reclaim","atr_expansion_breakout")
 
 def signals(df):
     c=df.close.astype(float); o=df.open.astype(float); h=df.high.astype(float); lo=df.low.astype(float)
@@ -25,6 +25,12 @@ def signals(df):
     # Cross bar itself is excluded: setup must form after the cross and within 30 bars.
     up_age=up.astype(int).rolling(31,min_periods=1).sum().shift(1).fillna(0)>0
     dn_age=dn.astype(int).rolling(31,min_periods=1).sum().shift(1).fillna(0)>0
+    up_age_5=up.astype(int).rolling(6,min_periods=1).sum().shift(1).fillna(0)>0
+    dn_age_5=dn.astype(int).rolling(6,min_periods=1).sum().shift(1).fillna(0)>0
+    up_age_10=up.astype(int).rolling(11,min_periods=1).sum().shift(1).fillna(0)>0
+    dn_age_10=dn.astype(int).rolling(11,min_periods=1).sum().shift(1).fillna(0)>0
+    up_age_20=up.astype(int).rolling(21,min_periods=1).sum().shift(1).fillna(0)>0
+    dn_age_20=dn.astype(int).rolling(21,min_periods=1).sum().shift(1).fillna(0)>0
     three_up=(c>c.shift(1))&(c.shift(1)>c.shift(2))&(c.shift(2)>c.shift(3))
     three_dn=(c<c.shift(1))&(c.shift(1)<c.shift(2))&(c.shift(2)<c.shift(3))
     prev3h=h.shift(1).rolling(3,min_periods=3).max()
@@ -38,8 +44,12 @@ def signals(df):
     # failed-breakout reclaim, and ATR expansion through a prior range boundary.
     touched_up=(lo<=e21).rolling(5,min_periods=1).max().shift(1).fillna(0).astype(bool)
     touched_dn=(h>=e21).rolling(5,min_periods=1).max().shift(1).fillna(0).astype(bool)
-    result["trend_pullback_reversal"]=((e9>e21)&touched_up&(c>o)&(c>h.shift(1))&(c>e21),
-                                        (e9<e21)&touched_dn&(c<o)&(c<lo.shift(1))&(c<e21))
+    trend_long=(e9>e21)&touched_up&(c>o)&(c>h.shift(1))&(c>e21)
+    trend_short=(e9<e21)&touched_dn&(c<o)&(c<lo.shift(1))&(c<e21)
+    result["trend_pullback_reversal"]=(trend_long,trend_short)
+    result["trend_pullback_cross5"]=(trend_long&up_age_5,trend_short&dn_age_5)
+    result["trend_pullback_cross10"]=(trend_long&up_age_10,trend_short&dn_age_10)
+    result["trend_pullback_cross20"]=(trend_long&up_age_20,trend_short&dn_age_20)
     prior_high=h.shift(1).rolling(20,min_periods=20).max()
     prior_low=lo.shift(1).rolling(20,min_periods=20).min()
     width=(prior_high-prior_low)/c
@@ -213,7 +223,13 @@ async def main():
         part=splits[split]; sigs,atr=signals(part); filters=confirmation_filters(part)
         for ent in ENTRIES:
             raw_long,raw_short=sigs[ent]
-            for filter_name,(long_filter,short_filter) in filters.items():
+            if ent.startswith("trend_pullback_cross"):
+                filter_names=("baseline","volume_above_sma20","rsi_tight_momentum","adx22_directional",
+                              "strong_candle_close","avoid_extended_entry","slope_plus_adx","trend_quality_stack")
+                active_filters=((name,filters[name]) for name in filter_names)
+            else:
+                active_filters=filters.items()
+            for filter_name,(long_filter,short_filter) in active_filters:
                 long_sig=raw_long & long_filter
                 short_sig=raw_short & short_filter
                 for stop in STOPS:
