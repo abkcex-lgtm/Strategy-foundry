@@ -23,7 +23,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: ethusdt-strategy-factory-research-v099-equal-weight-holdout
+  group: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && format('ethusdt-strategy-factory-research-v099-quick-{0}', github.run_id) || 'ethusdt-strategy-factory-research-v099-equal-weight-holdout' }}
   cancel-in-progress: true
 jobs:
   research:
