@@ -1101,14 +1101,12 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         return (spec.family,spec.fast,spec.slow,spec.atr_period,round(spec.stop_atr,6),spec.direction,spec.context_filter,spec.confirmation_filter,spec.secondary_family,spec.signal_composition,spec.stop_mode)
 
     def fitness(row):
-        # TRAIN-only, non-compensatory discovery ranking. Activity is a primary
-        # objective, not a late tie-breaker: the previous ordering ranked sparse
-        # high-PF samples above active candidates because distance omits activity
-        # from its four equal-weight core metrics.
-        # Passing candidates still rank first; exhausted-capital candidates are
-        # rejected next; then rank by daily and monthly activity shortfall before
-        # performance distance. Acceptance gates and execution assumptions do
-        # not change.
+        # TRAIN-only, non-compensatory discovery ranking. First keep capital-
+        # surviving candidates; then optimize the actual strategy gates (WR, PF,
+        # TP/day and loss streak) together, before activity shortfalls. This
+        # changes search guidance only: no target, execution rule, or acceptance
+        # threshold changes. Activity remains an explicit hard gate and a
+        # separately weighted surrogate penalty.
         m=row["metrics"]
         net=float(m.get("net_pnl",0.0) or 0.0)
         final=float(m.get("final_balance",cfg["initial_balance"]+net) or 0.0)
@@ -1126,10 +1124,10 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                      if isinstance(monthly,dict) and monthly else 1.0)
         return (not bool(m.get("passes_all_targets",False)),
                 exhausted,
+                float(row.get("distance",math.inf)),
                 daily_gap,
                 monthly_gap,
                 not _goal_activity_evidence(m,cfg),
-                float(row.get("distance",math.inf)),
                 net <= 0.0,
                 -net,
                 -int(m.get("trades",0)))
