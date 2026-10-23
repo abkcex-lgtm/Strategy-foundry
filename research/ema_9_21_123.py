@@ -223,8 +223,13 @@ def run_combined(df, long_sig, short_sig, atr, stopmode, loss_cooldown_bars=0, c
                 reason,price=resolution; exit_t=int(ts[j]); exit_i=j; break
         if exit_i is None: break
         gross=(price-entry)*qty*(1 if side_long else -1); ec=entry*qty*er; xc=price*qty*xr; net=gross-ec-xc; bal+=net
-        if reason=="TP": streak=0
-        else: streak+=1; maxstreak=max(maxstreak,streak)
+        if reason=="TP":
+            streak=0
+        else:
+            streak+=1
+            maxstreak=max(maxstreak,streak)
+            if loss_cooldown_bars>0 and streak>=cooldown_trigger_losses:
+                cooldown_until=max(cooldown_until,exit_i+loss_cooldown_bars)
         ledger.append({"entry_time":int(ts[entry_i]),"signal_time":int(ts[i]),"exit_time":exit_t,"side":side,"entry":entry,"stop":stop,"target":tp,"exit":price,"reason":reason,"net":net,"costs":ec+xc,"streak":streak})
         cursor=int(np.searchsorted(signal_idx,exit_i+1,side="left"))
     wins=sum(t["reason"]=="TP" and t["net"]>0 for t in ledger); gp=sum(max(0,t["net"]) for t in ledger); gl=abs(sum(min(0,t["net"]) for t in ledger))
