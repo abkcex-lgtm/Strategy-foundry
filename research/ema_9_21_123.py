@@ -312,3 +312,5 @@ async def main():
     print("EMA123_FINAL "+json.dumps({"report":"research-results/ema_9_21_123_report.json","result_count":len(results),"validated_count":output["validated_count"],"top_by_split":{k:[{"entry_method":x["entry_method"],"confirmation_filter":x.get("confirmation_filter","baseline"),"side":x["side"],"stop_method":x["stop_method"],"metrics":x["metrics"]} for x in v[:5]] for k,v in output["top_by_split"].items()}},sort_keys=True),flush=True)
 
 if __name__=="__main__": asyncio.run(main())
+
+# Research execution marker: rerun the focused real-data sweep for the latest strategy iteration.
