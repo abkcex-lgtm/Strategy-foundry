@@ -38,22 +38,30 @@ async def main():
  prepared_train=prepare_backtest_data(train)
  prepared_dev=prepare_backtest_data(dev)
  print("FOCUSED_FAMILY_START "+json.dumps({
-  "families":FAMILIES,"requested_candidates":5000,"seed":271828,
+  "families":FAMILIES,"requested_candidates":5000,"seed":271830,
   "train_rows":len(train),"development_rows":len(dev),
   "dataset_sha256":manifest.get("dataset_sha256"),
   "policy":"OOS untouched; fixed contract"
  },sort_keys=True),flush=True)
  search=search_candidates(
-  train,max_candidates=5000,seed=271828,contract=CONTRACT,
+  train,max_candidates=5000,seed=271830,contract=CONTRACT,
   algorithm="surrogate_genetic",
   search_space={"families":FAMILIES,
    "context_filters":["none","ema_trend","adx_strength","volume_confirm","vwap_side","low_volatility"],
    "confirmation_filters":["none","candle_direction","momentum","rsi_midline"]},
   prepared_context=prepared_train
  )
+ pool=[]
+ seen_strategies=set()
+ for source, candidates in (("train_ranked",search.get("results",[])),
+                            ("train_win_rate_ge_30",search.get("diagnostic_win_rate_30_candidates",[]))):
+  for candidate in candidates:
+   key=json.dumps(candidate.get("strategy",{}),sort_keys=True,separators=(",",":"))
+   if key and key not in seen_strategies:
+    seen_strategies.add(key); pool.append({**candidate,"_selection_source":source})
  rows=[]
  audit_failures=[]
- for idx,item in enumerate(search.get("results",[]),1):
+ for idx,item in enumerate(pool,1):
   try:
    strategy=item["strategy"]
    primary=backtest(dev,strategy,CONTRACT,_prepared_context=prepared_dev)
@@ -62,7 +70,7 @@ async def main():
    metrics=brief(primary["metrics"])
    distance,failed,distances=_candidate_distance(primary["metrics"],CONTRACT)
    row={
-    "rank_train":idx,"strategy":strategy,
+    "rank_train":idx,"selection_source":item.get("_selection_source"),"strategy":strategy,
     "train_metrics":brief(item.get("metrics",{})),
     "train_failed_conditions":item.get("failed_conditions",[]),
     "development_metrics":metrics,
@@ -81,7 +89,7 @@ async def main():
   print("FOCUSED_FAMILY_CANDIDATE "+json.dumps(rows[-1] if rows else audit_failures[-1],sort_keys=True),flush=True)
  rows.sort(key=lambda x:(not x["development_passes_all_targets"],x["development_distance"],x["development_metrics"].get("capital_exhausted",False),-float(x["development_metrics"].get("net_pnl") or 0)))
  report={
-  "schema":"focused_mean_reversion_failed_breakout_search_v1",
+  "schema":"focused_mean_reversion_failed_breakout_search_v2",
   "data":manifest,
   "data_scope":"Binance USD-M ETHUSDT 1m Apr-Sep 2026; Train Apr-Jun and Development Jul only; OOS untouched",
   "split_rows":{"train":len(train),"development":len(dev),"oos_not_evaluated":len(splits["oos"])},
@@ -91,7 +99,7 @@ async def main():
    "family_evaluated_counts":search.get("family_evaluated_counts"),"algorithm":search.get("algorithm"),
    "seed":search.get("seed"),"preflight_summary":search.get("preflight_summary"),
    "all_passing_train":search.get("all_passing"),"warning":search.get("warning")},
-  "development_audit_failures":audit_failures,
+  "development_audit_failures":audit_failures,"development_candidate_pool_count":len(pool),
   "development_validated_count":sum(x["development_passes_all_targets"] for x in rows),
   "development_results":rows,
   "top_development":rows[:5]
@@ -101,7 +109,7 @@ async def main():
   "report":"research-results/focused_family_report.json",
   "requested":report["search"]["requested_candidates"],
   "evaluated":report["search"]["evaluated_candidates"],
-  "development_validated_count":report["development_validated_count"],
+  "development_candidate_pool_count":len(pool),"development_validated_count":report["development_validated_count"],
   "top_development":[{"strategy":x["strategy"],"train_metrics":x["train_metrics"],"development_metrics":x["development_metrics"],
    "development_failed_conditions":x["development_failed_conditions"],"development_audit_status":x["development_audit_status"]} for x in rows[:5]]
  },sort_keys=True),flush=True)
