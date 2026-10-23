@@ -19,7 +19,7 @@ on:
       runtime_seconds:
         description: "Maximum research search time in seconds"
         required: false
-        default: "720"
+        default: "19500"
 permissions:
   contents: write
 concurrency:
@@ -99,4 +99,4 @@ jobs:
             git push origin HEAD:main
           fi
 
-# Explicit diagnostics rerun trigger; all acceptance gates remain unchanged.
+# [full-research] Owner-directed extended search: 500,000 requested candidates, 19,500-second search budget; preserve all strict gates and leave OOS untouched unless TRAIN and DEVELOPMENT both pass.
