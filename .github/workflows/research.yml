@@ -100,3 +100,5 @@ jobs:
           fi
 
 # [full-research] Owner-directed extended search: 500,000 requested candidates, 19,500-second search budget; preserve all strict gates and leave OOS untouched unless TRAIN and DEVELOPMENT both pass.
+
+# [15m-research] Next bounded run: rerun the complete multi-family factory with unchanged strict gates, fixed net $10 risk / $35 target, shared single-position execution, and OOS untouched.
