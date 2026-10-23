@@ -1,0 +1,37 @@
+name: Focused EMA 9/21 post-cross 1-2-3 test
+on:
+  push:
+    paths:
+      - "research/ema_9_21_123.py"
+      - ".github/workflows/ema-9-21-123.yml"
+      - "research/run_factory.py"
+      - "app/engine.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ema-9-21-123-focused-test
+  cancel-in-progress: true
+jobs:
+  focused-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Run focused real-data test
+        run: python -m compileall -q app research && python research/ema_9_21_123.py
+      - name: Upload EMA 9/21 1-2-3 report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-9-21-123-results
+          path: research-results/ema_9_21_123_report.json
+          if-no-files-found: warn
+          retention-days: 90
