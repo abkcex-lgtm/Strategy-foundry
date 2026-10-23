@@ -14,10 +14,25 @@ def ema_filters(df):
     c=df.close.astype(float)
     e21=c.ewm(span=21,adjust=False,min_periods=21).mean()
     e50=c.ewm(span=50,adjust=False,min_periods=50).mean()
+    # Higher-timeframe bars are only exposed after their full interval has closed.
+    ts=pd.to_datetime(df.open_time,unit="ms",utc=True)
+    base=pd.Series(c.to_numpy(),index=ts)
+    def htf_trend(rule):
+        bars=base.resample(rule,closed="left",label="right").last().dropna()
+        fast=bars.ewm(span=9,adjust=False,min_periods=9).mean()
+        slow=bars.ewm(span=21,adjust=False,min_periods=21).mean()
+        # A 1m signal at time t can only see HTF candles whose right edge <= t.
+        ff=(fast>slow).reindex(ts,method="ffill").fillna(False).to_numpy(bool)
+        ss=(fast<slow).reindex(ts,method="ffill").fillna(False).to_numpy(bool)
+        return pd.Series(ff,index=df.index),pd.Series(ss,index=df.index)
+    h15=htf_trend("15min"); h1=htf_trend("1h")
     return {
       "ema50_trend": ((c>e50)&(e21>e50), (c<e50)&(e21<e50)),
       "ema9_21_50_alignment": ((e21>e50), (e21<e50)),
       "ema50_slope": (e50>e50.shift(5), e50<e50.shift(5)),
+      "htf_15m_ema9_21": h15,
+      "htf_1h_ema9_21": h1,
+      "htf_15m_and_1h": (h15[0]&h1[0],h15[1]&h1[1]),
     }
 
 def digest(ledger):
@@ -50,7 +65,8 @@ async def main():
         singles=("baseline","strong_candle_close","ema21_slope5_atr","adx22_directional",
                  "rsi_tight_momentum","avoid_extended_entry","distance_to_ema_atr_0_75",
                  "distance_to_ema_atr_1_0","slope_adx_candle_stack","trend_quality_stack",
-                 "ema50_trend","ema9_21_50_alignment","ema50_slope")
+                 "ema50_trend","ema9_21_50_alignment","ema50_slope",
+                 "htf_15m_ema9_21","htf_1h_ema9_21","htf_15m_and_1h")
         for name in singles:
             specs.append((name,f[name][0],f[name][1]))
         combos=(("ema21_slope5_atr","adx22_directional"),
@@ -66,7 +82,15 @@ async def main():
                 ("avoid_extended_entry","adx22_directional"),
                 ("distance_to_ema_atr_1_0","strong_candle_close"),
                 ("distance_to_ema_atr_1_0","adx22_directional"),
-                ("rsi_tight_momentum","strong_candle_close"))
+                ("rsi_tight_momentum","strong_candle_close"),
+                ("htf_15m_ema9_21","strong_candle_close"),
+                ("htf_1h_ema9_21","strong_candle_close"),
+                ("htf_15m_ema9_21","adx22_directional"),
+                ("htf_1h_ema9_21","adx22_directional"),
+                ("htf_15m_and_1h","strong_candle_close"),
+                ("htf_15m_and_1h","adx22_directional"),
+                ("htf_15m_ema9_21","ema21_slope5_atr"),
+                ("htf_1h_ema9_21","ema21_slope5_atr"))
         for names in combos:
             specs.append(("+".join(names),
                           np.logical_and.reduce([f[n][0].fillna(False).to_numpy(bool) for n in names]),
@@ -102,7 +126,7 @@ async def main():
                             "stop_method":stop,"cooldown_bars":cool_bars,"cooldown_trigger_losses":trigger,
                             "side":"LONG+SHORT_SHARED_SINGLE_POSITION","metrics":m,
                             "ledger_sha256":digest(ledger)})
-    out={"schema":"focused_ema_causal_filter_stack_cooldown_v2","data":manifest,
+    out={"schema":"focused_ema_causal_filter_stack_cooldown_htf_v3","data":manifest,
          "data_scope":"Binance USD-M ETHUSDT 1m Apr-Sep 2026; Train and Development only; OOS not evaluated",
          "split_rows":{"train":len(splits["train"]),"development":len(splits["development"]),"oos":len(splits["oos"])},
          "fixed_contract":CONTRACT,"entry_methods":list(entries),"stop_methods":list(stops),
