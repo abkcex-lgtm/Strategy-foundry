@@ -117,45 +117,15 @@ def test_empty_search_space_selection_is_rejected():
                           search_space={"families": []})
 
 
-def test_structural_stop_genomes_do_not_multiply_irrelevant_atr_stop_values(monkeypatch):
-    # Structural stops derive their price from candle/swing extrema; stop_atr
-    # must not manufacture multiple candidate identities for the same phenotype.
-    seen = []
+def test_effective_genome_key_ignores_atr_multiplier_for_structural_stops():
+    base = engine.StrategySpec(family="ema_crossover", fast=8, slow=24,
+                               stop_mode="swing_3", stop_atr=0.4)
+    changed = engine.replace(base, stop_atr=5.0)
+    assert engine._effective_genome_key(base) == engine._effective_genome_key(changed)
 
-    def fake_backtest(frame, spec, contract):
-        seen.append((spec.stop_mode, spec.stop_atr))
-        metrics = {
-            "trades": 10, "wins": 2, "losses": 8, "win_rate_pct": 20.0,
-            "profit_factor": 0.5, "avg_net_tp_per_day": 0.1,
-            "max_consecutive_losses": 8, "net_pnl": -50.0,
-            "final_balance": 950.0, "total_costs": 1.0,
-            "data_hash_sha256": "d" * 64, "rows": 500, "span_days": 1.0,
-            "passes_all_targets": False,
-        }
-        return {
-            "strategy": engine.asdict(spec), "contract": contract, "metrics": metrics,
-            "run_hash_sha256": hashlib.sha256(repr(spec).encode()).hexdigest(),
-            "ledger": [],
-        }
-
-    monkeypatch.setattr(engine, "backtest", fake_backtest)
-    monkeypatch.setattr(audit, "independent_replay", lambda frame, spec, cfg: {"ledger": []})
-    result = search_candidates(
-        pd.DataFrame(), max_candidates=80, seed=19, contract=normalize_contract(),
-        search_space={"families": ["ema_crossover"], "context_filters": ["none"],
-                      "confirmation_filters": ["none"]},
-    )
-    structural = [x for x in seen if x[0] != "atr"]
-    assert result["evaluated_candidates"] == len(set(
-        (row["strategy"]["family"], row["strategy"]["fast"], row["strategy"]["slow"],
-         row["strategy"]["atr_period"], row["strategy"]["direction"],
-         row["strategy"]["context_filter"], row["strategy"]["confirmation_filter"],
-         row["strategy"]["secondary_family"], row["strategy"]["signal_composition"],
-         row["strategy"]["stop_mode"], row["strategy"]["stop_atr"] if row["strategy"]["stop_mode"] == "atr" else None)
-        for row in result["results"]
-    )) or result["evaluated_candidates"] >= len(seen)
-    assert structural
-
+    atr_base = engine.replace(base, stop_mode="atr", stop_atr=0.4)
+    atr_changed = engine.replace(base, stop_mode="atr", stop_atr=5.0)
+    assert engine._effective_genome_key(atr_base) != engine._effective_genome_key(atr_changed)
 
 def test_new_family_signal_arrays_match_independent_replay():
     # Deterministic unit-test fixture only; never used as market research data.
