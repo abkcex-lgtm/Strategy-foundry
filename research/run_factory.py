@@ -414,31 +414,37 @@ def run(df,data_manifest):
             outcome="NO_CANDIDATE_MET_DAILY_ACTIVITY_FLOOR" if search_complete else "INCOMPLETE_SEARCH_NO_ACTIVITY_ELIGIBLE_CANDIDATE"
     else:
         outcome="NO_CANDIDATE_MET_DAILY_ACTIVITY_FLOOR" if search_complete else "INCOMPLETE_SEARCH_NO_ACTIVITY_ELIGIBLE_CANDIDATE"
-        # Preserve a truthful, downloadable report instead of exporting low-activity
-        # candidates that the user explicitly excluded.
+        # Preserve audited TRAIN/DEVELOPMENT near-misses when no candidate passes.
+        # This is diagnostics only; never inspect OOS for candidates that failed prior gates.
+        diagnostics=sorted(dev_near,key=near_key)[:5]
         full_hash=frame_hash(df)
+        diagnostic_results=[{k:v for k,v in item.items() if not k.startswith("_")} for item in diagnostics]
         write(OUT/"report.json",{
             "schema_version":1,"outcome":outcome,"source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
             "requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"candidate_search_complete":search_complete,
             "failed_candidate_evaluations":failed,"candidate_failure_reason_counts":failure_reasons,
             "completed_batches":batches,"family_evaluated_counts":family_counts,"seed":SEED,"algorithm":ALGORITHM,
             "contract":cfg,"target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,
-            "avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":12,"min_trades_per_day":10,"risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5},
+            "avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":12,"min_trades_per_day":10,"min_trades_per_month":300,
+            "risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5},
             "data":data_manifest,"splits":{"train":{"rows":len(train),"sha256":train_hash},
-            "development":{"rows":len(dev),"sha256":dev_hash},"oos":{"rows":len(oos),"sha256":oos_hash}},
-            "validated_strategy_count":len(validated),"returned_candidate_count":0,"results":[],
+            "development":{"rows":len(dev),"sha256":dev_hash},"oos":{"rows":len(oos),"sha256":None,"evaluated":False}},
+            "validated_strategy_count":0,"returned_candidate_count":len(diagnostic_results),"results":diagnostic_results,
+            "diagnostic_only":True,"oos_evaluated_count":0,
             "activity_eligible_near_miss_count":len(activity_eligible_near),
-            "note":"No candidate passed every TRAIN and DEVELOPMENT gate, so OOS was not evaluated and no candidate is returned. Near-misses are not allowed to consume the untouched OOS holdout. No acceptance threshold is relaxed.",
-            "reproducibility":"Candidate selection and primary/independent ledger audits ran before this activity gate."})
+            "note":"No candidate passed every TRAIN and DEVELOPMENT gate. Results contain up to five audited TRAIN/DEVELOPMENT near-misses and their failed conditions for diagnosis only; OOS was not evaluated and remains untouched. These are not validated strategies and no acceptance threshold was relaxed.",
+            "reproducibility":"Primary and independent ledger audits were compared on TRAIN and DEVELOPMENT; OOS remains untouched until a candidate passes both splits."})
         with zipfile.ZipFile(OUT/"validated_strategies.zip","w",zipfile.ZIP_DEFLATED) as z:
-            z.writestr("README.txt","No strategies exported: no candidate met the agreed daily activity floor across Train, Development, and OOS.")
+            z.writestr("README.txt","No validated strategies exported. report.json contains up to five audited TRAIN/DEVELOPMENT near-misses for diagnosis only; OOS was not evaluated.")
+            z.writestr("market_data_manifest.json",json.dumps(data_manifest,ensure_ascii=False,sort_keys=True,indent=2))
         write(PROGRESS,{"status":"completed" if search_complete else "partial_search_reported","outcome":outcome,
-            "requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"validated_strategy_count":len(validated),
-            "returned_candidate_count":0,"report":"research-results/report.json","strategy_zip":"research-results/validated_strategies.zip"})
+            "requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"validated_strategy_count":0,
+            "returned_candidate_count":len(diagnostic_results),"report":"research-results/report.json","strategy_zip":"research-results/validated_strategies.zip"})
         print("FINAL_REPORT "+json.dumps({"outcome":outcome,"requested_candidates":REQUESTED,
-            "evaluated_unique_candidates":completed,"validated_strategy_count":len(validated),"returned_candidate_count":0,
+            "evaluated_unique_candidates":completed,"validated_strategy_count":0,"returned_candidate_count":len(diagnostic_results),
             "full_dataset_sha256":full_hash,"report_path":"research-results/report.json","zip_path":"research-results/validated_strategies.zip"},sort_keys=True),flush=True)
         return
+
     # Near-misses are not certificates. Preserve their real per-split metrics and audit
     # evidence without running expensive full-dataset standalone certification for them.
     # Full-data replay/export remains mandatory for candidates that pass every gate.
