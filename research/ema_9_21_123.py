@@ -12,7 +12,7 @@ from research.run_factory import get_data, split_reference_period
 OUT=Path("research-results"); OUT.mkdir(exist_ok=True)
 CONTRACT=normalize_contract({"symbol":"ETHUSDT","initial_balance":1000,"risk_mode":"fixed_usd","risk_usd":10,"compound":False,"reward_risk":3.5,"target_mode":"net_rr","commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"max_positions":1,"entry_model":"next_candle_open","exit_model":"sl_tp_only","min_win_rate_pct":40,"min_profit_factor":1,"min_tp_per_day":3,"max_consecutive_losses":12,"use_min_win_rate":True,"use_min_profit_factor":True,"use_min_tp_per_day":True,"use_max_consecutive_losses":True,"min_trades_per_day":10,"min_trades_per_month":300,"break_even_enabled":False,"trailing_stop_enabled":False,"partial_exit_enabled":False,"time_exit_enabled":False})
 STOPS=("signal_candle","swing_3","swing_5","atr_1.0","atr_1.5","atr_2.0")
-ENTRIES=("breakout_123","pullback_reclaim","higher_low_breakout","trend_pullback_reversal","trend_pullback_cross5","trend_pullback_cross10","trend_pullback_cross20","squeeze_breakout","swing_failure_reclaim","atr_expansion_breakout")
+ENTRIES=("breakout_123","pullback_reclaim","higher_low_breakout","trend_pullback_reversal","trend_pullback_cross5","trend_pullback_cross10","trend_pullback_cross20","structure_break_after_pullback","range_break_retest","swing_structure_break","squeeze_breakout","swing_failure_reclaim","atr_expansion_breakout")
 
 def signals(df):
     c=df.close.astype(float); o=df.open.astype(float); h=df.high.astype(float); lo=df.low.astype(float)
@@ -50,7 +50,29 @@ def signals(df):
     result["trend_pullback_cross5"]=(trend_long&up_age_5,trend_short&dn_age_5)
     result["trend_pullback_cross10"]=(trend_long&up_age_10,trend_short&dn_age_10)
     result["trend_pullback_cross20"]=(trend_long&up_age_20,trend_short&dn_age_20)
+    # New market-structure entries: causal swing/range levels are shifted so the
+    # current signal candle never participates in its own reference level.
     prior_high=h.shift(1).rolling(20,min_periods=20).max()
+    prior_low=lo.shift(1).rolling(20,min_periods=20).min()
+    recent_pullback_long=(lo.shift(1).rolling(5,min_periods=5).min()<=e21.shift(1))
+    recent_pullback_short=(h.shift(1).rolling(5,min_periods=5).max()>=e21.shift(1))
+    result["structure_break_after_pullback"]=((e9>e21)&recent_pullback_long&(c>prior_high)&(c>o),
+                                                (e9<e21)&recent_pullback_short&(c<prior_low)&(c<o))
+    # Breakout then retest of the prior 10-bar boundary, with a close back
+    # through the boundary in the direction of the original break.
+    high10=h.shift(1).rolling(10,min_periods=10).max()
+    low10=lo.shift(1).rolling(10,min_periods=10).min()
+    broke_up=(c.shift(1)>high10.shift(1))
+    broke_dn=(c.shift(1)<low10.shift(1))
+    result["range_break_retest"]=((broke_up&(lo<=high10)&(c>high10)&(c>o)),
+                                  (broke_dn&(h>=low10)&(c<low10)&(c<o)))
+    # Confirm a higher-low / lower-high structure before breaking a recent swing.
+    low5=lo.shift(1).rolling(5,min_periods=5).min()
+    high5=h.shift(1).rolling(5,min_periods=5).max()
+    higher_low=(low5>low5.shift(5))
+    lower_high=(high5<high5.shift(5))
+    result["swing_structure_break"]=((higher_low&(c>high5)&(c>o)),
+                                     (lower_high&(c<low5)&(c<o)))
     prior_low=lo.shift(1).rolling(20,min_periods=20).min()
     width=(prior_high-prior_low)/c
     width_rank=width.rolling(240,min_periods=60).rank(pct=True)
@@ -223,7 +245,7 @@ async def main():
         part=splits[split]; sigs,atr=signals(part); filters=confirmation_filters(part)
         for ent in ENTRIES:
             raw_long,raw_short=sigs[ent]
-            if ent.startswith("trend_pullback_cross"):
+            if ent.startswith("trend_pullback_cross") or ent in ("structure_break_after_pullback","range_break_retest","swing_structure_break"):
                 filter_names=("baseline","volume_above_sma20","rsi_tight_momentum","adx22_directional",
                               "strong_candle_close","avoid_extended_entry","slope_plus_adx","trend_quality_stack")
                 active_filters=((name,filters[name]) for name in filter_names)
