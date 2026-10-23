@@ -53,7 +53,7 @@ jobs:
       # [15m-research] Final batch size adapts to measured throughput; report audited near-misses even when no candidate meets all gates.
       # Goal-directed 15-minute lane uses the adaptive surrogate-genetic engine so later batches can use prior candidates;
       # the stratified-random lane remains available for screening. No acceptance thresholds are relaxed.
-      FOUNDRY_ALGORITHM: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '[screening-research]') || contains(github.event.head_commit.message, '[15m-research]')) && 'stratified_random' || 'surrogate_genetic' }}
+      FOUNDRY_ALGORITHM: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[screening-research]') && 'stratified_random' || 'surrogate_genetic' }}
       FOUNDRY_MAX_RUNTIME_SECONDS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[screening-research]') && '720' || github.event_name == 'push' && contains(github.event.head_commit.message, '[15m-research]') && '600' || github.event_name == 'push' && contains(github.event.head_commit.message, '[full-research]') && '19500' || github.event_name == 'push' && '600' || github.event.inputs.runtime_seconds || '19500' }}
     steps:
       - uses: actions/checkout@v4
