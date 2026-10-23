@@ -117,6 +117,7 @@ def test_empty_search_space_selection_is_rejected():
                           search_space={"families": []})
 
 
+# [15m-research] Run the strict, real-data screen against canonicalized strategy identities.
 def test_effective_genome_key_ignores_atr_multiplier_for_structural_stops():
     base = engine.StrategySpec(family="ema_crossover", fast=8, slow=24,
                                stop_mode="swing_3", stop_atr=0.4)
