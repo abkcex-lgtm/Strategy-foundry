@@ -1,9 +1,9 @@
 {
-  "evaluated_unique_candidates": 243192,
+  "evaluated_unique_candidates": 4081,
   "outcome": "INCOMPLETE_SEARCH_NO_ACTIVITY_ELIGIBLE_CANDIDATE",
   "report": "research-results/report.json",
   "requested_candidates": 500000,
-  "returned_candidate_count": 0,
+  "returned_candidate_count": 5,
   "status": "partial_search_reported",
   "strategy_zip": "research-results/validated_strategies.zip",
   "validated_strategy_count": 0
