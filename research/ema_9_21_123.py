@@ -12,7 +12,7 @@ from research.run_factory import get_data, split_reference_period
 OUT=Path("research-results"); OUT.mkdir(exist_ok=True)
 CONTRACT=normalize_contract({"symbol":"ETHUSDT","initial_balance":1000,"risk_mode":"fixed_usd","risk_usd":10,"compound":False,"reward_risk":3.5,"target_mode":"net_rr","commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"max_positions":1,"entry_model":"next_candle_open","exit_model":"sl_tp_only","min_win_rate_pct":40,"min_profit_factor":1,"min_tp_per_day":3,"max_consecutive_losses":12,"use_min_win_rate":True,"use_min_profit_factor":True,"use_min_tp_per_day":True,"use_max_consecutive_losses":True,"min_trades_per_day":10,"min_trades_per_month":300,"break_even_enabled":False,"trailing_stop_enabled":False,"partial_exit_enabled":False,"time_exit_enabled":False})
 STOPS=("signal_candle","swing_3","swing_5","atr_1.0","atr_1.5","atr_2.0")
-ENTRIES=("breakout_123","pullback_reclaim","higher_low_breakout")
+ENTRIES=("breakout_123","pullback_reclaim","higher_low_breakout","trend_pullback_reversal","squeeze_breakout","swing_failure_reclaim","atr_expansion_breakout")
 
 def signals(df):
     c=df.close.astype(float); o=df.open.astype(float); h=df.high.astype(float); lo=df.low.astype(float)
@@ -34,7 +34,26 @@ def signals(df):
     result["pullback_reclaim"]=(up_age&(lo<=e21)&(c>e21)&(c>o), dn_age&(h>=e21)&(c<e21)&(c<o))
     result["higher_low_breakout"]=(up_age&(lo.shift(1)<lo.shift(2))&(lo>lo.shift(1))&(c>h.shift(1))&(c>e21),
                                    dn_age&(h.shift(1)>h.shift(2))&(h<h.shift(1))&(c<lo.shift(1))&(c<e21))
+    # Additional entry structures: trend pullback/reversal, volatility squeeze breakout,
+    # failed-breakout reclaim, and ATR expansion through a prior range boundary.
+    touched_up=(lo<=e21).rolling(5,min_periods=1).max().shift(1).fillna(0).astype(bool)
+    touched_dn=(h>=e21).rolling(5,min_periods=1).max().shift(1).fillna(0).astype(bool)
+    result["trend_pullback_reversal"]=((e9>e21)&touched_up&(c>o)&(c>h.shift(1))&(c>e21),
+                                        (e9<e21)&touched_dn&(c<o)&(c<lo.shift(1))&(c<e21))
+    prior_high=h.shift(1).rolling(20,min_periods=20).max()
+    prior_low=lo.shift(1).rolling(20,min_periods=20).min()
+    width=(prior_high-prior_low)/c
+    width_rank=width.rolling(240,min_periods=60).rank(pct=True)
+    squeeze=width_rank.shift(1)<=0.25
+    result["squeeze_breakout"]=(squeeze&(c>prior_high),squeeze&(c<prior_low))
+    sweep_low=lo<lo.shift(1).rolling(10,min_periods=10).min()
+    sweep_high=h>h.shift(1).rolling(10,min_periods=10).max()
+    result["swing_failure_reclaim"]=(sweep_low&(c>lo.shift(1).rolling(10,min_periods=10).min())&(c>o),
+                                     sweep_high&(c<h.shift(1).rolling(10,min_periods=10).max())&(c<o))
     atr=pd.concat([h-lo,(h-c.shift(1)).abs(),(lo-c.shift(1)).abs()],axis=1).max(axis=1).ewm(alpha=1/14,adjust=False,min_periods=14).mean()
+    atr_base=atr.rolling(20,min_periods=20).mean()
+    result["atr_expansion_breakout"]=( (atr>atr_base.shift(1)*1.15)&(c>prior_high)&(c>o),
+                                        (atr>atr_base.shift(1)*1.15)&(c<prior_low)&(c<o))
     return result,atr
 
 def confirmation_filters(df):
