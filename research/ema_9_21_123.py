@@ -58,7 +58,7 @@ def signals(df):
 
 def confirmation_filters(df):
     """Causal directional confirmations; these refine entries without changing risk/exit contract."""
-    c=df.close.astype(float); h=df.high.astype(float); lo=df.low.astype(float); v=df.volume.astype(float) if "volume" in df.columns else pd.Series(np.nan,index=df.index)
+    c=df.close.astype(float); o=df.open.astype(float); h=df.high.astype(float); lo=df.low.astype(float); v=df.volume.astype(float) if "volume" in df.columns else pd.Series(np.nan,index=df.index)
     e21=c.ewm(span=21,adjust=False,min_periods=21).mean()
     tr=pd.concat([h-lo,(h-c.shift(1)).abs(),(lo-c.shift(1)).abs()],axis=1).max(axis=1)
     atr=tr.ewm(alpha=1/14,adjust=False,min_periods=14).mean()
