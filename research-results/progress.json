@@ -1,5 +1,5 @@
 {
-  "evaluated_unique_candidates": 2274,
+  "evaluated_unique_candidates": 11748,
   "outcome": "INCOMPLETE_SEARCH_NO_ACTIVITY_ELIGIBLE_CANDIDATE",
   "report": "research-results/report.json",
   "requested_candidates": 500000,
