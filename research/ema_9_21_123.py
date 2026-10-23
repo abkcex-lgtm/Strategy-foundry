@@ -37,6 +37,35 @@ def signals(df):
     atr=pd.concat([h-lo,(h-c.shift(1)).abs(),(lo-c.shift(1)).abs()],axis=1).max(axis=1).ewm(alpha=1/14,adjust=False,min_periods=14).mean()
     return result,atr
 
+def confirmation_filters(df):
+    """Causal directional confirmations; these refine entries without changing risk/exit contract."""
+    c=df.close.astype(float); h=df.high.astype(float); lo=df.low.astype(float); v=df.volume.astype(float) if "volume" in df.columns else pd.Series(np.nan,index=df.index)
+    e21=c.ewm(span=21,adjust=False,min_periods=21).mean()
+    tr=pd.concat([h-lo,(h-c.shift(1)).abs(),(lo-c.shift(1)).abs()],axis=1).max(axis=1)
+    atr=tr.ewm(alpha=1/14,adjust=False,min_periods=14).mean()
+    delta=c.diff(); gain=delta.clip(lower=0).ewm(alpha=1/14,adjust=False,min_periods=14).mean()
+    loss=(-delta.clip(upper=0)).ewm(alpha=1/14,adjust=False,min_periods=14).mean()
+    rs=gain/loss.replace(0,np.nan); rsi=100-(100/(1+rs))
+    upmove=h.diff(); downmove=-lo.diff()
+    plus_dm=upmove.where((upmove>downmove)&(upmove>0),0.0)
+    minus_dm=downmove.where((downmove>upmove)&(downmove>0),0.0)
+    plus_di=100*plus_dm.ewm(alpha=1/14,adjust=False,min_periods=14).mean()/atr.replace(0,np.nan)
+    minus_di=100*minus_dm.ewm(alpha=1/14,adjust=False,min_periods=14).mean()/atr.replace(0,np.nan)
+    dx=100*(plus_di-minus_di).abs()/(plus_di+minus_di).replace(0,np.nan)
+    adx=dx.ewm(alpha=1/14,adjust=False,min_periods=14).mean()
+    volmean=v.rolling(20,min_periods=20).mean()
+    atrpct=atr/c
+    volrank=atrpct.rolling(240,min_periods=60).rank(pct=True)
+    return {
+      "baseline": (pd.Series(True,index=df.index),pd.Series(True,index=df.index)),
+      "ema21_slope3": ((e21>e21.shift(3)),(e21<e21.shift(3))),
+      "adx18_directional": ((adx>=18)&(plus_di>minus_di),(adx>=18)&(minus_di>plus_di)),
+      "rsi_momentum": ((rsi>=50)&(rsi<=72),(rsi<=50)&(rsi>=28)),
+      "volume_above_sma20": ((v>volmean),(v>volmean)),
+      "atr_midrange": ((volrank>=0.2)&(volrank<=0.8),(volrank>=0.2)&(volrank<=0.8)),
+      "slope_plus_adx": ((e21>e21.shift(3))&(adx>=18)&(plus_di>minus_di),(e21<e21.shift(3))&(adx>=18)&(minus_di>plus_di)),
+    }
+
 def run_one(df, sig, atr, side, stopmode):
     op=df.open.to_numpy(float); hi=df.high.to_numpy(float); lo=df.low.to_numpy(float); cl=df.close.to_numpy(float); ts=df.open_time.to_numpy(np.int64)
     mask=sig.fillna(False).to_numpy(bool); positions=np.flatnonzero(mask); ledger=[]; bal=1000.; streak=0; maxstreak=0; capital=False; unresolved=0
@@ -141,24 +170,27 @@ async def main():
     splits=split_reference_period(df)
     results=[]
     for split in ("train","development"):
-        part=splits[split]; sigs,atr=signals(part)
+        part=splits[split]; sigs,atr=signals(part); filters=confirmation_filters(part)
         for ent in ENTRIES:
-            long_sig,short_sig=sigs[ent]
-            for stop in STOPS:
-                m,ledger=run_combined(part,long_sig,short_sig,atr,stop)
-                results.append({"split":split,"entry_method":ent,"side":"LONG+SHORT_SHARED_SINGLE_POSITION","stop_method":stop,"metrics":m,
-                                "ledger_sha256":hashlib.sha256(json.dumps(ledger,sort_keys=True,separators=(",",":")).encode()).hexdigest()})
-                print("EMA123_COMBINED_RESULT "+json.dumps(results[-1],sort_keys=True),flush=True)
+            raw_long,raw_short=sigs[ent]
+            for filter_name,(long_filter,short_filter) in filters.items():
+                long_sig=raw_long & long_filter
+                short_sig=raw_short & short_filter
+                for stop in STOPS:
+                    m,ledger=run_combined(part,long_sig,short_sig,atr,stop)
+                    results.append({"split":split,"entry_method":ent,"confirmation_filter":filter_name,"side":"LONG+SHORT_SHARED_SINGLE_POSITION","stop_method":stop,"metrics":m,
+                                    "ledger_sha256":hashlib.sha256(json.dumps(ledger,sort_keys=True,separators=(",",":")).encode()).hexdigest()})
+                    print("EMA123_COMBINED_RESULT "+json.dumps(results[-1],sort_keys=True),flush=True)
     def rank(x):
         m=x["metrics"]
         # No target relaxed; rank diagnostic misses by closest overall gates, then PnL.
         gaps=sum([max(0,40.0001-m["win_rate_pct"])/40, max(0,1.0001-(m["profit_factor"] or 0)),max(0,3-m["tp_per_day"])/3,max(0,10-m["trades_per_day"])/10,max(0,m["max_consecutive_losses"]-12)/12,1 if m["capital_exhausted"] else 0])
         return (not m["passes_all_user_targets"],gaps,-m["net_pnl"],-m["trades"])
-    output={"schema":"ema9_21_post_cross_123_shared_single_position_v2","data":manifest,"data_scope":"Binance USD-M ETHUSDT 1m Apr-Sep 2026; OOS not evaluated","split_rows":{"train":len(splits["train"]),"development":len(splits["development"]),"oos":len(splits["oos"])},"fixed_contract":CONTRACT,"entry_methods":list(ENTRIES),"stop_methods":list(STOPS),"execution_mode":"shared chronological LONG+SHORT ledger; one position across both sides","result_count":len(results),"validated_count":sum(x["metrics"]["passes_all_user_targets"] for x in results),"top_by_split":{},"results":results}
+    output={"schema":"ema9_21_post_cross_123_filtered_shared_single_position_v3","data":manifest,"data_scope":"Binance USD-M ETHUSDT 1m Apr-Sep 2026; OOS not evaluated","split_rows":{"train":len(splits["train"]),"development":len(splits["development"]),"oos":len(splits["oos"])},"fixed_contract":CONTRACT,"entry_methods":list(ENTRIES),"confirmation_filters":list(confirmation_filters(splits["development"]).keys()),"stop_methods":list(STOPS),"execution_mode":"shared chronological LONG+SHORT ledger; one position across both sides","result_count":len(results),"validated_count":sum(x["metrics"]["passes_all_user_targets"] for x in results),"top_by_split":{},"results":results}
     for split in ("train","development"):
         subset=sorted([x for x in results if x["split"]==split],key=rank)
         output["top_by_split"][split]=subset[:10]
     (OUT/"ema_9_21_123_report.json").write_text(json.dumps(output,indent=2,sort_keys=True))
-    print("EMA123_FINAL "+json.dumps({"report":"research-results/ema_9_21_123_report.json","result_count":len(results),"validated_count":output["validated_count"],"top_by_split":{k:[{"entry_method":x["entry_method"],"side":x["side"],"stop_method":x["stop_method"],"metrics":x["metrics"]} for x in v[:5]] for k,v in output["top_by_split"].items()}},sort_keys=True),flush=True)
+    print("EMA123_FINAL "+json.dumps({"report":"research-results/ema_9_21_123_report.json","result_count":len(results),"validated_count":output["validated_count"],"top_by_split":{k:[{"entry_method":x["entry_method"],"confirmation_filter":x.get("confirmation_filter","baseline"),"side":x["side"],"stop_method":x["stop_method"],"metrics":x["metrics"]} for x in v[:5]] for k,v in output["top_by_split"].items()}},sort_keys=True),flush=True)
 
 if __name__=="__main__": asyncio.run(main())
