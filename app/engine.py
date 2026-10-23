@@ -926,6 +926,18 @@ def _parallel_candidate_evaluate(spec):
         return {"_evaluation_error": f"{type(exc).__name__}: {exc}"}
 
 
+def _effective_genome_key(spec):
+    """Canonical identity for the effective strategy phenotype.
+
+    ATR stop distance is ignored when the stop is structural; those modes derive
+    their stop from candle/swing prices and never read spec.stop_atr.
+    """
+    effective_stop_atr=round(spec.stop_atr,6) if spec.stop_mode=="atr" else None
+    return (spec.family,spec.fast,spec.slow,spec.atr_period,effective_stop_atr,
+            spec.direction,spec.context_filter,spec.confirmation_filter,
+            spec.secondary_family,spec.signal_composition,spec.stop_mode)
+
+
 def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorithm="surrogate_genetic", search_space=None, progress_callback=None, excluded_genome_hashes=None, prior_candidates=None, prepared_context=None):
     """Deterministic bounded evolutionary search on TRAIN only.
 
@@ -1098,15 +1110,7 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
         return StrategySpec(f"{label} {fast}/{slow} ATR {period}x{stop:g} {direction} [ctx={context_filter}; confirm={confirmation_filter}]",fast,slow,period,stop,direction,seed,family,context_filter,confirmation_filter,secondary_family,signal_composition,stop_mode)
 
     def genome(spec):
-        # Canonicalize the effective phenotype, not the raw parameter tuple.
-        # stop_atr is only read by the ATR stop branch; for signal-candle/swing
-        # stops it has zero effect on any trade. Treating it as a distinct gene
-        # created many "unique" genomes with identical trades and wasted the
-        # small research budget on cosmetic variants.
-        effective_stop_atr=round(spec.stop_atr,6) if spec.stop_mode=="atr" else None
-        return (spec.family,spec.fast,spec.slow,spec.atr_period,effective_stop_atr,
-                spec.direction,spec.context_filter,spec.confirmation_filter,
-                spec.secondary_family,spec.signal_composition,spec.stop_mode)
+        return _effective_genome_key(spec)
 
     def fitness(row):
         # TRAIN-only, non-compensatory discovery ranking. Activity evidence
