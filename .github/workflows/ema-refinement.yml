@@ -1,0 +1,37 @@
+name: Focused EMA refinement with EMA50
+on:
+  push:
+    paths:
+      - "research/ema_refinement.py"
+      - ".github/workflows/ema-refinement.yml"
+      - "research/ema_9_21_123.py"
+      - "research/run_factory.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ema-refinement-focused-test
+  cancel-in-progress: true
+jobs:
+  refinement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Run focused EMA refinement on real data
+        run: python -m compileall -q app research && python research/ema_refinement.py
+      - name: Upload EMA refinement report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-refinement-results
+          path: research-results/ema_refinement_report.json
+          if-no-files-found: warn
+          retention-days: 90
