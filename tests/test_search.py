@@ -282,8 +282,9 @@ def test_activity_search_prioritizes_bidirectional_and_samples_composites(monkey
     search_candidates(pd.DataFrame(), max_candidates=200, seed=20261023,
                       contract=normalize_contract(), algorithm="stratified_random")
 
-    # A small initial family-stratification seed can include directional controls;
-    # the larger activity-discovery lane must overwhelmingly be LONG+SHORT.
-    assert directions.count("both") / len(directions) >= 0.70
-    assert set(directions) <= {"both", "long", "short"}
+    # The discovery budget must compare long/short asymmetry as well as both-sided rules.
+    assert set(directions) == {"both", "long", "short"}
+    assert 0.25 <= directions.count("both") / len(directions) <= 0.55
+    assert directions.count("long") / len(directions) >= 0.15
+    assert directions.count("short") / len(directions) >= 0.15
     assert any(composition in {"and", "or", "xor"} for composition in compositions)

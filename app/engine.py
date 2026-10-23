@@ -1064,10 +1064,10 @@ def search_candidates(frame, max_candidates=500, seed=42, contract=None, algorit
                 period=int(rng.choice([3,4,5,6,7,8,9,10,12,14,16]))
                 # Search broad stop placements; net risk and net 3.5R are immutable.
                 stop=float(rng.choice([0.2,0.25,0.3,0.35,0.4,0.5,0.6,0.7,0.8,1.0,1.2,1.5,2.0]))
-                # The production hypothesis is explicitly bidirectional: every activity-lane
-                # candidate may take LONG and SHORT entries from its respective signal.
-                # Do not spend most of the budget testing one-sided variants.
-                direction="both"
+                # Balanced directional discovery: compare LONG, SHORT and BOTH on the
+                # same cost model instead of assuming symmetry. The accepted strategy can
+                # still trade both directions; directional candidates diagnose asymmetry.
+                direction=str(rng.choice(["both","long","short"],p=[0.40,0.30,0.30]))
                 # Keep a strong unfiltered single-signal lane for activity, but reserve
                 # 20% for multi-signal combinations; OR is favored for activity while
                 # AND/XOR still test whether confirmation improves net edge.

@@ -234,9 +234,11 @@ def run(df,data_manifest):
     dev_backtest_hash=prepared_dev.data_hash
     cfg=normalize_contract({"symbol":SYMBOL,"initial_balance":1000,"risk_mode":"fixed_usd","risk_usd":10,"compound":False,"reward_risk":3.5,"target_mode":"net_rr","commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"max_positions":1,"entry_model":"next_candle_open","exit_model":"sl_tp_only","min_win_rate_pct":40,"min_profit_factor":1,"min_tp_per_day":3,"max_consecutive_losses":12,"use_min_win_rate":True,"use_min_profit_factor":True,"use_min_tp_per_day":True,"use_max_consecutive_losses":True,"min_trades_per_day":10,"min_trades_per_month":300,"break_even_enabled":False,"trailing_stop_enabled":False,"partial_exit_enabled":False,"time_exit_enabled":False})
     start=time.monotonic(); seen=set(); train_pass=[]; train_near=[]; failed=generations=fits=0; failure_reasons={}; family_counts={}; completed=batches=zero=0
+    algorithms_used=[]
     preflight_summary=None; preflight_gate_warning=None
     max_batches=max(5,math.ceil(REQUESTED/1000)*5)
-    print(f"SEARCH_START requested={REQUESTED} seed={SEED} algorithm={ALGORITHM} train_rows={len(train)} train_sha256={train_hash}",flush=True)
+    search_plan=("stratified_random pilot -> surrogate_genetic active-learning refinement" if ALGORITHM=="stratified_random" else ALGORITHM)
+    print(f"SEARCH_START requested={REQUESTED} seed={SEED} algorithm_plan={search_plan} train_rows={len(train)} train_sha256={train_hash}",flush=True)
     while completed<REQUESTED and batches<max_batches and time.monotonic()-start<MAX_SECONDS:
         # Start with a small representative pilot; later batches learn from
         # prior audited candidates instead of restarting an isolated population.
@@ -263,6 +265,12 @@ def run(df,data_manifest):
                     net <= 0.0, -net,
                     -int(m.get("trades",0)))
         prior_pool=sorted(train_pass+train_near,key=train_survival_key)[:192]
+        # Two-stage search: a broad, balanced pilot first, then the ExtraTrees
+        # surrogate-guided active-learning loop uses the pilot and audited near-misses.
+        # This reduces blind repeated sampling without changing any acceptance gate.
+        batch_algorithm=("stratified_random" if batches==0 else "surrogate_genetic") if ALGORITHM=="stratified_random" else ALGORITHM
+        algorithms_used.append(batch_algorithm)
+        print(f"SEARCH_BATCH_PLAN batch={batches+1} algorithm={batch_algorithm} prior_pool={len(prior_pool)}",flush=True)
         batch_started=time.monotonic()
         def heartbeat(batch_state):
             # Live observability: publish frequent log heartbeats while a batch is
@@ -284,7 +292,7 @@ def run(df,data_manifest):
                 "batch_elapsed_seconds":round(time.monotonic()-batch_started,2),
                 "candidates_per_second":round(local_done/max(time.monotonic()-batch_started,1e-9),3),
                 "seed":SEED,
-                "algorithm":ALGORITHM,
+                "algorithm":batch_algorithm,
                 "train_sha256":train_hash,
                 "development_sha256":dev_hash,
                 "family_evaluated_counts":{family:family_counts.get(family,0)+int(batch_state.get("family_evaluated_counts",{}).get(family,0)) for family in set(family_counts)|set(batch_state.get("family_evaluated_counts",{}))},
@@ -292,7 +300,7 @@ def run(df,data_manifest):
             }
             write(PROGRESS,state)
             print("SEARCH_HEARTBEAT "+json.dumps(state,sort_keys=True),flush=True)
-        result=search_candidates(train,size,seed,cfg,ALGORITHM,progress_callback=heartbeat,
+        result=search_candidates(train,size,seed,cfg,batch_algorithm,progress_callback=heartbeat,
                                  excluded_genome_hashes=seen,prior_candidates=prior_pool,
                                  prepared_context=prepared_train)
         hashes=result.pop("evaluated_genome_hashes",[]); actual=len(hashes); seen.update(hashes); completed+=actual; batches+=1
@@ -460,7 +468,7 @@ def run(df,data_manifest):
             "candidate_failure_reason_counts":failure_reasons,"completed_batches":batches,
             "surrogate_model_fits":fits,"generations":generations,"family_evaluated_counts":family_counts,
             "speed_benchmark":speed_benchmark,"candidate_search_budget_seconds":MAX_SECONDS,
-            "seed":SEED,"algorithm":ALGORITHM,"preflight_summary":preflight_summary,
+            "seed":SEED,"algorithm":("stratified_random_then_surrogate_genetic" if len(set(algorithms_used))>1 else (algorithms_used[0] if algorithms_used else ALGORITHM)),"preflight_summary":preflight_summary,
             "preflight_warning":preflight_gate_warning,"contract":cfg,
             "target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,
                 "avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":12,
@@ -527,11 +535,11 @@ def run(df,data_manifest):
     results=[]
     for item in delivery:
         results.append({k:v for k,v in item.items() if not k.startswith("_")})
-    report={"schema_version":1,"outcome":outcome,"source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"candidate_search_complete":search_complete,"failed_candidate_evaluations":failed,"candidate_failure_reason_counts":failure_reasons,"completed_batches":batches,"surrogate_model_fits":fits,"generations":generations,"family_evaluated_counts":family_counts,"speed_benchmark":speed_benchmark,"candidate_search_budget_seconds":MAX_SECONDS,"invalid_stop_proposals_removed":True,"parallel_worker_limit":(max(1,min(8,os.cpu_count() or 1)) if ALGORITHM=="stratified_random" else 1),"indicator_cache_stats":{"hits":prepared_train.indicator_cache_hits,"misses":prepared_train.indicator_cache_misses,"entries":len(prepared_train.indicator_cache),"limit":prepared_train.indicator_cache_limit},"seed":SEED,"algorithm":ALGORITHM,"preflight_summary":preflight_summary,"preflight_warning":preflight_gate_warning,"capability_gate":{"min_avg_tp_per_day":0.5,"min_trades":50,"min_win_rate_pct":25,"min_profit_factor":0.5,"blocking":False,"policy":"advisory only; all candidate families remain eligible and pilot results never terminate the requested search"},"contract":cfg,"target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,"avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":12,"min_trades_per_day":10.0,"min_trades_per_month":300,"risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5,"commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"entry_model":"next_candle_open","exit_model":"SL/TP only","max_positions":1,"loss_streak_resets_only_on_full_TP":True},"data":data_manifest,"splits":{"train":{"rows":len(train),"sha256":train_hash,"backtest_sha256":train_backtest_hash,"used_for_candidate_generation":True},"development":{"rows":len(dev),"sha256":dev_hash,"backtest_sha256":dev_backtest_hash,"used_for_selection_and_near_miss_ranking":True},"oos":{"rows":len(oos),"sha256":oos_hash,"backtest_sha256":oos_backtest_hash,"used_only_after_selection_frozen":True}},"development_passing_count":len(dev_pass),"development_near_miss_count":len(dev_near),"oos_evaluated_count":len(oos_results),"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"activity_eligible_near_miss_count":len(activity_eligible_near),"near_miss_shortfall":max(0,5-len(delivery)) if not validated else 0,"development_audit_failures":audit_failures,"exports":exports,"results":results,"selection_policy":"Train creates candidates; win rate, profit factor, TP/day, max consecutive losses, >=10 trades/day and independent ledger match are mandatory eligibility gates; four active performance criteria have equal-weight normalized distance; Development freezes selection; OOS is only evaluated after selection is frozen and never used to rank/select.","reproducibility":"Primary and independent ledgers compared field-by-field at rel_tol=1e-10 and abs_tol=1e-8; standalone exports include exact hashes and auto-fetch 1-second windows only for ambiguous candles."}
+    report={"schema_version":1,"outcome":outcome,"source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"candidate_search_complete":search_complete,"failed_candidate_evaluations":failed,"candidate_failure_reason_counts":failure_reasons,"completed_batches":batches,"surrogate_model_fits":fits,"generations":generations,"family_evaluated_counts":family_counts,"speed_benchmark":speed_benchmark,"candidate_search_budget_seconds":MAX_SECONDS,"invalid_stop_proposals_removed":True,"parallel_worker_limit":(max(1,min(8,os.cpu_count() or 1)) if "stratified_random" in algorithms_used else 1),"algorithm_schedule":algorithms_used,"indicator_cache_stats":{"hits":prepared_train.indicator_cache_hits,"misses":prepared_train.indicator_cache_misses,"entries":len(prepared_train.indicator_cache),"limit":prepared_train.indicator_cache_limit},"seed":SEED,"algorithm":ALGORITHM,"preflight_summary":preflight_summary,"preflight_warning":preflight_gate_warning,"capability_gate":{"min_avg_tp_per_day":0.5,"min_trades":50,"min_win_rate_pct":25,"min_profit_factor":0.5,"blocking":False,"policy":"advisory only; all candidate families remain eligible and pilot results never terminate the requested search"},"contract":cfg,"target_criteria":{"win_rate_pct_strictly_greater_than":40,"profit_factor_strictly_greater_than":1,"avg_net_tp_per_day_at_least":3,"max_consecutive_losses_at_most":12,"min_trades_per_day":10.0,"min_trades_per_month":300,"risk_usd_fixed":10,"initial_balance":1000,"net_reward_risk":3.5,"commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"entry_model":"next_candle_open","exit_model":"SL/TP only","max_positions":1,"loss_streak_resets_only_on_full_TP":True},"data":data_manifest,"splits":{"train":{"rows":len(train),"sha256":train_hash,"backtest_sha256":train_backtest_hash,"used_for_candidate_generation":True},"development":{"rows":len(dev),"sha256":dev_hash,"backtest_sha256":dev_backtest_hash,"used_for_selection_and_near_miss_ranking":True},"oos":{"rows":len(oos),"sha256":oos_hash,"backtest_sha256":oos_backtest_hash,"used_only_after_selection_frozen":True}},"development_passing_count":len(dev_pass),"development_near_miss_count":len(dev_near),"oos_evaluated_count":len(oos_results),"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"activity_eligible_near_miss_count":len(activity_eligible_near),"near_miss_shortfall":max(0,5-len(delivery)) if not validated else 0,"development_audit_failures":audit_failures,"exports":exports,"results":results,"selection_policy":"Train creates candidates; win rate, profit factor, TP/day, max consecutive losses, >=10 trades/day and independent ledger match are mandatory eligibility gates; four active performance criteria have equal-weight normalized distance; Development freezes selection; OOS is only evaluated after selection is frozen and never used to rank/select.","reproducibility":"Primary and independent ledgers compared field-by-field at rel_tol=1e-10 and abs_tol=1e-8; standalone exports include exact hashes and auto-fetch 1-second windows only for ambiguous candles."}
     write(OUT/"report.json",report); write(PROGRESS,{"status":"completed" if search_complete else "partial_search_reported","candidate_search_complete":search_complete,"outcome":outcome,"candidate_search_complete":search_complete,"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"report":"research-results/report.json","strategy_zip":"research-results/validated_strategies.zip"})
     print("FINAL_REPORT "+json.dumps({"outcome":outcome,"requested_candidates":REQUESTED,"evaluated_unique_candidates":completed,"validated_strategy_count":len(validated),"returned_candidate_count":len(delivery),"full_dataset_sha256":full_hash,"train_sha256":train_hash,"development_sha256":dev_hash,"oos_sha256":oos_hash,"report_path":"research-results/report.json","zip_path":"research-results/validated_strategies.zip"},sort_keys=True),flush=True)
 def main():
-    write(PROGRESS,{"status":"downloading_data","requested_candidates":REQUESTED,"seed":SEED,"algorithm":ALGORITHM})
+    write(PROGRESS,{"status":"downloading_data","requested_candidates":REQUESTED,"seed":SEED,"algorithm_plan":("stratified_random_then_surrogate_genetic" if ALGORITHM=="stratified_random" else ALGORITHM)})
     df,manifest=asyncio.run(get_data()); write(PROGRESS,{"status":"data_validated","requested_candidates":REQUESTED,"dataset_sha256":manifest["dataset_sha256"],"rows":len(df)})
     run(df,manifest)
 if __name__=="__main__": main()
