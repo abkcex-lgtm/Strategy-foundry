@@ -12,7 +12,7 @@ from research.run_factory import get_data, split_reference_period
 OUT=Path("research-results"); OUT.mkdir(exist_ok=True)
 CONTRACT=normalize_contract({"symbol":"ETHUSDT","initial_balance":1000,"risk_mode":"fixed_usd","risk_usd":10,"compound":False,"reward_risk":3.5,"target_mode":"net_rr","commission_pct_per_side":0.04,"slippage_pct_per_side":0.02,"max_positions":1,"entry_model":"next_candle_open","exit_model":"sl_tp_only","min_win_rate_pct":40,"min_profit_factor":1,"min_tp_per_day":3,"max_consecutive_losses":12,"use_min_win_rate":True,"use_min_profit_factor":True,"use_min_tp_per_day":True,"use_max_consecutive_losses":True,"min_trades_per_day":10,"min_trades_per_month":300,"break_even_enabled":False,"trailing_stop_enabled":False,"partial_exit_enabled":False,"time_exit_enabled":False})
 STOPS=("signal_candle","swing_3","swing_5","atr_1.0","atr_1.5","atr_2.0")
-ENTRIES=("breakout_123","pullback_reclaim","higher_low_breakout","trend_pullback_reversal","trend_pullback_cross5","trend_pullback_cross10","trend_pullback_cross20","structure_break_after_pullback","range_break_retest","swing_structure_break","squeeze_breakout","swing_failure_reclaim","atr_expansion_breakout")
+ENTRIES=("breakout_123","pullback_reclaim","higher_low_breakout","trend_pullback_reversal","trend_pullback_cross5","trend_pullback_cross10","trend_pullback_cross20","cross_pullback_breakout5","cross_pullback_breakout10","cross_pullback_breakout20","structure_break_after_pullback","range_break_retest","swing_structure_break","squeeze_breakout","swing_failure_reclaim","atr_expansion_breakout")
 
 def signals(df):
     c=df.close.astype(float); o=df.open.astype(float); h=df.high.astype(float); lo=df.low.astype(float)
@@ -46,6 +46,16 @@ def signals(df):
     touched_dn=(h>=e21).rolling(5,min_periods=1).max().shift(1).fillna(0).astype(bool)
     trend_long=(e9>e21)&touched_up&(c>o)&(c>h.shift(1))&(c>e21)
     trend_short=(e9<e21)&touched_dn&(c<o)&(c<lo.shift(1))&(c<e21)
+    # New causal EMA-cross -> EMA21 pullback -> local structure breakout variants.
+    # The touch must occur before the signal candle; entry remains next candle open.
+    break2h=h.shift(1).rolling(2,min_periods=2).max()
+    break2l=lo.shift(1).rolling(2,min_periods=2).min()
+    result["cross_pullback_breakout5"]=(up_age_5&touched_up&(c>o)&(c>break2h)&(c>e21),
+                                          dn_age_5&touched_dn&(c<o)&(c<break2l)&(c<e21))
+    result["cross_pullback_breakout10"]=(up_age_10&touched_up&(c>o)&(c>break2h)&(c>e21),
+                                           dn_age_10&touched_dn&(c<o)&(c<break2l)&(c<e21))
+    result["cross_pullback_breakout20"]=(up_age_20&touched_up&(c>o)&(c>break2h)&(c>e21),
+                                           dn_age_20&touched_dn&(c<o)&(c<break2l)&(c<e21))
     result["trend_pullback_reversal"]=(trend_long,trend_short)
     result["trend_pullback_cross5"]=(trend_long&up_age_5,trend_short&dn_age_5)
     result["trend_pullback_cross10"]=(trend_long&up_age_10,trend_short&dn_age_10)
@@ -253,7 +263,7 @@ async def main():
         part=splits[split]; sigs,atr=signals(part); filters=confirmation_filters(part)
         for ent in ENTRIES:
             raw_long,raw_short=sigs[ent]
-            if ent.startswith("trend_pullback_cross") or ent in ("structure_break_after_pullback","range_break_retest","swing_structure_break"):
+            if ent.startswith("trend_pullback_cross") or ent.startswith("cross_pullback_breakout") or ent in ("structure_break_after_pullback","range_break_retest","swing_structure_break"):
                 filter_names=("baseline","volume_above_sma20","rsi_tight_momentum","adx22_directional",
                               "strong_candle_close","avoid_extended_entry","slope_plus_adx","trend_quality_stack","slope_adx_candle_stack")
                 active_filters=((name,filters[name]) for name in filter_names)
