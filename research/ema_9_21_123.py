@@ -1,6 +1,8 @@
 """Focused EMA 9/21 + post-cross 1-2-3 test. Real Binance USD-M candles; no OOS selection."""
 import asyncio, json, math, hashlib
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 import pandas as pd
 from app.engine import normalize_contract, _size_and_target, _resolve_bar_exit
