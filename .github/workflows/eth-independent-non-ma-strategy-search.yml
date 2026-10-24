@@ -1,0 +1,38 @@
+name: ETH independent non-MA strategy search
+on:
+  push:
+    paths:
+      - '.github/workflows/eth-independent-non-ma-strategy-search.yml'
+      - 'research/eth_independent_non_ma_strategy_search.py'
+      - 'research/ema_9_21_123.py'
+      - 'research/run_factory.py'
+      - 'app/engine.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: eth-independent-non-ma-strategy-search
+  cancel-in-progress: true
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Run independent ETH strategy search on Binance candles
+        run: python -m compileall -q app research && PYTHONPATH=. python research/eth_independent_non_ma_strategy_search.py
+      - name: Upload search report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eth-independent-non-ma-strategy-search-results
+          path: research-results/eth_independent_non_ma_strategy_sweep_report.json
+          if-no-files-found: warn
+          retention-days: 90
