@@ -47,3 +47,4 @@ async def main():
  p=OUT/'improve_11_loss_winrate_report.json'; p.write_text(json.dumps(out,indent=2,sort_keys=True,allow_nan=False))
  print('WINRATE_FINAL '+json.dumps({'report':str(p),'baseline_development':base,'eligible_count':len(eligible),'top_eligible':out['eligible_no_regression_development'][:5]},sort_keys=True),flush=True)
 if __name__=='__main__': asyncio.run(main())
+# Trigger marker: execute this research sweep on real Binance data.
