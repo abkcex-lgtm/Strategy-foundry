@@ -21,16 +21,20 @@ def val(x):
  if isinstance(x,(np.floating,)): return float(x)
  if isinstance(x,(np.bool_,)): return bool(x)
  return x
+def tpday(m):
+ return float(m.get("avg_net_tp_per_day",m.get("tp_per_day",0)) or 0)
 def gates(m):
- return bool(m.get("win_rate_pct",0)>40 and (m.get("profit_factor") or 0)>1 and m.get("tp_per_day",0)>=3
+ monthly=m.get("monthly_trade_counts") or {}
+ return bool(m.get("win_rate_pct",0)>40 and (m.get("profit_factor") or 0)>1 and tpday(m)>=3
   and m.get("trades_per_day",0)>=10 and m.get("max_consecutive_losses",999)<=12
-  and not m.get("capital_exhausted",False) and m.get("final_balance",0)>10)
+  and monthly and min(int(v or 0) for v in monthly.values())>=300
+  and m.get("net_pnl",0)>0 and not m.get("capital_exhausted",False) and m.get("final_balance",0)>10)
 def score(m):
  # Lexicographic: full hard-gate pass first; then minimize the largest shortfall.
  gaps=[
   max(0,40-float(m.get("win_rate_pct",0)))/40,
   max(0,1-float(m.get("profit_factor") or 0)),
-  max(0,3-float(m.get("tp_per_day",0)))/3,
+  max(0,3-tpday(m))/3,
   max(0,10-float(m.get("trades_per_day",0)))/10,
   max(0,int(m.get("max_consecutive_losses",999))-12)/12,
   1 if m.get("capital_exhausted",False) else 0,
@@ -54,7 +58,7 @@ async def main():
  for ix,algorithm in enumerate(("stratified_random","surrogate_genetic","surrogate_genetic"),1):
   loop_start=time.monotonic()
   # Reuse the same validated TRAIN dataset and fixed contract. Fresh random seed each pass.
-  res=search_candidates(train,400,4200+ix*177,CFG,algorithm,
+  res=search_candidates(train,1200,4200+ix*177,CFG,algorithm,
     excluded_genome_hashes=excluded,prior_candidates=prior,prepared_context=trainctx)
   excluded.update(res.get("evaluated_genome_hashes",[]))
   selected=res.get("results",[]) or []
@@ -71,7 +75,7 @@ async def main():
     dev_rows.append(d); all_dev.append(d)
    except Exception as e:
     dev_rows.append({"strategy":row.get("strategy"),"validation_error":type(e).__name__+":"+str(e)})
-  report["loops"].append({"loop":ix,"algorithm":algorithm,"requested_candidates":400,
+  report["loops"].append({"loop":ix,"algorithm":algorithm,"requested_candidates":1200,
    "evaluated_candidates":res.get("evaluated_candidates"),"failed_candidates":res.get("failed_candidates"),
    "duplicate_genomes_skipped":res.get("duplicate_genomes_skipped"),"independent_audit_failures":res.get("independent_audit_failures"),
    "family_evaluated_counts":res.get("family_evaluated_counts"),"all_passing_on_train":res.get("all_passing"),
