@@ -1,0 +1,39 @@
+name: ETH three-loop strategy refinement
+on:
+  push:
+    paths:
+      - '.github/workflows/eth-three-loop-refinement.yml'
+      - 'research/eth_three_loop_refinement.py'
+      - 'research/eth_independent_non_ma_strategy_search.py'
+      - 'research/ema_9_21_123.py'
+      - 'research/run_factory.py'
+      - 'app/engine.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: eth-three-loop-refinement
+  cancel-in-progress: true
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Run three research/refinement loops on ETHUSDT
+        run: python -m compileall -q app research && PYTHONPATH=. python research/eth_three_loop_refinement.py
+      - name: Upload three-loop report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eth-three-loop-refinement-report
+          path: research-results/eth_three_loop_refinement_report.json
+          if-no-files-found: warn
+          retention-days: 90
