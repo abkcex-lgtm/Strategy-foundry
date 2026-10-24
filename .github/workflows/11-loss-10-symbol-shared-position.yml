@@ -1,0 +1,35 @@
+name: Test 11-loss candidate across 10 symbols with one shared position
+on:
+  push:
+    paths:
+      - ".github/workflows/11-loss-10-symbol-shared-position.yml"
+      - "research/11_loss_10_symbol_shared_position.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: 11-loss-10-symbol-shared-position
+  cancel-in-progress: true
+jobs:
+  portfolio-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Download and test 10 symbols with shared one-position portfolio
+        run: python -m compileall -q app research && PYTHONPATH=. python research/11_loss_10_symbol_shared_position.py
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 11-loss-10-symbol-shared-position-results
+          path: research-results/11_loss_10_symbol_shared_position_report.json
+          if-no-files-found: warn
+          retention-days: 90
