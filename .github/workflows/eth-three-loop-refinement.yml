@@ -1,10 +1,9 @@
-name: ETH three-loop strategy refinement
+name: ETH structural entry/filter/stop sweep
 on:
   push:
     paths:
       - '.github/workflows/eth-three-loop-refinement.yml'
-      - 'research/eth_three_loop_refinement.py'
-      - 'research/eth_independent_non_ma_strategy_search.py'
+      - 'research/structural_entry_filter_stop_sweep.py'
       - 'research/ema_9_21_123.py'
       - 'research/run_factory.py'
       - 'app/engine.py'
@@ -27,13 +26,13 @@ jobs:
           cache-dependency-path: requirements.txt
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
-      - name: Run three research/refinement loops on ETHUSDT
-        run: python -m compileall -q app research && PYTHONPATH=. python research/eth_three_loop_refinement.py
-      - name: Upload three-loop report
+      - name: Run structural entry/filter/stop sweep on ETHUSDT
+        run: python -m compileall -q app research && PYTHONPATH=. python research/structural_entry_filter_stop_sweep.py
+      - name: Upload structural sweep report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: eth-three-loop-refinement-report
-          path: research-results/eth_three_loop_refinement_report.json
+          name: structural-entry-filter-stop-sweep-report
+          path: research-results/structural_entry_filter_stop_sweep.json
           if-no-files-found: warn
           retention-days: 90
