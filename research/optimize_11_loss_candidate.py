@@ -43,10 +43,10 @@ async def main():
    if x["split"]!="development":continue
    key=(x["entry"],x["filter"],x["stop"],x["cooldown_bars"],x["cooldown_trigger_losses"])
    t=[y for y in out["variants"] if y["split"]=="train" and (y["entry"],y["filter"],y["stop"],y["cooldown_bars"],y["cooldown_trigger_losses"])==key]
-   if t and good(x["metrics"],base["development"]["metrics"]) and good(t[0]["metrics"],base["train"]["metrics"]):
-    eligible.append({"spec":key,"development":x["metrics"],"train":t[0]["metrics"]})
+   if t and good(x["metrics"],base["development"]["metrics"]) and good(t[0]["metrics"],base["train"]["metrics"]):eligible.append({"spec":key,"development":x["metrics"],"train":t[0]["metrics"]})
  out["eligible_no_regression_both_splits"]=sorted(eligible,key=lambda x:(x["development"]["win_rate_pct"],x["development"]["profit_factor"] or 0,x["development"]["tp_per_day"]),reverse=True)[:20]
  out["note"]="Recommend only candidates that improve WR and do not regress PF, TP/day, trades/day, max loss streak or net PnL on both train and development. OOS untouched."
  p=OUT/"optimize_11_loss_report.json";p.write_text(json.dumps(out,indent=2,sort_keys=True,allow_nan=False))
  print("FINAL",json.dumps({"report":str(p),"variants":len(out["variants"]),"eligible":len(eligible),"top":out["eligible_no_regression_both_splits"][:3]},sort_keys=True),flush=True)
 if __name__=="__main__":asyncio.run(main())
+# trigger optimization workflow
