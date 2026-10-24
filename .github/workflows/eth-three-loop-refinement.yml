@@ -1,9 +1,9 @@
-name: ETH structural entry/filter/stop sweep
+name: ETH asymmetric side-filter and cooldown sweep
 on:
   push:
     paths:
       - '.github/workflows/eth-three-loop-refinement.yml'
-      - 'research/structural_entry_filter_stop_sweep.py'
+      - 'research/asymmetric_side_filter_cooldown_sweep.py'
       - 'research/ema_9_21_123.py'
       - 'research/run_factory.py'
       - 'app/engine.py'
@@ -26,13 +26,13 @@ jobs:
           cache-dependency-path: requirements.txt
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
-      - name: Run structural entry/filter/stop sweep on ETHUSDT
-        run: python -m compileall -q app research && PYTHONPATH=. python research/structural_entry_filter_stop_sweep.py
-      - name: Upload structural sweep report
+      - name: Run asymmetric long-short filter/cooldown sweep on ETHUSDT
+        run: python -m compileall -q app research && PYTHONPATH=. python research/asymmetric_side_filter_cooldown_sweep.py
+      - name: Upload asymmetric sweep report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: structural-entry-filter-stop-sweep-report
-          path: research-results/structural_entry_filter_stop_sweep.json
+          name: asymmetric-side-filter-cooldown-report
+          path: research-results/asymmetric_side_filter_cooldown_sweep.json
           if-no-files-found: warn
           retention-days: 90
