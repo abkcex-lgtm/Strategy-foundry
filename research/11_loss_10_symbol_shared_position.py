@@ -51,7 +51,7 @@ def summarize(ledger, start_ms, end_ms, balance, capital, unresolved, conflicts,
       "unresolved_ohlc_bars_count":unresolved,"simultaneous_signal_conflicts_skipped":conflicts,
       "symbol_trade_counts":symbol_counts,"span_days":span,"max_positions":1,"cooldown_bars_after_loss":cooldown_bars}
 
-def portfolio_backtest(frames, split_name):
+def portfolio_backtest(frames, split_name, ranking="hash"):
     # Signal calculations are per-symbol; portfolio execution is globally chronological.
     prepared={}
     for sym,df in frames.items():
@@ -109,9 +109,21 @@ def portfolio_backtest(frames, split_name):
                 else: stop=float(df.high.iloc[max(0,i-4):i+1].max())
                 # Deterministic hash tie-break avoids always privileging one symbol when signals coincide.
                 tie=hashlib.sha256(f"{ts}:{sym}".encode()).hexdigest()
-                candidates.append((tie,sym,side,stop))
+                if ranking == "hash":
+                    score=0.0
+                else:
+                    lookback=int(ranking.replace("mom",""))
+                    if i < lookback or not np.isfinite(float(row["atr"].iloc[i])) or float(row["atr"].iloc[i]) <= 0:
+                        score=-1e9
+                    else:
+                        direction=1.0 if side=="LONG" else -1.0
+                        score=direction*(float(df.close.iloc[i])-float(df.close.iloc[i-lookback]))/float(row["atr"].iloc[i])
+                candidates.append((score,tie,sym,side,stop))
             if candidates:
-                _,sym,side,stop=min(candidates)
+                if ranking == "hash":
+                    _,_,sym,side,stop=min(candidates, key=lambda x:x[1])
+                else:
+                    _,_,sym,side,stop=max(candidates, key=lambda x:(x[0],x[1]))
                 pending=(sym,side,stop,ts)
     metrics=summarize(ledger,start_ms,end_ms,bal,capital,unresolved,conflicts,symbol_counts)
     return metrics,ledger
@@ -126,20 +138,33 @@ async def main():
       "selection_policy":"If multiple symbols signal at the same close, deterministic SHA-256(timestamp,symbol) tie-break; no concurrent positions.",
       "ambiguity_note":"Same-bar SL+TP conservatively counted as SL from 1m OHLC. 1-second resolution not implemented; exploratory only.",
       "splits":{}}
+    policies=["hash","mom3","mom5","mom10"]
+    selected_policy=None
     for split_name in ("train","development"):
         per={s:splits[s][split_name] for s in SYMBOLS}
-        # ETH-only exact baseline with the existing engine and same candidate/cooldown.
         eth=per["ETHUSDT"]; l,s,atr=signals_for(eth)
         base_metrics,base_ledger=sm.run_combined(eth,pd.Series(l,index=eth.index),pd.Series(s,index=eth.index),atr,BASE[2],
               loss_cooldown_bars=BASE[3],cooldown_trigger_losses=BASE[4])
-        portfolio_metrics,portfolio_ledger=portfolio_backtest(per,split_name)
+        policy_results={}
+        for policy in policies:
+            pm,pl=portfolio_backtest(per,split_name,ranking=policy)
+            policy_results[policy]={"metrics":pm,"ledger_sha256":hashlib.sha256(json.dumps(pl,sort_keys=True,separators=(",",":"),allow_nan=False).encode()).hexdigest(),"ledger":pl}
+        if split_name=="train":
+            def score(item):
+                name,v=item; m=v["metrics"]
+                meets=(m["tp_per_day"]>=3 and m["win_rate_pct"]>40 and (m["profit_factor"] or 0)>1 and m["max_consecutive_losses"]<13 and m["trades_per_day"]>=10)
+                return (int(meets),min(m["tp_per_day"]/3,1.0),m["profit_factor"] or 0,m["win_rate_pct"],-m["max_consecutive_losses"],m["trades_per_day"])
+            selected_policy=max(policy_results.items(),key=score)[0]
+        best=policy_results[selected_policy]
+        portfolio_metrics=best["metrics"]; portfolio_ledger=best["ledger"]
         output["splits"][split_name]={"eth_single_symbol_baseline":base_metrics,"ten_symbol_one_position":portfolio_metrics,
+          "selected_policy":selected_policy,"all_policy_metrics":{k:v["metrics"] for k,v in policy_results.items()},
           "delta_trades":portfolio_metrics["trades"]-base_metrics["trades"],
           "delta_win_rate_percentage_points":portfolio_metrics["win_rate_pct"]-base_metrics["win_rate_pct"],
           "baseline_ledger_sha256":hashlib.sha256(json.dumps(base_ledger,sort_keys=True,separators=(",",":"),allow_nan=False).encode()).hexdigest(),
-          "portfolio_ledger_sha256":hashlib.sha256(json.dumps(portfolio_ledger,sort_keys=True,separators=(",",":"),allow_nan=False).encode()).hexdigest(),
-          "portfolio_ledger":portfolio_ledger}
-        print("MULTISYMBOL_RESULT "+json.dumps({"split":split_name,"baseline":base_metrics,"portfolio":portfolio_metrics,
+          "portfolio_ledger_sha256":best["ledger_sha256"],"portfolio_ledger":portfolio_ledger}
+        print("MULTISYMBOL_RESULT "+json.dumps({"split":split_name,"selected_policy":selected_policy,"baseline":base_metrics,
+          "portfolio":portfolio_metrics,"all_policy_metrics":{k:v["metrics"] for k,v in policy_results.items()},
           "delta_trades":output["splits"][split_name]["delta_trades"],"delta_win_rate_pp":output["splits"][split_name]["delta_win_rate_percentage_points"]},sort_keys=True),flush=True)
     output["elapsed_seconds"]=round(time.monotonic()-started,2)
     (OUT/"11_loss_10_symbol_shared_position_report.json").write_text(json.dumps(output,indent=2,sort_keys=True,allow_nan=False))
