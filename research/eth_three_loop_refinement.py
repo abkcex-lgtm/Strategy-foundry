@@ -103,8 +103,9 @@ async def main():
             m,ledger=sm.run_combined(part,l,s,atr,stop,loss_cooldown_bars=cb,cooldown_trigger_losses=ct)
             item[sn]={"metrics":clean(m),"ledger_sha256":digest(ledger)}
         trpart=splits["train"]; sigtr,atrtr=broad.make_signals(trpart); ftr=sm.confirmation_filters(trpart); raw=sigtr[entry_name]
-        for month in sorted(trpart.index.to_period("M").astype(str).unique()):
-            mask=trpart.index.to_period("M").astype(str)==month; mp=trpart.loc[mask]
+        train_month_labels=pd.to_datetime(trpart["open_time"],unit="ms",utc=True).dt.strftime("%Y-%m")
+        for month in sorted(train_month_labels.unique()):
+            mask=(train_month_labels==month).to_numpy(); mp=trpart.loc[mask]
             l=pd.Series(raw[0],index=trpart.index).loc[mask].fillna(False)&ftr[lf][0].loc[mask].fillna(False)
             s=pd.Series(raw[1],index=trpart.index).loc[mask].fillna(False)&ftr[sf][1].loc[mask].fillna(False)
             m,ledger=sm.run_combined(mp,l,s,atrtr.loc[mask],stop,loss_cooldown_bars=cb,cooldown_trigger_losses=ct)
