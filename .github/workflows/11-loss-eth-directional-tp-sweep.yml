@@ -1,0 +1,38 @@
+name: ETH-only 11-loss directional TP sweep
+on:
+  push:
+    paths:
+      - '.github/workflows/11-loss-eth-directional-tp-sweep.yml'
+      - 'research/11_loss_eth_directional_tp_sweep.py'
+      - 'research/ema_9_21_123.py'
+      - 'research/run_factory.py'
+      - 'app/engine.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: eth-11-loss-directional-tp-sweep
+  cancel-in-progress: true
+jobs:
+  directional-tp-sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Run ETH-only directional and entry-quality sweep
+        run: python -m compileall -q app research && PYTHONPATH=. python research/11_loss_eth_directional_tp_sweep.py
+      - name: Upload directional sweep report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 11-loss-eth-directional-tp-sweep-results
+          path: research-results/11_loss_eth_directional_tp_sweep_report.json
+          if-no-files-found: warn
+          retention-days: 90
