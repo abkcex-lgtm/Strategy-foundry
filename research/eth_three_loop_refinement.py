@@ -50,13 +50,16 @@ async def main():
     # LOOP 2: refine the strongest signal families with asymmetric long/short filters.
     sm.CONTRACT=normalize_contract(CFG)
     keyrows={}
+    # Use the same candidate families and filter pool on both splits so matched configurations can be compared.
+    common_safe=r["splits"]["train"]["top_streak_le_12"][:10]+r["splits"]["development"]["top_streak_le_12"][:10]
+    entries=sorted(set(x["entry"] for x in common_safe))[:6]
+    common_filters=sorted(set(x["filter"] for x in common_safe))
+    if len(common_filters)<6:
+        common_filters=list(dict.fromkeys(common_filters+["baseline","adx18_directional","rsi_momentum","strong_candle_close","atr_midrange","body_plus_adx22"]))
+    common_filters=common_filters[:6]
     for sn in ("train","development"):
         part=splits[sn]; sig,atr=broad.make_signals(part); f=sm.confirmation_filters(part)
-        safe=r["splits"][sn]["top_streak_le_12"][:10]
-        entries=sorted(set(x["entry"] for x in safe))[:4]
-        filters=sorted(set(x["filter"] for x in safe))
-        if len(filters)<4: filters=list(f.keys())[:6]
-        filters=filters[:6]
+        filters=common_filters
         rows=[]
         for en in entries:
             raw=sig[en]
