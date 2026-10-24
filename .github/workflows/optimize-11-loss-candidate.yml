@@ -1,0 +1,38 @@
+name: Optimize 11-loss candidate
+on:
+  push:
+    paths:
+      - "research/optimize_11_loss_candidate.py"
+      - "research/ema_9_21_123.py"
+      - "research/run_factory.py"
+      - "app/engine.py"
+      - "app/data.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: optimize-11-loss-candidate
+  cancel-in-progress: true
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Sweep entry structures, filters, and stops on real Binance data
+        run: python -m compileall -q app research && PYTHONPATH=. python research/optimize_11_loss_candidate.py
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: optimize-11-loss-results
+          path: research-results/optimize_11_loss_report.json
+          if-no-files-found: warn
+          retention-days: 90
