@@ -1,0 +1,35 @@
+name: Optimize 11-loss session and market filters
+on:
+  push:
+    paths:
+      - ".github/workflows/optimize-11-loss-session-filters.yml"
+      - "research/optimize_11_loss_session_filters.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: optimize-11-loss-session-filters
+  cancel-in-progress: true
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Test filters with real costs on train and development only
+        run: python -m compileall -q app research && PYTHONPATH=. python research/optimize_11_loss_session_filters.py
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 11-loss-session-filter-results
+          path: research-results/11_loss_session_filter_report.json
+          if-no-files-found: warn
+          retention-days: 90
