@@ -1,4 +1,5 @@
-"""Independent ETH-only non-MA strategy search; research-only, OOS untouched."""
+"""Independent ETH-only non-MA strategy search; research-only, OOS untouched.
+Iteration note: compare non-MA entry families and causal filters with fixed net 3.5R and one-position constraints."""
 import asyncio, hashlib, json, time
 from pathlib import Path
 import numpy as np
