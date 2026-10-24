@@ -2,6 +2,7 @@ name: Optimize 11-loss candidate
 on:
   push:
     paths:
+      - ".github/workflows/optimize-11-loss-candidate.yml"
       - "research/optimize_11_loss_candidate.py"
       - "research/ema_9_21_123.py"
       - "research/run_factory.py"
