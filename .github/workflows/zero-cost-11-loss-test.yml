@@ -1,0 +1,38 @@
+name: Zero-cost 11-loss candidate test
+on:
+  push:
+    paths:
+      - "research/zero_cost_11_loss_test.py"
+      - ".github/workflows/zero-cost-11-loss-test.yml"
+      - "research/ema_9_21_123.py"
+      - "research/run_factory.py"
+      - "app/engine.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zero-cost-11-loss-test
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Run paired zero-cost and baseline replay
+        run: python -m compileall -q app research && PYTHONPATH=. python research/zero_cost_11_loss_test.py
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zero-cost-11-loss-results
+          path: research-results/zero_cost_11_loss_report.json
+          if-no-files-found: warn
+          retention-days: 90
