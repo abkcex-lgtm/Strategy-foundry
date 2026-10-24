@@ -1,0 +1,38 @@
+name: ETH EMA 7/20 crossover net RR 2R vs 3R
+on:
+  push:
+    paths:
+      - "research/ema7_20_cross_net_rr_comparison.py"
+      - ".github/workflows/ema7-20-cross-net-rr.yml"
+      - "research/ema_9_21_123.py"
+      - "research/run_factory.py"
+      - "app/engine.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: eth-ema7-20-net-rr-comparison
+  cancel-in-progress: false
+jobs:
+  comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Run EMA 7/20 net RR comparison on real data
+        run: python -m compileall -q app research && PYTHONPATH=. python research/ema7_20_cross_net_rr_comparison.py
+      - name: Upload comparison report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eth-ema7-20-net-rr-comparison
+          path: research-results/ema7_20_cross_net_rr_comparison.json
+          if-no-files-found: warn
+          retention-days: 90
