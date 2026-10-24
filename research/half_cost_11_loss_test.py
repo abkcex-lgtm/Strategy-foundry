@@ -1,6 +1,7 @@
 """Half-cost sensitivity test for the fixed 11-loss-streak ETHUSDT candidate.
-Research-only. Replays the exact candidate with baseline costs and half costs;
-all strategy rules and risk/exit settings stay unchanged. OOS remains untouched.
+Research-only paired replay. NOTE: this script still uses 1m OHLC conservative ambiguity handling;
+use the 1s execution-resolved follow-up before treating ambiguous-bar metrics as final. OOS untouched.
+Rerun marker 2026-10-24: refresh paired metrics against current Binance source data.
 """
 import asyncio, json
 from pathlib import Path
