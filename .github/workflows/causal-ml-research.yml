@@ -1,0 +1,37 @@
+name: Causal ML meta-label research
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "research/causal_ml_meta_label_search.py"
+      - ".github/workflows/causal-ml-research.yml"
+      - "requirements.txt"
+permissions:
+  contents: read
+concurrency:
+  group: causal-ml-meta-label-research
+  cancel-in-progress: true
+jobs:
+  causal-ml:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Regression tests
+        run: python -m pytest -q
+      - name: Run causal ML research on TRAIN and DEVELOPMENT only
+        run: python -m compileall -q research/causal_ml_meta_label_search.py && python research/causal_ml_meta_label_search.py
+      - name: Preserve research report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: causal-ml-meta-label-report
+          path: research-results/causal_ml_meta_label_report.json
+          if-no-files-found: warn
+          retention-days: 90
