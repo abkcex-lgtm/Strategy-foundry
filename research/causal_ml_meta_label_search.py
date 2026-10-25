@@ -11,7 +11,9 @@ import research.ema_9_21_123 as sm
 from research.run_factory import get_data,split_reference_period
 from app.engine import normalize_contract
 OUT=Path("research-results");OUT.mkdir(exist_ok=True)
-FAMILIES=("structure_break_after_pullback","swing_failure_reclaim","range_break_retest","atr_expansion_breakout","donchian_break_10","donchian_break_20")
+# Expand the ML meta-label search across causal price-action/structure families already implemented in the research engine.
+# Keep the execution contract fixed and use chronological, purged TRAIN validation; DEVELOPMENT remains a separate confirmation split.
+FAMILIES=("breakout_123","pullback_reclaim","higher_low_breakout","cross_pullback_breakout5","cross_pullback_breakout10","cross_pullback_breakout20","trend_pullback_reversal","trend_pullback_cross5","trend_pullback_cross10","trend_pullback_cross20","structure_break_after_pullback","structure_break_pb3_br5","structure_break_pb3_br10","structure_break_pb3_br15","structure_break_pb5_br10","structure_break_pb5_br15","structure_break_pb5_br20","structure_break_pb8_br10","structure_break_pb8_br15","structure_break_pb8_br20","structure_break_pb10_br15","structure_break_pb10_br20","range_break_retest","swing_structure_break","squeeze_breakout","swing_failure_reclaim","atr_expansion_breakout","donchian_break_10","donchian_break_20")
 FEATS=("r1","r3","r5","r15","r30","range_atr","body_atr","uw_atr","lw_atr","atr_pct","atr_ratio","volz20","volz60","rsi","rsi_slope","ema_gap","ema_slope","high_dist","low_dist","hour_sin","hour_cos","weekday")
 FAMILY_FEATS=tuple("family__"+x for x in FAMILIES)
 MODEL_FEATS=FEATS+FAMILY_FEATS+("side_sign",)
@@ -67,7 +69,7 @@ def backtest(d,a,fam,threshold,start_idx=0):
 async def main():
  start=time.monotonic()
  sm.CONTRACT=normalize_contract({"symbol":"ETHUSDT","initial_balance":1000,"risk_mode":"fixed_usd","risk_usd":10,"compound":False,"reward_risk":3.5,"target_mode":"net_rr","commission_pct_per_side":.04,"slippage_pct_per_side":.02,"max_positions":1,"entry_model":"next_candle_open","exit_model":"sl_tp_only","break_even_enabled":False,"trailing_stop_enabled":False,"partial_exit_enabled":False,"time_exit_enabled":False})
- df,manifest=await get_data();sp=split_reference_period(df);parts={};rep={"schema":"causal_ml_meta_label_v1","data_manifest":manifest,"oos_evaluated":False,"method":"HistGradientBoosting meta-label model; past-only OHLCV/regime/time features; labels are future first-touch outcomes for fixed $10 risk and net 3.5R target with same-bar SL priority; chronological 60/20/20 TRAIN fit/tune/untouched holdout; threshold selected on tuning segment; July held out.","features":list(MODEL_FEATS),"splits":{}}
+ df,manifest=await get_data();sp=split_reference_period(df);parts={};rep={"schema":"causal_ml_meta_label_v2_expanded_families","data_manifest":manifest,"oos_evaluated":False,"method":"Expanded 29-family HistGradientBoosting meta-label search across causal EMA pullbacks, price action, swing structure, squeeze/ATR expansion, failed-breakout reclaim and Donchian breakouts; past-only OHLCV/regime/time features plus family and side; fixed $10 net risk / $35 net target; same-bar SL priority; chronological purged 60/20/20 TRAIN fit/tune/untouched holdout, then separate July Development confirmation; OOS not loaded/evaluated.","features":list(MODEL_FEATS),"splits":{}}
  for name in ("train","development"):
   d=sp[name];_,a=get_signals(d);ev=events(d,a);parts[name]=(d,a)
   rep["splits"][name]={"rows":len(d),"events":len(ev),"label_win_rate_pct":float(ev.label.mean()*100) if len(ev) else 0}
