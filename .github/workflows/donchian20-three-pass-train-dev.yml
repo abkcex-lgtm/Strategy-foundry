@@ -1,0 +1,41 @@
+name: Donchian20 three-pass Train-Development audit
+on:
+  push:
+    paths:
+      - "research/donchian20_three_pass_train_dev.py"
+      - ".github/workflows/donchian20-three-pass-train-dev.yml"
+      - "research/causal_ml_meta_label_search.py"
+      - "research/ema_9_21_123.py"
+      - "research/run_factory.py"
+      - "app/engine.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: donchian20-three-pass-train-dev
+  cancel-in-progress: true
+jobs:
+  focused-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Regression tests
+        run: python -m pytest -q
+      - name: Run three-pass Donchian20 audit without OOS
+        run: python -m compileall -q research/donchian20_three_pass_train_dev.py && PYTHONPATH=. python research/donchian20_three_pass_train_dev.py
+      - name: Preserve report and ledgers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: donchian20-three-pass-train-dev-report
+          path: research-results/donchian20_three_pass_train_dev_report.json
+          if-no-files-found: warn
+          retention-days: 90
