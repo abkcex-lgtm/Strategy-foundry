@@ -22,8 +22,14 @@ def features(d,a):
  for n in (20,60):f["volz"+str(n)]=(v-v.rolling(n,min_periods=max(15,n//2)).mean())/v.rolling(n,min_periods=max(15,n//2)).std().replace(0,np.nan)
  f["rsi"]=r;f["rsi_slope"]=r-r.shift(3);f["ema_gap"]=(c-e)/a;f["ema_slope"]=(e-e.shift(5))/a;f["high_dist"]=(c-h.rolling(20,min_periods=20).max())/a;f["low_dist"]=(c-l.rolling(20,min_periods=20).min())/a;f["hour_sin"]=np.sin(2*np.pi*mi/1440);f["hour_cos"]=np.cos(2*np.pi*mi/1440);f["weekday"]=dt.dt.dayofweek
  return f.replace([np.inf,-np.inf],np.nan)
+def get_signals(d):
+ sigs,a=sm.signals(d);c=d.close.astype(float);h=d.high.astype(float);l=d.low.astype(float)
+ for n in (10,20):
+  hi=h.shift(1).rolling(n,min_periods=n).max();lo=l.shift(1).rolling(n,min_periods=n).min()
+  sigs["donchian_break_"+str(n)]=((c>hi)&(c.shift(1)<=hi.shift(1)),(c<lo)&(c.shift(1)>=lo.shift(1)))
+ return sigs,a
 def events(d,a):
- sigs,_=sm.signals(d);f=features(d,a);rows=[]
+ sigs,_=get_signals(d);f=features(d,a);rows=[]
  for fam in FAMILIES:
   if fam not in sigs:continue
   for side,sig in (("LONG",sigs[fam][0]),("SHORT",sigs[fam][1])):
@@ -42,7 +48,7 @@ def events(d,a):
  return pd.DataFrame(rows)
 MODEL=None
 def backtest(d,a,fam,threshold):
- sigs,_=sm.signals(d);f=features(d,a);L=np.zeros(len(d),bool);S=np.zeros(len(d),bool)
+ sigs,_=get_signals(d);f=features(d,a);L=np.zeros(len(d),bool);S=np.zeros(len(d),bool)
  for side,raw,out in (("LONG",sigs[fam][0],L),("SHORT",sigs[fam][1],S)):
   ix=np.flatnonzero(pd.Series(raw,index=d.index).fillna(False).to_numpy());ix=ix[(ix>=80)&(ix<len(d)-1)]
   if len(ix):out[ix]=MODEL.predict_proba(f.iloc[ix][list(FEATS)])[:,1]>=threshold
@@ -52,7 +58,7 @@ async def main():
  sm.CONTRACT=normalize_contract({"symbol":"ETHUSDT","initial_balance":1000,"risk_mode":"fixed_usd","risk_usd":10,"compound":False,"reward_risk":3.5,"target_mode":"net_rr","commission_pct_per_side":.04,"slippage_pct_per_side":.02,"max_positions":1,"entry_model":"next_candle_open","exit_model":"sl_tp_only","break_even_enabled":False,"trailing_stop_enabled":False,"partial_exit_enabled":False,"time_exit_enabled":False})
  df,manifest=await get_data();sp=split_reference_period(df);parts={};rep={"schema":"causal_ml_meta_label_v1","data_manifest":manifest,"oos_evaluated":False,"method":"HistGradientBoosting meta-label model; past-only OHLCV/regime/time features; labels are future first-touch outcomes for fixed $10 risk and net 3.5R target with same-bar SL priority; chronological 80/20 TRAIN event split; threshold selected on TRAIN tail only; July held out.","features":list(FEATS),"splits":{}}
  for name in ("train","development"):
-  d=sp[name];_,a=sm.signals(d);ev=events(d,a);parts[name]=(d,a)
+  d=sp[name];_,a=get_signals(d);ev=events(d,a);parts[name]=(d,a)
   rep["splits"][name]={"rows":len(d),"events":len(ev),"label_win_rate_pct":float(ev.label.mean()*100) if len(ev) else 0}
   if name=="train":tr=ev
  if len(tr)<100:raise RuntimeError("Insufficient supervised training events: "+str(len(tr)))
@@ -67,7 +73,7 @@ async def main():
  for name in ("train","development"):
   d,a=parts[name];res=[]
   for fam in FAMILIES:
-   if fam not in sm.signals(d)[0]:continue
+   if fam not in get_signals(d)[0]:continue
    m,led=backtest(d,a,fam,chosen["threshold"]);res.append({"family":fam,"metrics":m,"trades":len(led)})
   res.sort(key=lambda x:(x["metrics"]["passes_all_user_targets"],x["metrics"]["tp_per_day"],x["metrics"]["profit_factor"] or 0),reverse=True)
   rep["splits"][name].update(passing_families=sum(x["metrics"]["passes_all_user_targets"] for x in res),backtests=res)
