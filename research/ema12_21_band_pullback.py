@@ -3,6 +3,9 @@ Only TRAIN (Apr-Jun 2026) and DEVELOPMENT (Jul 2026) are evaluated; OOS stays un
 """
 import asyncio, hashlib, json, time
 from pathlib import Path
+import sys
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 import numpy as np
 import pandas as pd
 
