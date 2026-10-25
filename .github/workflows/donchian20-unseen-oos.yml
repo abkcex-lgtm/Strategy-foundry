@@ -1,0 +1,33 @@
+name: Frozen Donchian20 unseen OOS validation
+on:
+  push:
+    paths:
+      - "research/donchian20_unseen_oos.py"
+      - ".github/workflows/donchian20-unseen-oos.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unseen-oos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Regression tests
+        run: python -m pytest -q
+      - name: Freeze rules and test on untouched OOS
+        run: python -m compileall -q research/donchian20_unseen_oos.py && python research/donchian20_unseen_oos.py
+      - name: Preserve OOS report and trade ledger
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: donchian20-unseen-oos-report
+          path: research-results/donchian20_unseen_oos_report.json
+          if-no-files-found: warn
+          retention-days: 90
