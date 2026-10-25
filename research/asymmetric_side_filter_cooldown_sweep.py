@@ -75,6 +75,9 @@ async def main():
   report["splits"][split]={"tested":len(rows),"baseline_11_loss_metrics":baseline,"pass_all_gates":len(passes),
     "top_by_full_gate_proximity":rows[:20],"top_win_rate_with_frequency_and_streak":sorted(freq_streak,key=lambda r:(r["metrics"]["win_rate_pct"],r["metrics"]["profit_factor"] or 0,r["metrics"]["tp_per_day"]),reverse=True)[:15],
     "top_30pct_wr_candidates": [r for r in rows if r["metrics"]["win_rate_pct"]>=30 and r["metrics"]["trades_per_day"]>=7.5][:15]}
+  # Persist completed split immediately so a timeout still leaves a usable partial artifact.
+  partial_path=OUT/"asymmetric_side_filter_cooldown_sweep.json"
+  partial_path.write_text(json.dumps(report,indent=2,sort_keys=True,allow_nan=False),encoding="utf-8")
   print("ASYMMETRIC_SPLIT "+json.dumps({"split":split,"tested":len(rows),"baseline":baseline,"passes":len(passes),"top":rows[:3]},sort_keys=True),flush=True)
  # Matched configurations: require evidence across both Train and Development, not one lucky split.
  matched=[]
