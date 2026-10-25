@@ -90,20 +90,24 @@ async def main():
     }
     for split in ("train", "development"):
         part = splits[split]
-        # Exact historical candidate associated with the prior 11-loss result:
-        # EMA9/21 structure-break after pullback, strong-candle long filter,
-        # unfiltered short side, swing_5 stop. This is rerun on the same split.
+        # Exact reference marked in the prior research as the 11-loss baseline:
+        # structure_break_after_pullback, EMA21 slope normalized by ATR on both sides,
+        # swing_5 stop, and 1-bar cooldown after each loss.
         sigs, base_atr = sm.signals(part)
         filters = sm.confirmation_filters(part)
-        base_l, base_s = sigs["structure_break_pb8_br15"]
-        base_l = base_l & filters["strong_candle_close"][0].reindex(part.index).fillna(False)
-        base_s = base_s & filters["baseline"][1].reindex(part.index).fillna(False)
-        base_m, base_ledger = sm.run_combined(part, base_l, base_s, base_atr, "swing_5")
+        base_l, base_s = sigs["structure_break_after_pullback"]
+        long_filter, short_filter = filters["ema21_slope5_atr"]
+        base_l = base_l & long_filter.reindex(part.index).fillna(False)
+        base_s = base_s & short_filter.reindex(part.index).fillna(False)
+        base_m, base_ledger = sm.run_combined(
+            part, base_l, base_s, base_atr, "swing_5",
+            loss_cooldown_bars=1, cooldown_trigger_losses=1
+        )
         # New EMA12/21 band pullback reversal. Stop is the last 3-candle local low/high.
         long_sig, short_sig, atr = ema1221_band_signals(part)
         new_m, new_ledger = sm.run_combined(part, long_sig, short_sig, atr, "swing_3")
         report["splits"][split] = {
-            "baseline_11_loss_reference": {"metrics": brief(base_m), "trades": len(base_ledger),
+            "baseline_11_loss_reference": {"definition": "structure_break_after_pullback + EMA21 slope5/ATR filter on both sides + swing_5 + cooldown 1 bar after each loss", "metrics": brief(base_m), "trades": len(base_ledger),
                                            "ledger_sha256": sha(base_ledger)},
             "ema12_21_band_pullback": {"metrics": brief(new_m), "trades": len(new_ledger),
                                        "long_signals": int(long_sig.sum()), "short_signals": int(short_sig.sum()),
