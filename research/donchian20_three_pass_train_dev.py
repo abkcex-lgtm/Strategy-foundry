@@ -46,7 +46,7 @@ def gates(m,monthly_gate=True):
  return bool(m.get("win_rate_pct",0)>40 and (m.get("profit_factor") or 0)>1
   and m.get("tp_per_day",m.get("avg_net_tp_per_day",0))>=3
   and m.get("trades_per_day",0)>=10 and m.get("max_consecutive_losses",999)<=12
-  and (not monthly_gate or (monthly and min(int(v or 0) for v in monthly.values())>=300))
+  and (not monthly_gate or (monthly and min(int(v or 0) for v in monthly.values())>=300)))
 async def main():
  started=time.monotonic()
  sm.CONTRACT=CONTRACT
