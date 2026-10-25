@@ -25,11 +25,23 @@ def gates(m):
  and m["trades_per_day"]>=10 and m["max_consecutive_losses"]<=12 and not m["capital_exhausted"]
  and all(v>=300 for v in m["monthly_trade_counts"].values()))
 def score(m):
- # Hard requirements dominate ranking; no sparse strategy can rank as a success.
- return (gates(m), m["trades_per_day"]>=10, m["tp_per_day"]>=3,
-         m["max_consecutive_losses"]<=12, m["win_rate_pct"]>=30,
-         (m["profit_factor"] or 0)>1, m["win_rate_pct"],m["profit_factor"] or 0,
-         m["tp_per_day"],m["trades_per_day"],m["net_pnl"])
+ # Rank by balanced distance to every gate; do not let a sparse/low-streak candidate
+ # outrank a materially more informative candidate just because one boolean passes.
+ pf=float(m["profit_factor"] or 0.0)
+ months=m.get("monthly_trade_counts",{})
+ monthly_ok=bool(months) and all(v>=300 for v in months.values())
+ satisfied=sum((m["win_rate_pct"]>=30, pf>1, m["tp_per_day"]>=3,
+                m["trades_per_day"]>=10, m["max_consecutive_losses"]<=12,
+                not m["capital_exhausted"], monthly_ok))
+ distance=(max(0,30-m["win_rate_pct"])/30
+           +max(0,1-pf)
+           +max(0,3-m["tp_per_day"])/3
+           +max(0,10-m["trades_per_day"])/10
+           +max(0,m["max_consecutive_losses"]-12)/12
+           +max(0,300-min(months.values(),default=0))/300
+           +(1 if m["capital_exhausted"] else 0))
+ return (gates(m), satisfied, -distance, monthly_ok, m["trades_per_day"],
+         m["tp_per_day"], m["win_rate_pct"], pf, m["net_pnl"])
 def sig_hash(ledger):
  return hashlib.sha256(json.dumps(ledger,sort_keys=True,separators=(",",":"),allow_nan=False).encode()).hexdigest()
 async def main():
@@ -82,13 +94,17 @@ async def main():
       matched.append({"entry":entry,"long_filter":lf,"short_filter":sf,"stop":stop,"cooldown_bars":bars,"cooldown_trigger_losses":trigger,
         "train":tr["metrics"],"development":dv["metrics"],"train_pass":gates(tr["metrics"]),"development_pass":gates(dv["metrics"]),
         "train_ledger_sha256":tr["ledger_sha256"],"development_ledger_sha256":dv["ledger_sha256"]})
- matched.sort(key=lambda x:(x["train_pass"] and x["development_pass"],
-  min(x["train"]["trades_per_day"],x["development"]["trades_per_day"])>=7.5,
-  min(x["train"]["max_consecutive_losses"],x["development"]["max_consecutive_losses"])<=12,
-  min(x["train"]["win_rate_pct"],x["development"]["win_rate_pct"])>=30,
-  min(x["train"]["win_rate_pct"],x["development"]["win_rate_pct"]),
-  min(x["train"]["profit_factor"] or 0,x["development"]["profit_factor"] or 0),
-  min(x["train"]["tp_per_day"],x["development"]["tp_per_day"])),reverse=True)
+ def cross_score(x):
+  tr,dv=x["train"],x["development"]
+  # Robustness is based on the weaker split; no single-split winner can dominate.
+  return (x["train_pass"] and x["development_pass"],
+    min(score(tr)[1],score(dv)[1]),
+    min(score(tr)[2],score(dv)[2]),
+    min(tr["trades_per_day"],dv["trades_per_day"]),
+    min(tr["tp_per_day"],dv["tp_per_day"]),
+    min(tr["win_rate_pct"],dv["win_rate_pct"]),
+    min(tr["profit_factor"] or 0,dv["profit_factor"] or 0))
+ matched.sort(key=cross_score,reverse=True)
  report["cross_split"]={"matched_configurations":len(matched),"both_splits_pass_all_gates":sum(x["train_pass"] and x["development_pass"] for x in matched),"top":matched[:30]}
  report["elapsed_seconds"]=round(time.monotonic()-started,2)
  path=OUT/"asymmetric_side_filter_cooldown_sweep.json"; path.write_text(json.dumps(report,indent=2,sort_keys=True,allow_nan=False))
