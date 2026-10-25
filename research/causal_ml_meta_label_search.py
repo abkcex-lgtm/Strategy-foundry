@@ -1,3 +1,4 @@
+# Verification rerun requested 2026-10-25: repeat the exact deterministic Train/Development experiment without evaluating OOS.
 """Causal ML meta-label experiment; never loads/evaluates OOS."""
 import asyncio,json,time,sys
 from pathlib import Path
