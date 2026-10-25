@@ -64,7 +64,7 @@ def backtest(d,a,fam,threshold,start_idx=0):
   ix=np.flatnonzero(pd.Series(raw,index=d.index).fillna(False).to_numpy());ix=ix[(ix>=max(80,int(start_idx)))&(ix<len(d)-1)]
   if len(ix):
    xf=f.iloc[ix].copy();xf["family"]=fam;xf["side"]=side
-   out[ix]=MODEL.predict_proba(model_matrix(xf))[:,1]>=threshold
+   out[ix]=MODEL.predict_proba(model_matrix(xf))[:,1]>=(threshold.get(fam,threshold.get("__default__",0.25)) if isinstance(threshold,dict) else threshold)
  return sm.run_combined(d,pd.Series(L,index=d.index),pd.Series(S,index=d.index),a,"atr_1.5",loss_cooldown_bars=1,cooldown_trigger_losses=1)
 async def main():
  start=time.monotonic()
@@ -92,14 +92,32 @@ async def main():
   keep=p>=th;n=int(keep.sum());w=int(tune.label.to_numpy()[keep].sum());opts.append({"threshold":th,"events":n,"win_rate_pct":100*w/n if n else 0,"net_expectancy_per_trade":(35*w-10*(n-w))/n if n else None})
  viable=[x for x in opts if x["events"]>=50]
  chosen=max(viable,key=lambda x:(x["net_expectancy_per_trade"],x["events"])) if viable else max(opts,key=lambda x:x["events"])
+ # Tune thresholds per family on the chronological tuning segment; sparse families fall back to the global threshold.
+ family_thresholds={"__default__":chosen["threshold"]}
+ family_threshold_diagnostics={}
+ p_by_event=pd.Series(p,index=tune.index)
+ for fam in FAMILIES:
+  mask=(tune["family"].to_numpy()==fam)
+  fam_labels=tune.label.to_numpy()[mask]
+  fam_p=p[mask]
+  candidates=[]
+  for th in (.2,.25,.3,.35,.4,.45,.5,.55,.6,.65,.7,.75):
+   keep=fam_p>=th;n=int(keep.sum());w=int(fam_labels[keep].sum())
+   if n>=50:
+    candidates.append({"threshold":th,"events":n,"win_rate_pct":100*w/n,"net_expectancy_per_trade":(35*w-10*(n-w))/n})
+  if candidates:
+   best=max(candidates,key=lambda x:(x["net_expectancy_per_trade"],x["events"]))
+   family_thresholds[fam]=best["threshold"];family_threshold_diagnostics[fam]=best
+  else:
+   family_thresholds[fam]=chosen["threshold"];family_threshold_diagnostics[fam]={"fallback":True,"available_events":int(mask.sum()),"threshold":chosen["threshold"]}
  holdout_start_idx=int(holdout.idx.min()) if len(holdout) else len(parts["train"][0])
- rep["train_model"]={"fit_events_raw":len(fit_raw),"fit_events_after_purge":len(fit),"threshold_tuning_events_raw":len(tune_raw),"threshold_tuning_events_after_purge":len(tune),"final_train_holdout_events":len(holdout),"threshold_candidates":opts,"chosen_threshold":chosen["threshold"],"chosen_tuning_metrics":chosen,"selection_protocol":"chronological 60% fit / 20% threshold tuning / 20% untouched TRAIN holdout; TRAIN backtest restricted to final holdout tail"}
+ rep["train_model"]={"fit_events_raw":len(fit_raw),"fit_events_after_purge":len(fit),"threshold_tuning_events_raw":len(tune_raw),"threshold_tuning_events_after_purge":len(tune),"final_train_holdout_events":len(holdout),"threshold_candidates":opts,"chosen_threshold":chosen["threshold"],"chosen_tuning_metrics":chosen,"family_thresholds":family_thresholds,"family_threshold_diagnostics":family_threshold_diagnostics,"selection_protocol":"chronological purged 60% fit / 20% threshold tuning / 20% untouched TRAIN holdout; global fallback plus family-specific thresholds selected only on tuning events; TRAIN backtest restricted to final holdout tail"}
  for name in ("train","development"):
   d,a=parts[name];res=[]
   start_idx=holdout_start_idx if name=="train" else 0
   for fam in FAMILIES:
    if fam not in get_signals(d)[0]:continue
-   m,led=backtest(d,a,fam,chosen["threshold"],start_idx=start_idx);res.append({"family":fam,"metrics":m,"trades":len(led)})
+   m,led=backtest(d,a,fam,family_thresholds,start_idx=start_idx);res.append({"family":fam,"metrics":m,"trades":len(led)})
   res.sort(key=lambda x:(x["metrics"]["passes_all_user_targets"],x["metrics"]["tp_per_day"],x["metrics"]["profit_factor"] or 0),reverse=True)
   rep["splits"][name].update(passing_families=sum(x["metrics"]["passes_all_user_targets"] for x in res),backtests=res)
  rep["elapsed_seconds"]=round(time.monotonic()-start,2);p=OUT/"causal_ml_meta_label_report.json";p.write_text(json.dumps(rep,indent=2,sort_keys=True,allow_nan=False))
