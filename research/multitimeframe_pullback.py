@@ -38,7 +38,7 @@ def new_idea(df):
     body=(c-o).abs()/rng
     close_pos=(c-lo)/rng
     long=(htf_up&(e9>e21)&(e21>e21.shift(3))&touched_up&(c>o)&(c>prior_high)&(c>e21)&(body>=0.45)&(close_pos>=0.7))
-    short=(htf_dn&(e9<e21)&(e21<e21.shift(3))&touched_dn&(c<o)&(c<prior_low)&(c<e21)&(body>=0.45)&(close_pos<=0.3)
+    short=(htf_dn&(e9<e21)&(e21<e21.shift(3))&touched_dn&(c<o)&(c<prior_low)&(c<e21)&(body>=0.45)&(close_pos<=0.3))
     return long.fillna(False),short.fillna(False),atr
 
 def brief(m):
