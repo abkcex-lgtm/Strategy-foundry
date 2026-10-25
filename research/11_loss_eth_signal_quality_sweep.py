@@ -21,7 +21,7 @@ def serial_metrics(m):
 async def main():
     started=time.monotonic(); sm.CONTRACT=normalize_contract(CFG)
     df,manifest=await get_data(); splits=split_reference_period(df)
-    report={'schema':'eth_11_loss_signal_quality_sweep_v1','data_manifest':manifest,'baseline':{'entry':BASE_ENTRY,'filter':BASE_FILTER,'stop':BASE_STOP,'cooldown_bars':1,'cooldown_trigger_losses':1},'contract':CFG,'oos_evaluated':False,'ambiguity_note':'1m OHLC only; unresolved same-bar SL/TP is counted as SL; 1s resolution not implemented, so exploratory only.','splits':{},'elapsed_seconds':None}
+    report={'schema':'eth_11_loss_signal_quality_sweep_v2_directional_diagnostic','data_manifest':manifest,'baseline':{'entry':BASE_ENTRY,'filter':BASE_FILTER,'stop':BASE_STOP,'cooldown_bars':1,'cooldown_trigger_losses':1},'contract':CFG,'oos_evaluated':False,'directional_diagnostic':True,'direction_note':'Each candidate is evaluated as combined long+short, long-only, and short-only. Single-direction rows are diagnostics only; final deployment still requires user approval and all fixed constraints.','ambiguity_note':'1m OHLC only; unresolved same-bar SL/TP is counted as SL; 1s resolution not implemented, so exploratory only.','splits':{},'elapsed_seconds':None}
     all_rows=[]
     for split_name in ('train','development'):
         part=splits[split_name]; signals,atr=sm.signals(part); filters=sm.confirmation_filters(part)
@@ -30,12 +30,16 @@ async def main():
             raw_l,raw_s=signals[entry_name]
             for filter_name in FILTERS:
                 lf,sf=filters[filter_name]; long_sig=raw_l & lf.fillna(False); short_sig=raw_s & sf.fillna(False)
-                for stop in STOPS:
-                    for cooldown_bars,cooldown_trigger in COOLDOWNS:
-                        metrics,ledger=sm.run_combined(part,pd.Series(long_sig,index=part.index),pd.Series(short_sig,index=part.index),atr,stop,loss_cooldown_bars=cooldown_bars,cooldown_trigger_losses=cooldown_trigger)
-                        metrics=serial_metrics(metrics)
-                        item={'split':split_name,'entry':entry_name,'filter':filter_name,'stop':stop,'cooldown_bars':cooldown_bars,'cooldown_trigger_losses':cooldown_trigger,'metrics':metrics,'ledger_sha256':hashlib.sha256(json.dumps(ledger,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()}
-                        rows.append(item); all_rows.append(item)
+                for direction in ('both','long_only','short_only'):
+                    if direction=='long_only': short_sig_test=np.zeros(len(part),dtype=bool); long_sig_test=long_sig
+                    elif direction=='short_only': long_sig_test=np.zeros(len(part),dtype=bool); short_sig_test=short_sig
+                    else: long_sig_test=long_sig; short_sig_test=short_sig
+                    for stop in STOPS:
+                        for cooldown_bars,cooldown_trigger in COOLDOWNS:
+                            metrics,ledger=sm.run_combined(part,pd.Series(long_sig_test,index=part.index),pd.Series(short_sig_test,index=part.index),atr,stop,loss_cooldown_bars=cooldown_bars,cooldown_trigger_losses=cooldown_trigger)
+                            metrics=serial_metrics(metrics)
+                            item={'split':split_name,'entry':entry_name,'filter':filter_name,'direction':direction,'stop':stop,'cooldown_bars':cooldown_bars,'cooldown_trigger_losses':cooldown_trigger,'metrics':metrics,'ledger_sha256':hashlib.sha256(json.dumps(ledger,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()}
+                            rows.append(item); all_rows.append(item)
         # baseline exact replay
         bl,bs=signals[BASE_ENTRY]; fl,fs=filters[BASE_FILTER]
         bm,blg=sm.run_combined(part,pd.Series(bl & fl.fillna(False),index=part.index),pd.Series(bs & fs.fillna(False),index=part.index),atr,BASE_STOP,loss_cooldown_bars=BASE_COOLDOWN[0],cooldown_trigger_losses=BASE_COOLDOWN[1])
@@ -47,13 +51,13 @@ async def main():
         report['splits'][split_name]={'baseline_metrics':bm,'baseline_ledger_sha256':hashlib.sha256(json.dumps(blg,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest(),'tested_candidates':len(rows),'eligible_count':len(eligible),'top_eligible':eligible[:20],'best_by_win_rate_all':sorted(rows,key=lambda x:x['metrics']['win_rate_pct'],reverse=True)[:10],'best_by_profit_factor_all':sorted(rows,key=lambda x:(x['metrics']['profit_factor'] or 0),reverse=True)[:10]}
         print('ETH_QUALITY_SWEEP '+json.dumps({'split':split_name,'baseline':bm,'tested':len(rows),'eligible':len(eligible),'top':eligible[:5]},sort_keys=True),flush=True)
     # Cross-split candidates must preserve each split's max loss streak; no OOS touched.
-    dev={ (x['entry'],x['filter'],x['stop'],x['cooldown_bars'],x['cooldown_trigger_losses']):x for x in all_rows if x['split']=='development'}
-    trn={ (x['entry'],x['filter'],x['stop'],x['cooldown_bars'],x['cooldown_trigger_losses']):x for x in all_rows if x['split']=='train'}
+    dev={ (x['entry'],x['filter'],x.get('direction','both'),x['stop'],x['cooldown_bars'],x['cooldown_trigger_losses']):x for x in all_rows if x['split']=='development'}
+    trn={ (x['entry'],x['filter'],x.get('direction','both'),x['stop'],x['cooldown_bars'],x['cooldown_trigger_losses']):x for x in all_rows if x['split']=='train'}
     cross=[]
     for k,d in dev.items():
         t=trn[k]
         if d['metrics']['max_consecutive_losses']<=report['splits']['development']['baseline_metrics']['max_consecutive_losses'] and t['metrics']['max_consecutive_losses']<=report['splits']['train']['baseline_metrics']['max_consecutive_losses']:
-            cross.append({'entry':k[0],'filter':k[1],'stop':k[2],'cooldown_bars':k[3],'cooldown_trigger_losses':k[4],'train':t['metrics'],'development':d['metrics'],'train_ledger_sha256':t['ledger_sha256'],'development_ledger_sha256':d['ledger_sha256']})
+            cross.append({'entry':k[0],'filter':k[1],'direction':k[2],'stop':k[3],'cooldown_bars':k[4],'cooldown_trigger_losses':k[5],'train':t['metrics'],'development':d['metrics'],'train_ledger_sha256':t['ledger_sha256'],'development_ledger_sha256':d['ledger_sha256']})
     cross.sort(key=lambda x:(min(x['train']['win_rate_pct'],x['development']['win_rate_pct']),min(x['train']['profit_factor'] or 0,x['development']['profit_factor'] or 0),min(x['train']['trades'],x['development']['trades'])),reverse=True)
     report['cross_split_candidates_preserving_streak']={'count':len(cross),'top':cross[:30]}
     report['elapsed_seconds']=round(time.monotonic()-started,2)
