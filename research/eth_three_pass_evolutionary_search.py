@@ -59,7 +59,7 @@ async def main():
  for ix,algorithm in enumerate(("stratified_random","surrogate_genetic","surrogate_genetic"),1):
   loop_start=time.monotonic()
   # Reuse the same validated TRAIN dataset and fixed contract. Fresh random seed each pass.
-  res=search_candidates(train,1200,4200+ix*177,CFG,algorithm,
+  res=search_candidates(train,5000,8200+ix*311,CFG,algorithm,
     excluded_genome_hashes=excluded,prior_candidates=prior,prepared_context=trainctx)
   excluded.update(res.get("evaluated_genome_hashes",[]))
   selected=res.get("results",[]) or []
@@ -76,7 +76,7 @@ async def main():
     dev_rows.append(d); all_dev.append(d)
    except Exception as e:
     dev_rows.append({"strategy":row.get("strategy"),"validation_error":type(e).__name__+":"+str(e)})
-  report["loops"].append({"loop":ix,"algorithm":algorithm,"requested_candidates":1200,
+  report["loops"].append({"loop":ix,"algorithm":algorithm,"requested_candidates":5000,
    "evaluated_candidates":res.get("evaluated_candidates"),"failed_candidates":res.get("failed_candidates"),
    "duplicate_genomes_skipped":res.get("duplicate_genomes_skipped"),"independent_audit_failures":res.get("independent_audit_failures"),
    "family_evaluated_counts":res.get("family_evaluated_counts"),"all_passing_on_train":res.get("all_passing"),
