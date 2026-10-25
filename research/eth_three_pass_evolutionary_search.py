@@ -53,6 +53,7 @@ async def main():
   "split_hashes":{"train":frame_hash(train),"development":frame_hash(dev)},
   "oos_evaluated":False,"oos_used_for_selection":False,
   "execution_note":"Fixed net risk $10 and net 3.5R target; costs 0.04% commission and 0.02% slippage per side; one position; next-bar-open; SL/TP only. Same-candle ambiguity is conservatively resolved by the engine; 1m-only is not final 1s ambiguity validation.",
+  "iteration_plan":{"count":3,"algorithms":["stratified_random","surrogate_genetic","surrogate_genetic"],"selection_data":"TRAIN only","confirmation_data":"DEVELOPMENT only","oos_policy":"do not load or evaluate OOS"},
   "loops":[]}
  prior=[]; excluded=set(); all_dev=[]
  for ix,algorithm in enumerate(("stratified_random","surrogate_genetic","surrogate_genetic"),1):
@@ -86,6 +87,7 @@ async def main():
   print("ETH_LOOP "+json.dumps({"loop":ix,"algorithm":algorithm,"evaluated":res.get("evaluated_candidates"),
    "dev_retested":len(dev_rows),"best_train":(selected[0].get("metrics") if selected else None),
    "best_dev":(dev_rows[0].get("development_metrics") if dev_rows and "development_metrics" in dev_rows[0] else None)},default=str),flush=True)
+ if len(report["loops"]) != 3: raise RuntimeError("Required three research loops did not complete")
  # Best by strict simultaneous gates, then balanced train/development performance; do not let tiny samples win just on PF.
  def joint(row):
   if "development_metrics" not in row: return (False,-999,-999,-999,-999)
