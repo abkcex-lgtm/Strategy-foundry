@@ -1,0 +1,38 @@
+name: Multi-timeframe pullback hypothesis
+on:
+  push:
+    paths:
+      - "research/multitimeframe_pullback.py"
+      - ".github/workflows/multitimeframe-pullback.yml"
+      - "research/ema_9_21_123.py"
+      - "research/run_factory.py"
+      - "app/engine.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: multitimeframe-pullback-hypothesis
+  cancel-in-progress: true
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Run real-data Train/Development test
+        run: python -m compileall -q app research && python research/multitimeframe_pullback.py
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: multitimeframe-pullback-report
+          path: research-results/multitimeframe_pullback_report.json
+          if-no-files-found: warn
+          retention-days: 90
