@@ -53,10 +53,10 @@ async def main():
   "split_hashes":{"train":frame_hash(train),"development":frame_hash(dev)},
   "oos_evaluated":False,"oos_used_for_selection":False,
   "execution_note":"Fixed net risk $10 and net 3.5R target; costs 0.04% commission and 0.02% slippage per side; one position; next-bar-open; SL/TP only. Same-candle ambiguity is conservatively resolved by the engine; 1m-only is not final 1s ambiguity validation.",
-  "iteration_plan":{"count":3,"algorithms":["stratified_random","surrogate_genetic","surrogate_genetic"],"selection_data":"TRAIN only","confirmation_data":"DEVELOPMENT only","oos_policy":"do not load or evaluate OOS"},
+  "iteration_plan":{"count":3,"algorithms":["hybrid_genetic","stratified_random","surrogate_genetic"],"selection_data":"TRAIN only","confirmation_data":"DEVELOPMENT only","oos_policy":"do not load or evaluate OOS"},
   "loops":[]}
  prior=[]; excluded=set(); all_dev=[]
- for ix,algorithm in enumerate(("stratified_random","surrogate_genetic","surrogate_genetic"),1):
+ for ix,algorithm in enumerate(("hybrid_genetic","stratified_random","surrogate_genetic"),1):
   loop_start=time.monotonic()
   # Reuse the same validated TRAIN dataset and fixed contract. Fresh random seed each pass.
   res=search_candidates(train,5000,8200+ix*311,CFG,algorithm,
