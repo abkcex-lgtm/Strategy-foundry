@@ -1,0 +1,31 @@
+name: Frozen top candidate unseen OOS diagnostic
+on:
+  push:
+    paths:
+      - "research/frozen_candidate_unseen_oos.py"
+      - ".github/workflows/frozen-candidate-unseen-oos.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unseen-oos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Test frozen candidate on OOS only
+        run: python -m compileall -q research/frozen_candidate_unseen_oos.py && PYTHONPATH=. python research/frozen_candidate_unseen_oos.py
+      - name: Upload unseen OOS report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frozen-candidate-unseen-oos-report
+          path: research-results/frozen_candidate_unseen_oos_report.json
+          if-no-files-found: warn
+          retention-days: 90
