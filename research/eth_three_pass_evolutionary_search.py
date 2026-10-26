@@ -88,13 +88,35 @@ async def main():
    "dev_retested":len(dev_rows),"best_train":(selected[0].get("metrics") if selected else None),
    "best_dev":(dev_rows[0].get("development_metrics") if dev_rows and "development_metrics" in dev_rows[0] else None)},default=str),flush=True)
  if len(report["loops"]) != 3: raise RuntimeError("Required three research loops did not complete")
- # Best by strict simultaneous gates, then balanced train/development performance; do not let tiny samples win just on PF.
+ # Joint ranking fix: the prior code read nonexistent "tp_per_day" instead of
+ # "avg_net_tp_per_day", making TP/day always zero and ranking near-misses mostly
+ # by win rate. Rank on the worst normalized shortfall across every hard gate.
  def joint(row):
-  if "development_metrics" not in row: return (False,-999,-999,-999,-999)
+  if "development_metrics" not in row: return (False,-999.0,-999.0,-999.0)
   a,b=row.get("train_metrics",{}),row["development_metrics"]
-  return (row.get("both_splits_pass",False),min(a.get("win_rate_pct",0),b.get("win_rate_pct",0)),
-   min(a.get("tp_per_day",0),b.get("tp_per_day",0)),min(a.get("trades_per_day",0),b.get("trades_per_day",0)),
-   min(a.get("net_pnl",0),b.get("net_pnl",0)))
+  def gaps(m):
+   monthly=m.get("monthly_trade_counts") or {}
+   monthly_min=min([int(v or 0) for v in monthly.values()] or [0])
+   pf=float(m.get("profit_factor") or 0.0)
+   wr=float(m.get("win_rate_pct",0.0) or 0.0)
+   tp=tpday(m)
+   tpd=float(m.get("trades_per_day",0.0) or 0.0)
+   streak=int(m.get("max_consecutive_losses",999) or 999)
+   return [
+    max(0.0,40.0-wr)/40.0,
+    max(0.0,1.0-pf),
+    max(0.0,3.0-tp)/3.0,
+    max(0.0,10.0-tpd)/10.0,
+    max(0.0,streak-12)/12.0,
+    max(0.0,300.0-monthly_min)/300.0,
+    1.0 if m.get("capital_exhausted",False) else 0.0,
+    1.0 if float(m.get("net_pnl",0.0) or 0.0)<=0.0 else 0.0,
+   ]
+  ga,gb=gaps(a),gaps(b)
+  worst=max(ga+gb)
+  total=sum(ga)+sum(gb)
+  return (bool(row.get("both_splits_pass",False)),-worst,-total,
+          min(float(a.get("net_pnl",0.0) or 0.0),float(b.get("net_pnl",0.0) or 0.0)))
  all_dev.sort(key=joint,reverse=True)
  report["final_summary"]={"tested_dev_retests":len(all_dev),"both_splits_pass_all_gates":sum(x.get("both_splits_pass",False) for x in all_dev),
   "best_candidate":all_dev[0] if all_dev else None,"top_candidates":all_dev[:10],
